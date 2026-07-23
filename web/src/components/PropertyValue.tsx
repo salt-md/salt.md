@@ -1,0 +1,587 @@
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { api } from '../api';
+import type { PropDef, PropOption } from '../types';
+import Portal from './Portal';
+import { OPTION_PALETTE, optionSlug } from '../selectOptions';
+import { Check, Link2 as LinkIcon, Plus, Trash2 } from 'lucide-react';
+
+interface Props {
+  def: PropDef;
+  value: unknown;
+  onChange?: (v: unknown) => void;
+  onOptionsChange?: (options: PropOption[]) => void;
+  readOnly?: boolean;
+  compact?: boolean;
+}
+
+function chip(opt: PropOption | undefined, fallback: string) {
+  const color = opt?.color ?? '#999';
+  return (
+    <span className="prop-chip" style={{ background: color + '2e', color }}>
+      {opt?.name ?? fallback}
+    </span>
+  );
+}
+
+// SelectCell is the Notion-style editor for select / multiselect cells: click to
+// open a popover where you can search, create an option inline, pick each
+// option's colour, or delete it. Rendered through a Portal with a viewport-
+// clamped fixed position so it never runs off-screen or gets clipped by the
+// scrolling table. Colour editing is a second panel (not a nested popover) so it
+// stays on-screen on mobile.
+function SelectCell({
+  def,
+  value,
+  multi,
+  onChange,
+  onOptionsChange,
+}: {
+  def: PropDef;
+  value: unknown;
+  multi: boolean;
+  onChange: (v: unknown) => void;
+  onOptionsChange?: (options: PropOption[]) => void;
+}) {
+  // Robust gegen fehlerhaft geschriebene Schemata: kommt eine Option als reine
+  // Zeichenkette (statt {id, name}), riss `o.name.toLowerCase()` bisher die
+  // GANZE Ansicht in den Fehlerzustand — eine kaputte Spalte machte die
+  // Datenbank unbenutzbar. Der Server normalisiert das inzwischen beim
+  // Schreiben; hier steht der Gürtel zum Hosenträger, auch für Altbestand.
+  const options: PropOption[] = (def.options ?? [])
+    .map((o) =>
+      typeof o === 'string'
+        ? ({ id: o, name: o, color: '' } as PropOption)
+        : (o as PropOption),
+    )
+    .filter((o) => o && typeof o.name === 'string');
+  const vals = multi
+    ? Array.isArray(value)
+      ? (value as string[])
+      : []
+    : value
+      ? [String(value)]
+      : [];
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [colorFor, setColorFor] = useState<string | null>(null); // option id being recoloured
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<{
+    left: number;
+    top?: number;
+    bottom?: number;
+    width: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const r = triggerRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(Math.max(r.width, 240), vw - 16);
+    const left = Math.max(8, Math.min(r.left, vw - width - 8));
+    const spaceBelow = vh - r.bottom - 12;
+    const spaceAbove = r.top - 12;
+    const below = spaceBelow >= 240 || spaceBelow >= spaceAbove;
+    setPos({
+      left,
+      width,
+      top: below ? r.bottom + 4 : undefined,
+      bottom: below ? undefined : vh - r.top + 4,
+      maxHeight: Math.max(200, (below ? spaceBelow : spaceAbove)),
+    });
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    setColorFor(null);
+    setQ('');
+  };
+  const selected = (id: string) => vals.includes(id);
+  const query = q.trim();
+  const filtered = options.filter((o) => o.name.toLowerCase().includes(query.toLowerCase()));
+  const exact = options.some((o) => o.name.toLowerCase() === query.toLowerCase());
+
+  const pick = (id: string) => {
+    if (multi) onChange(selected(id) ? vals.filter((v) => v !== id) : [...vals, id]);
+    else {
+      onChange(selected(id) ? '' : id);
+      close();
+    }
+  };
+  const create = () => {
+    if (!query || !onOptionsChange) return;
+    const oid = optionSlug(query, options);
+    const color = OPTION_PALETTE[options.length % OPTION_PALETTE.length].hex;
+    onOptionsChange([...options, { id: oid, name: query, color }]);
+    if (multi) {
+      onChange([...vals, oid]);
+      setQ('');
+    } else {
+      onChange(oid);
+      close();
+    }
+  };
+  const setColor = (oid: string, hex: string) => {
+    onOptionsChange?.(options.map((o) => (o.id === oid ? { ...o, color: hex } : o)));
+    setColorFor(null);
+  };
+  const remove = (oid: string) => {
+    onOptionsChange?.(options.filter((o) => o.id !== oid));
+    if (multi) onChange(vals.filter((v) => v !== oid));
+    else if (String(value) === oid) onChange('');
+    setColorFor(null);
+  };
+
+  const editing = colorFor ? options.find((o) => o.id === colorFor) : null;
+
+  return (
+    <div className="select-cell">
+      <button ref={triggerRef} className="select-cell-value" onClick={() => setOpen((o) => !o)}>
+        {vals.length ? (
+          vals.map((id) => <span key={id}>{chip(options.find((o) => o.id === id), id)}</span>)
+        ) : (
+          <span className="prop-empty">—</span>
+        )}
+      </button>
+      {open && pos && (
+        <Portal>
+          <div className="select-backdrop" onClick={close} />
+          <div
+            className="select-menu"
+            style={{
+              position: 'fixed',
+              left: pos.left,
+              top: pos.top,
+              bottom: pos.bottom,
+              width: pos.width,
+              maxHeight: pos.maxHeight,
+            }}
+          >
+            {editing ? (
+              /* Colour / delete panel for a single option (keeps everything on-screen). */
+              <>
+                <button className="select-back" onClick={() => setColorFor(null)}>
+                  ‹ Zurück
+                </button>
+                <div className="select-editing-name">
+                  <span className="prop-chip" style={{ background: editing.color + '2e', color: editing.color }}>
+                    {editing.name}
+                  </span>
+                </div>
+                <button className="tag-color-opt danger" onClick={() => remove(editing.id)}>
+                  <Trash2 size={14} /> Option löschen
+                </button>
+                <div className="menu-label">Farben</div>
+                <div className="select-options">
+                  {OPTION_PALETTE.map((c) => (
+                    <button key={c.hex} className="tag-color-opt" onClick={() => setColor(editing.id, c.hex)}>
+                      <span className="tag-swatch" style={{ background: c.hex }} />
+                      <span className="tag-color-name">{c.name}</span>
+                      {editing.color === c.hex && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <input
+                  className="select-search"
+                  autoFocus
+                  placeholder="Suchen oder anlegen…"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (query && !exact) create();
+                      else if (filtered[0]) pick(filtered[0].id);
+                    } else if (e.key === 'Escape') close();
+                  }}
+                />
+                <div className="select-options">
+                  {filtered.map((o) => (
+                    <div key={o.id} className={'select-option' + (selected(o.id) ? ' on' : '')}>
+                      <button className="select-option-main" onClick={() => pick(o.id)}>
+                        <span className="prop-chip" style={{ background: o.color + '2e', color: o.color }}>
+                          {o.name}
+                        </span>
+                        <span className="select-option-check">{selected(o.id) && <Check size={15} />}</span>
+                      </button>
+                      {onOptionsChange && (
+                        <button
+                          className="select-option-more"
+                          title="Farbe / löschen"
+                          onClick={() => setColorFor(o.id)}
+                        >
+                          ⋯
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {query && !exact && onOptionsChange && (
+                    <button className="select-create" onClick={create}>
+                      <Plus size={15} /> Anlegen: „{query}"
+                    </button>
+                  )}
+                  {filtered.length === 0 && !query && (
+                    <div className="select-empty">Keine Optionen — tippe, um eine anzulegen.</div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        </Portal>
+      )}
+    </div>
+  );
+}
+
+// Format an ISO date (YYYY-MM-DD) as a localized dd.mm.yyyy — parsed from the
+// string parts (no Date() so there's no timezone shift), shown everywhere a date
+// is read instead of the raw ISO.
+function fmtDate(v: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : v;
+}
+
+// Faelligkeiten sagen erst dann etwas, wenn man Dringlichkeit sieht, ohne zu
+// rechnen — das ist der Grund, warum ein Trello-Board auf einen Blick lesbar
+// ist. Ueberfaellig rot, heute/morgen gelb, alles andere unauffaellig.
+function dateUrgency(v: string): '' | ' is-overdue' | ' is-soon' {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
+  if (!m) return '';
+  const due = new Date(+m[1], +m[2] - 1, +m[3]);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return ' is-overdue';
+  if (days <= 1) return ' is-soon';
+  return '';
+}
+
+// Format a computed (rollup/formula) value for display. The server sends either
+// a number or a "⚠ <message>" error string.
+function formatComputed(value: unknown): { text: string; error: boolean } {
+  if (typeof value === 'string' && value.startsWith('⚠')) return { text: value, error: true };
+  if (typeof value === 'number') {
+    // Trim floating-point noise (13.000000001) without forcing decimals on ints.
+    const rounded = Math.round(value * 1e6) / 1e6;
+    return { text: String(rounded), error: false };
+  }
+  return { text: value != null ? String(value) : '', error: false };
+}
+
+// Renders a numeric value per its numberDisplay: plain text, a progress bar, or
+// a ring. Used by number props and by number-valued rollup/formula props. Falls
+// back to plain text when the value isn't a finite number.
+function NumberDisplay({ value, def, compact }: { value: unknown; def: PropDef; compact?: boolean }) {
+  const num = typeof value === 'number' ? value : parseFloat(String(value ?? ''));
+  const display = def.numberDisplay ?? 'plain';
+  const label = typeof value === 'number' ? String(Math.round(value * 1e6) / 1e6) : value != null ? String(value) : '';
+  if (display === 'plain' || !isFinite(num)) {
+    if (!label) return compact ? null : <span className="prop-empty" />;
+    return <span className="prop-number">{label}</span>;
+  }
+  const max = def.numberMax && def.numberMax > 0 ? def.numberMax : 100;
+  const pct = Math.max(0, Math.min(100, (num / max) * 100));
+  if (display === 'ring') {
+    const r = 7;
+    const circ = 2 * Math.PI * r;
+    return (
+      <span className="prop-ring" title={`${label} / ${max}`}>
+        <svg width="18" height="18" viewBox="0 0 18 18">
+          <circle className="prop-ring-track" cx="9" cy="9" r={r} />
+          <circle
+            className="prop-ring-fill"
+            cx="9"
+            cy="9"
+            r={r}
+            strokeDasharray={circ}
+            strokeDashoffset={circ * (1 - pct / 100)}
+            transform="rotate(-90 9 9)"
+          />
+        </svg>
+        <span className="prop-bar-label">{label}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="prop-bar" title={`${label} / ${max}`}>
+      <span className="prop-bar-track">
+        <span className="prop-bar-fill" style={{ width: pct + '%' }} />
+      </span>
+      <span className="prop-bar-label">{label}</span>
+    </span>
+  );
+}
+
+// ---- Relation picker ----
+// Rows of the target collection are fetched once per collection and shared
+// across every relation cell via a module-level cache, so a table with many
+// relation cells doesn't issue one request per cell.
+type RelOption = { id: string; title: string; icon: string };
+const relCache = new Map<string, Promise<RelOption[]>>();
+
+function loadRelationOptions(colId: string, force = false): Promise<RelOption[]> {
+  if (force || !relCache.has(colId)) {
+    const p = api
+      .collectionRows(colId, { limit: 500 })
+      .then((r) => r.rows.map((x) => ({ id: x.id, title: x.title, icon: x.icon })))
+      .catch(() => [] as RelOption[]);
+    relCache.set(colId, p);
+  }
+  return relCache.get(colId)!;
+}
+
+function RelationValue({ def, value, onChange, readOnly, compact }: Props) {
+  const targetId = def.relationCollection;
+  const ids = Array.isArray(value) ? (value as string[]) : [];
+  const [options, setOptions] = useState<RelOption[]>([]);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const boxRef = useRef<HTMLDivElement>(null);
+  const ro = readOnly || !onChange;
+
+  useEffect(() => {
+    if (!targetId) return;
+    let alive = true;
+    void loadRelationOptions(targetId).then((o) => alive && setOptions(o));
+    return () => {
+      alive = false;
+    };
+  }, [targetId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [open]);
+
+  const titleOf = (id: string) => options.find((o) => o.id === id)?.title || 'Untitled';
+  const iconOf = (id: string) => options.find((o) => o.id === id)?.icon || '';
+
+  if (!targetId) return <span className="prop-empty">No target</span>;
+
+  const chips = (
+    <span className="prop-multi">
+      {ids.map((id) => (
+        <span key={id} className="prop-chip relation-chip" style={{ background: '#3b6fb52e', color: '#3b6fb5' }}>
+          {iconOf(id) && <span>{iconOf(id)} </span>}
+          {titleOf(id)}
+        </span>
+      ))}
+    </span>
+  );
+
+  if (ro) return ids.length ? chips : null;
+  if (compact) return ids.length ? chips : null;
+
+  const toggle = (id: string) => {
+    onChange!(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
+  };
+  const filtered = options.filter((o) =>
+    (o.title || 'Untitled').toLowerCase().includes(query.toLowerCase()),
+  );
+
+  return (
+    <div className="relation-value" ref={boxRef}>
+      <button
+        type="button"
+        className="relation-open"
+        onClick={() => {
+          if (!open && targetId) void loadRelationOptions(targetId, true).then(setOptions);
+          setOpen((v) => !v);
+        }}
+      >
+        {ids.length ? chips : <span className="prop-empty">＋ Link</span>}
+      </button>
+      {open && (
+        <div className="menu relation-menu">
+          <input
+            className="prop-input"
+            autoFocus
+            placeholder="Search…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          <div className="relation-options">
+            {filtered.length === 0 && <div className="relation-empty">No rows</div>}
+            {filtered.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                className={'relation-option' + (ids.includes(o.id) ? ' on' : '')}
+                onClick={() => toggle(o.id)}
+              >
+                <span className="relation-check">{ids.includes(o.id) ? '✓' : ''}</span>
+                {o.icon && <span>{o.icon} </span>}
+                {o.title || 'Untitled'}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function PropertyValue({ def, value, onChange, onOptionsChange, readOnly, compact }: Props) {
+  const [editing, setEditing] = useState(false);
+  const ro = readOnly || !onChange;
+
+  switch (def.type) {
+    case 'relation':
+      return <RelationValue def={def} value={value} onChange={onChange} readOnly={readOnly} compact={compact} />;
+    case 'rollup':
+    case 'formula': {
+      // Computed server-side; always read-only. Renders the number or an
+      // inline "⚠ …" for a bad formula (division by zero, cycle, …).
+      const { text, error } = formatComputed(value);
+      if (!text) return compact ? null : <span className="prop-empty">—</span>;
+      // A numeric computed value can display as a progress bar/ring too.
+      if (!error && (def.numberDisplay === 'bar' || def.numberDisplay === 'ring') && isFinite(Number(value))) {
+        return <NumberDisplay value={value} def={def} compact={compact} />;
+      }
+      return <span className={'prop-computed' + (error ? ' error' : '')}>{text}</span>;
+    }
+    case 'select': {
+      const opt = def.options?.find((o) => o.id === value);
+      if (ro) return value ? chip(opt, String(value)) : null;
+      return (
+        <SelectCell
+          def={def}
+          value={value}
+          multi={false}
+          onChange={onChange!}
+          onOptionsChange={onOptionsChange}
+        />
+      );
+    }
+    case 'multiselect': {
+      const vals = Array.isArray(value) ? (value as string[]) : [];
+      if (compact || ro) {
+        return (
+          <span className="prop-multi">
+            {vals.map((id) => chip(def.options?.find((o) => o.id === id), id))}
+          </span>
+        );
+      }
+      return (
+        <SelectCell
+          def={def}
+          value={value}
+          multi
+          onChange={onChange!}
+          onOptionsChange={onOptionsChange}
+        />
+      );
+    }
+    case 'checkbox':
+      return (
+        <input
+          type="checkbox"
+          checked={value === true}
+          disabled={ro}
+          onChange={(e) => onChange?.(e.target.checked)}
+        />
+      );
+    case 'number': {
+      const display = def.numberDisplay ?? 'plain';
+      if (ro) return <NumberDisplay value={value} def={def} compact={compact} />;
+      // A bar/ring number shows the visual until clicked, then edits the raw
+      // value (like the text cell). A plain number stays an always-on input.
+      if (display !== 'plain' && !editing) {
+        return (
+          <span className="prop-num-editable" onClick={() => setEditing(true)}>
+            <NumberDisplay value={value} def={def} compact={compact} />
+          </span>
+        );
+      }
+      return (
+        <input
+          className="prop-input"
+          type="number"
+          autoFocus={display !== 'plain'}
+          value={(value as number) ?? ''}
+          onChange={(e) => onChange!(e.target.value === '' ? null : Number(e.target.value))}
+          onBlur={display !== 'plain' ? () => setEditing(false) : undefined}
+        />
+      );
+    }
+    case 'date':
+      if (ro)
+        return value ? (
+          <span className={'prop-date' + dateUrgency(String(value))}>{fmtDate(String(value))}</span>
+        ) : compact ? null : (
+          <span className="prop-empty" />
+        );
+      return (
+        <input
+          className="prop-input prop-input-date"
+          type="date"
+          value={(value as string) || ''}
+          onChange={(e) => onChange!(e.target.value)}
+        />
+      );
+    case 'url': {
+      // Ohne eigenen Fall landete eine URL im text-Zweig und stand als volle
+      // Zeile Rohtext auf der Karte („https://trello.com/c/yksGXxLh") — auf
+      // einem Board ist das reines Rauschen. Angezeigt wird der Gastgeber,
+      // angeklickt wird die volle Adresse.
+      const href = String(value ?? '').trim();
+      if (!href) return compact ? null : <span className="prop-empty">—</span>;
+      let label = href;
+      try {
+        const u = new URL(href.includes('://') ? href : 'https://' + href);
+        label = u.hostname.replace(/^www\./, '');
+      } catch {
+        /* keine gueltige URL — dann eben ungekuerzt */
+      }
+      return (
+        <a
+          className="prop-url-chip"
+          href={href.includes('://') ? href : 'https://' + href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={href}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <LinkIcon size={11} />
+          {label}
+        </a>
+      );
+    }
+    case 'person':
+    case 'text':
+    default:
+      if (compact) return value ? <span className="prop-text-chip">{String(value)}</span> : null;
+      if (ro || !editing) {
+        return (
+          <span
+            className="prop-text"
+            onClick={ro ? undefined : () => setEditing(true)}
+          >
+            {value ? String(value) : <span className="prop-empty" />}
+          </span>
+        );
+      }
+      return (
+        <input
+          className="prop-input"
+          autoFocus
+          defaultValue={(value as string) || ''}
+          onBlur={(e) => {
+            setEditing(false);
+            onChange!(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+        />
+      );
+  }
+}

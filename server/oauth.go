@@ -1,0 +1,357 @@
+package server
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// OAuth-Login (Welle 41): "Mit Google/Microsoft anmelden" als Produkt-Feature.
+// Klassischer OIDC Authorization-Code-Flow mit PKCE, ohne externe Library —
+// der Admin hinterlegt Client-ID/-Secret in den Instanz-Einstellungen, die
+// Login-Seite zeigt die Buttons automatisch.
+//
+// Neue Konten folgen derselben Registrierungs-Policy wie das Passwort-Signup
+// (invite = nur bestehende Konten dürfen sich per OAuth anmelden, domain =
+// E-Mail-Allowlist, open = jeder). Die ID-Token-Claims stammen direkt vom
+// Token-Endpoint über TLS — deshalb ist das Parsen ohne eigene
+// Signaturprüfung hier in Ordnung.
+
+type oauthProvider struct {
+	key         string
+	authURL     string
+	tokenURL    string
+	userinfoURL string
+	extraAuth   url.Values
+}
+
+var oauthProviders = map[string]oauthProvider{
+	"google": {
+		key:         "google",
+		authURL:     "https://accounts.google.com/o/oauth2/v2/auth",
+		tokenURL:    "https://oauth2.googleapis.com/token",
+		userinfoURL: "https://openidconnect.googleapis.com/v1/userinfo",
+		extraAuth:   url.Values{"access_type": {"online"}, "prompt": {"select_account"}},
+	},
+	"microsoft": {
+		key:         "microsoft",
+		authURL:     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+		tokenURL:    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+		userinfoURL: "https://graph.microsoft.com/oidc/userinfo",
+	},
+}
+
+func (s *Server) oauthClient(p string) (id, secret string) {
+	switch p {
+	case "google":
+		return s.setting("oauth_google_id", ""), s.setting("oauth_google_secret", "")
+	case "microsoft":
+		return s.setting("oauth_ms_id", ""), s.setting("oauth_ms_secret", "")
+	}
+	return "", ""
+}
+
+// oauthEnabled reports which providers are fully configured — the login page
+// only shows buttons for these.
+func (s *Server) oauthEnabled() (google, microsoft bool) {
+	gid, gsec := s.oauthClient("google")
+	mid, msec := s.oauthClient("microsoft")
+	return gid != "" && gsec != "", mid != "" && msec != ""
+}
+
+const oauthCookie = "salt_oauth"
+
+type oauthTx struct {
+	Provider string `json:"p"`
+	State    string `json:"s"`
+	Verifier string `json:"v"`
+	Exp      int64  `json:"e"`
+}
+
+func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
+
+// sha256Sum liefert die base64url-kodierte SHA-256-Summe (PKCE-Challenge).
+func sha256Sum(v string) string {
+	sum := sha256.Sum256([]byte(v))
+	return b64url(sum[:])
+}
+
+func randB64(n int) string {
+	b := make([]byte, n)
+	rand.Read(b)
+	return b64url(b)
+}
+
+// loginErrorRedirect sends the browser back to the login screen with a
+// human-readable message (the SPA shows it above the form).
+func loginErrorRedirect(w http.ResponseWriter, r *http.Request, msg string) {
+	http.Redirect(w, r, "/?oauthError="+url.QueryEscape(msg), http.StatusFound)
+}
+
+func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
+	pname := r.PathValue("provider")
+	prov, ok := oauthProviders[pname]
+	if !ok {
+		httpError(w, 404, "unknown provider")
+		return
+	}
+	clientID, clientSecret := s.oauthClient(pname)
+	if clientID == "" || clientSecret == "" {
+		loginErrorRedirect(w, r, "Dieser Login ist nicht konfiguriert.")
+		return
+	}
+
+	// The whole flow must run on ONE origin (the state cookie is host-scoped
+	// and the registered redirect URI must match). If a public base URL is
+	// configured and the user is browsing via LAN IP / tunnel alias, hop to
+	// the canonical origin first.
+	if base := s.setting("public_base_url", ""); base != "" {
+		if u, err := url.Parse(base); err == nil && u.Host != "" && u.Host != r.Host {
+			http.Redirect(w, r, strings.TrimRight(base, "/")+"/api/oauth/"+pname+"/start", http.StatusFound)
+			return
+		}
+	}
+
+	state := randB64(16)
+	verifier := randB64(32)
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := b64url(sum[:])
+
+	tx, _ := json.Marshal(oauthTx{Provider: pname, State: state, Verifier: verifier, Exp: time.Now().Add(10 * time.Minute).Unix()})
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthCookie,
+		Value:    b64url(tx),
+		Path:     "/api/oauth/",
+		MaxAge:   600,
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	q := url.Values{}
+	q.Set("client_id", clientID)
+	q.Set("redirect_uri", s.baseURL(r)+"/api/oauth/"+pname+"/callback")
+	q.Set("response_type", "code")
+	q.Set("scope", "openid email profile")
+	q.Set("state", state)
+	q.Set("code_challenge", challenge)
+	q.Set("code_challenge_method", "S256")
+	for k, vs := range prov.extraAuth {
+		for _, v := range vs {
+			q.Set(k, v)
+		}
+	}
+	http.Redirect(w, r, prov.authURL+"?"+q.Encode(), http.StatusFound)
+}
+
+func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	pname := r.PathValue("provider")
+	prov, ok := oauthProviders[pname]
+	if !ok {
+		httpError(w, 404, "unknown provider")
+		return
+	}
+
+	// Clear the transaction cookie in any case.
+	defer http.SetCookie(w, &http.Cookie{Name: oauthCookie, Path: "/api/oauth/", MaxAge: -1})
+
+	if e := r.URL.Query().Get("error"); e != "" {
+		loginErrorRedirect(w, r, "Anmeldung abgebrochen ("+e+")")
+		return
+	}
+
+	c, err := r.Cookie(oauthCookie)
+	if err != nil {
+		loginErrorRedirect(w, r, "Anmeldung abgelaufen — bitte erneut versuchen.")
+		return
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
+	var tx oauthTx
+	if err != nil || json.Unmarshal(raw, &tx) != nil || tx.Provider != pname ||
+		tx.Exp < time.Now().Unix() || tx.State == "" || tx.State != r.URL.Query().Get("state") {
+		loginErrorRedirect(w, r, "Anmeldung ungültig (State) — bitte erneut versuchen.")
+		return
+	}
+
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		loginErrorRedirect(w, r, "Kein Autorisierungscode erhalten.")
+		return
+	}
+
+	clientID, clientSecret := s.oauthClient(pname)
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
+	form.Set("redirect_uri", s.baseURL(r)+"/api/oauth/"+pname+"/callback")
+	form.Set("code_verifier", tx.Verifier)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.PostForm(prov.tokenURL, form)
+	if err != nil {
+		loginErrorRedirect(w, r, "Token-Austausch fehlgeschlagen.")
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	var tok struct {
+		AccessToken string `json:"access_token"`
+		IDToken     string `json:"id_token"`
+		Error       string `json:"error"`
+		ErrorDesc   string `json:"error_description"`
+	}
+	if json.Unmarshal(body, &tok) != nil || tok.Error != "" || tok.IDToken == "" {
+		msg := tok.ErrorDesc
+		if msg == "" {
+			msg = tok.Error
+		}
+		if msg == "" {
+			msg = "Token-Antwort unlesbar"
+		}
+		loginErrorRedirect(w, r, "Anmeldung fehlgeschlagen: "+msg)
+		return
+	}
+
+	email, name, verified := parseIDToken(tok.IDToken)
+	if email == "" && prov.userinfoURL != "" && tok.AccessToken != "" {
+		email, name = s.fetchUserinfo(prov.userinfoURL, tok.AccessToken, name)
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	if email == "" {
+		loginErrorRedirect(w, r, "Der Anbieter hat keine E-Mail-Adresse geliefert.")
+		return
+	}
+	if pname == "google" && !verified {
+		loginErrorRedirect(w, r, "Diese Google-E-Mail ist nicht verifiziert.")
+		return
+	}
+
+	// Nur ueber eine BESTAETIGTE E-Mail anmelden. Eine per Selbstaenderung
+	// gesetzte (unbestaetigte) Adresse darf keine OAuth-Identitaet begruenden —
+	// sonst koennte man die kuenftige SSO-Anmeldung eines Kollegen kapern.
+	var uid string
+	err = s.db.QueryRow(`SELECT id FROM users WHERE email = ? AND email_verified = 1`, email).Scan(&uid)
+	if err != nil {
+		// Haelt ein UNbestaetigtes Konto diese Adresse, ist das ein Squatter:
+		// nicht anlegen (E-Mail ist UNIQUE) und nicht stillschweigend anmelden.
+		var squat int
+		s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, email).Scan(&squat)
+		if squat > 0 {
+			loginErrorRedirect(w, r, "Diese E-Mail ist einem Konto zugeordnet, das sie nicht bestätigt hat. Bitte per Passwort anmelden oder den Administrator kontaktieren.")
+			return
+		}
+		uid, err = s.oauthCreateUser(email, name)
+		if err != nil {
+			loginErrorRedirect(w, r, err.Error())
+			return
+		}
+	}
+
+	sessTok, err := s.createSession(uid)
+	if err != nil {
+		loginErrorRedirect(w, r, "Session konnte nicht erstellt werden.")
+		return
+	}
+	setSessionCookie(w, r, sessTok, s.sessionDays()*24*3600)
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// parseIDToken extracts the claims we need from a JWT delivered directly by
+// the token endpoint (no signature check needed on this trust path).
+func parseIDToken(jwt string) (email, name string, verified bool) {
+	parts := strings.Split(jwt, ".")
+	if len(parts) < 2 {
+		return "", "", false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", "", false
+	}
+	var claims struct {
+		Email             string `json:"email"`
+		EmailVerified     any    `json:"email_verified"` // bool bei Google, string bei manchen IdPs
+		Name              string `json:"name"`
+		PreferredUsername string `json:"preferred_username"`
+	}
+	if json.Unmarshal(payload, &claims) != nil {
+		return "", "", false
+	}
+	email = claims.Email
+	if email == "" && strings.Contains(claims.PreferredUsername, "@") {
+		email = claims.PreferredUsername
+	}
+	verified = true
+	switch v := claims.EmailVerified.(type) {
+	case bool:
+		verified = v
+	case string:
+		verified = v != "false"
+	}
+	return email, claims.Name, verified
+}
+
+func (s *Server) fetchUserinfo(uiURL, accessToken, fallbackName string) (email, name string) {
+	req, _ := http.NewRequest("GET", uiURL, nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fallbackName
+	}
+	defer resp.Body.Close()
+	var ui struct {
+		Email string `json:"email"`
+		Name  string `json:"name"`
+	}
+	json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&ui)
+	if ui.Name == "" {
+		ui.Name = fallbackName
+	}
+	return ui.Email, ui.Name
+}
+
+// oauthCreateUser applies the instance signup policy and provisions the
+// account with an unusable random password (login happens via OAuth).
+func (s *Server) oauthCreateUser(email, name string) (string, error) {
+	mode := s.setting("signup_mode", "invite")
+	var ws string
+	switch mode {
+	case "open":
+		s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&ws)
+	case "domain":
+		var ok bool
+		if ws, ok = s.domainAllowsSelfSignup(email); !ok {
+			return "", fmt.Errorf("Für diese E-Mail ist keine Registrierung erlaubt — bitte einen Admin um eine Einladung.")
+		}
+	default:
+		return "", fmt.Errorf("Kein Konto für %s — die Registrierung ist einladungsbasiert.", email)
+	}
+	if ws == "" {
+		return "", fmt.Errorf("Kein Workspace zum Beitreten vorhanden.")
+	}
+	if name = strings.TrimSpace(name); name == "" {
+		name = strings.SplitN(email, "@", 2)[0]
+	}
+	if len([]rune(name)) > 80 {
+		name = string([]rune(name)[:80])
+	}
+	randPw := make([]byte, 32)
+	rand.Read(randPw)
+	uid := newID()
+	if _, err := s.db.Exec(`INSERT INTO users (id, email, name, color, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)`,
+		uid, email, name, s.nextColor(), hashPassword(hex.EncodeToString(randPw)), now()); err != nil {
+		return "", fmt.Errorf("Konto konnte nicht erstellt werden.")
+	}
+	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, uid)
+	return uid, nil
+}

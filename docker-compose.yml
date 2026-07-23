@@ -1,0 +1,19 @@
+services:
+  salt:
+    build: .
+    # Or use a prebuilt image instead of build:
+    # image: ghcr.io/you/salt:latest
+    ports:
+      - "8420:8420"
+    volumes:
+      - salt-data:/data
+    environment:
+      SALT_ADDR: ":8420"
+      SALT_DATA: "/data"
+      # For HTTPS, mount certs and point these at them:
+      # SALT_TLS_CERT: "/certs/fullchain.pem"
+      # SALT_TLS_KEY: "/certs/privkey.pem"
+    restart: unless-stopped
+
+volumes:
+  salt-data:

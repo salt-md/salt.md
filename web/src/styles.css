@@ -1,0 +1,6651 @@
+:root {
+  /* Hoehe der Dokument-Kopfzeile. Wird von .topbar UND von der
+     Kommentarspalte gelesen, damit die eine unter der anderen beginnt. */
+  --topbar-h: 47px;
+  /* EINE Spaltenbreite fuer Titel, Eigenschaften und Fliesstext. Vorher lief
+     der Titel auf 860px und der Text auf 760px — beide zentriert, wodurch der
+     Text 50px weiter rechts begann als die Ueberschrift und 100px schmaler
+     war. Genau das liess die Seite unfertig wirken. */
+  --doc-width: 940px;
+  --doc-pad: 56px;
+  --bg: #ffffff;
+  --fg: #37352f;
+  --muted: #787774;
+  --sidebar-bg: #f7f6f3;
+  --hover: rgba(0, 0, 0, 0.05);
+  --active: rgba(0, 0, 0, 0.08);
+  --border: #e9e7e4;
+  --accent: #2f7d4f;
+  --accent-soft: rgba(47, 125, 79, 0.12);
+  --danger: #c4554d;
+  --card: #ffffff;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.16);
+  /* Glow design system (W37, Taskade-inspired): accent as RGB triplet for
+     colored shadows, a gradient fill for primary actions, and a small palette
+     of ambient hues. */
+  --accent-rgb: 47, 125, 79;
+  --grad-accent: linear-gradient(120deg, #2f9d5f, #1e8e78);
+  --glow-pink: 255, 45, 96;
+  --glow-purple: 147, 51, 234;
+  --glow-blue: 59, 130, 246;
+  --glow-orange: 249, 115, 22;
+  --glow-green: 34, 197, 94;
+}
+
+[data-theme='dark'] {
+  --bg: #191919;
+  --fg: #d4d4d4;
+  --muted: #8f8f8f;
+  --sidebar-bg: #202020;
+  --hover: rgba(255, 255, 255, 0.055);
+  --active: rgba(255, 255, 255, 0.09);
+  --border: #2f2f2f;
+  --accent: #4fa872;
+  --accent-soft: rgba(79, 168, 114, 0.16);
+  --danger: #e06c62;
+  --card: #242424;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+  --accent-rgb: 79, 168, 114;
+  --grad-accent: linear-gradient(120deg, #3fae6e, #27a08a);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica,
+    Arial, sans-serif;
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.app {
+  display: flex;
+  height: 100%;
+  overflow: hidden; /* the sidebar drawer + table own their own scrolling */
+}
+
+.app-loading {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+}
+
+/* ---------- Sidebar ---------- */
+
+/* Die Seitenleiste ist das Zuhause der App — sie darf Platz haben. Große
+   Zeilen, ruhige Typografie, klare Trefferflächen (Bear-Vorbild) statt einer
+   dichten Baumliste. */
+.sidebar {
+  width: 292px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 16px 14px 10px;
+  font-size: 15px;
+}
+
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Runde Icon-Buttons im Kopf: klar als eigenständige Aktion erkennbar und
+   mit echter Fingerfläche, ohne dass sie optisch schwer werden. */
+.sidebar-header .icon-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--hover);
+}
+
+.sidebar-header .icon-btn:hover {
+  background: var(--active);
+  color: var(--fg);
+}
+
+/* Der Drawer-Schließer gehört nur aufs Handy. Die Regel oben ist spezifischer
+   als das globale `.menu-btn { display: none }` und würde ihn sonst auch auf
+   dem Desktop einblenden. */
+.sidebar-header .menu-btn {
+  display: none;
+}
+
+/* Hamburger / drawer-close buttons: hidden on desktop, shown on mobile. */
+.menu-btn {
+  display: none;
+}
+
+.topbar-menu {
+  flex-shrink: 0;
+  font-size: 18px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.topbar-menu:hover {
+  background: var(--hover);
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+.logo strong {
+  letter-spacing: -0.01em;
+}
+
+.icon-btn {
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 14px;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+}
+
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 6px 12px 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 14.5px;
+  color: var(--muted);
+  background: var(--hover);
+  border: 1px solid transparent; /* reserves space for the rainbow hover ring */
+}
+
+.sidebar-search:hover {
+  background: var(--active);
+}
+
+.kbd {
+  font-size: 11px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  background: var(--bg);
+}
+
+.tree {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2px 8px 16px;
+}
+
+/* Eine Zeile ist eine Pille, kein Listeneintrag: volle Breite, weiche Ecken,
+   genug Höhe zum Treffen — auch mit dem Daumen. */
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  font-size: 14.5px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  border-top: 2px solid transparent;
+  border-bottom: 2px solid transparent;
+  /* Die 2px-Rahmen oben/unten gibt es für die Drag-Marker. Ohne diese Zeile
+     malt der Hintergrund darunter durch (border-box ist die Vorgabe) — die
+     Pillen benachbarter Zeilen berührten sich direkt und klebten optisch
+     zusammen. Mit padding-box endet die Füllung am Innenrand, und aus den
+     vorhandenen Rahmen wird der Abstand: 2px + 2px = 4px zwischen zwei Zeilen,
+     ohne Zeilenhöhe oder Listenlänge zu verändern. */
+  background-clip: padding-box;
+}
+
+.tree-item:hover {
+  background-color: var(--hover); /* siehe .tree-item.active: keine Kurzschreibweise */
+}
+
+/* Die aktive Seite trägt Farbe statt nur Grau — sie ist auf einen Blick
+   auffindbar, auch wenn die Liste lang wird.
+   WICHTIG: `background-color`, NICHT die Kurzschreibweise `background` — die
+   würde `background-clip: padding-box` aus der Grundregel zurücksetzen und die
+   Pillen benachbarter Zeilen wieder aneinanderkleben lassen. */
+.tree-item.active {
+  background-color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tree-item.active .tree-icon,
+.tree-item.active .sb-flat-parent {
+  color: inherit;
+}
+
+.tree-item.drop-inside {
+  background-color: var(--accent-soft);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+.tree-item.drop-before {
+  border-top-color: var(--accent);
+}
+
+.tree-item.drop-after {
+  border-bottom-color: var(--accent);
+}
+
+.chevron {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.chevron:hover {
+  background: var(--active);
+}
+
+.chevron.spacer {
+  pointer-events: none;
+}
+
+.tree-icon {
+  font-size: 17px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  color: var(--muted);
+}
+
+.tree-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.tree-item:hover .tree-actions {
+  display: inline-flex;
+}
+
+.tree-actions > button {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-actions > button:hover {
+  background: var(--active);
+  color: var(--fg);
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: 24px;
+  z-index: 50;
+  min-width: 180px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+
+.menu button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.menu button:hover {
+  background: var(--hover);
+}
+
+.menu button.danger {
+  color: var(--danger);
+}
+
+/* Overflow ("…") menu: secondary page actions grouped out of the topbar. */
+.overflow-menu {
+  min-width: 210px;
+}
+.menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
+}
+.menu-label {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.menu-item svg {
+  color: var(--muted);
+  flex: none;
+}
+
+/* ---- Page tags (Welle 25/28) ---- */
+.page-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 8px;
+}
+.page-tag {
+  position: relative; /* anchors the colour-picker popover */
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--accent, #2f7d4f);
+  background: color-mix(in srgb, var(--accent, #2f7d4f) 12%, transparent);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+.page-tag-x {
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.55;
+  padding: 0 0 0 1px;
+}
+.page-tag-x:hover {
+  opacity: 1;
+}
+.page-tag-input {
+  border: none;
+  background: none;
+  font-size: 12.5px;
+  color: var(--text);
+  padding: 2px 4px;
+  min-width: 90px;
+  outline: none;
+}
+.page-tag-input::placeholder {
+  color: var(--muted);
+}
+
+/* ---- Sidebar tags section ---- */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 2px 6px 4px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--hover);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+.tag-chip:hover {
+  color: var(--text);
+}
+.tag-chip.active {
+  outline: 1.5px solid currentColor;
+  outline-offset: -1.5px;
+  font-weight: 600;
+}
+.tag-chip-count {
+  opacity: 0.6;
+  font-size: 11px;
+}
+.tag-filter-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--accent, #2f7d4f);
+  padding: 4px 6px 6px;
+}
+.tag-filter-banner span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.tag-filter-clear {
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+.tag-filter-clear:hover {
+  color: var(--text);
+}
+
+/* ---- Document tabs (Welle 26) ---- */
+.tab-bar {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 4px 6px 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex: none;
+}
+.tab-bar::-webkit-scrollbar {
+  height: 0;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  min-width: 96px;
+  padding: 6px 8px 6px 10px;
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom: none;
+  user-select: none;
+}
+.tab:hover {
+  background: var(--hover);
+}
+.tab.active {
+  color: var(--text);
+  background: var(--card);
+  border-color: var(--border);
+}
+.tab-icon {
+  display: inline-flex;
+  flex: none;
+  color: var(--muted);
+}
+.tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tab-close {
+  display: inline-flex;
+  flex: none;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px;
+  opacity: 0;
+}
+.tab:hover .tab-close,
+.tab.active .tab-close {
+  opacity: 0.7;
+}
+.tab-close:hover {
+  opacity: 1;
+  background: var(--hover);
+}
+
+.new-page {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  margin-top: 4px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.new-page:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.trash-section {
+  border-top: 1px solid var(--border);
+  padding: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.trash-toggle {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.trash-toggle:hover {
+  background: var(--hover);
+}
+
+.trash-count {
+  background: var(--active);
+  border-radius: 8px;
+  padding: 0 7px;
+  font-size: 11px;
+}
+
+.trash-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--muted);
+  border-radius: 6px;
+}
+
+.trash-item:hover {
+  background: var(--hover);
+}
+
+.trash-item .tree-title {
+  text-decoration: line-through;
+}
+
+.trash-item button {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.trash-item button:hover {
+  background: var(--active);
+}
+
+.trash-item button.danger:hover {
+  color: var(--danger);
+}
+
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+
+.footer-btn {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.footer-btn:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+/* ---------- Main / Editor ---------- */
+
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  overflow: hidden;
+  /* Bezugsrahmen fuer die Kommentarspalte: sie wird zwar innerhalb von
+     .page-body gerendert, soll aber NICHT mitscrollen. Weil ihr
+     Bezugsrahmen ausserhalb des Scrollers liegt, schneidet der sie auch
+     nicht ab. */
+  position: relative;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  /* Feste Hoehe, weil die Kommentarspalte darunter beginnen muss. Ohne einen
+     gemeinsamen Wert deckte sie die Aktionen rechts oben zu — Stern, Schloss
+     und ⋯ waren nicht mehr erreichbar. Beide lesen jetzt --topbar-h. */
+  min-height: var(--topbar-h);
+  box-sizing: border-box;
+  /* Left-aligned flow (hamburger → breadcrumbs), actions pushed right via
+     margin — space-between floated the breadcrumbs to the middle whenever
+     the hamburger appeared (collapsed sidebar / mobile). */
+  gap: 12px;
+  padding: 10px 18px;
+}
+
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 13.5px;
+  min-width: 0;
+}
+
+.crumb {
+  padding: 3px 6px;
+  border-radius: 6px;
+  color: var(--fg);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crumb:hover {
+  background: var(--hover);
+}
+
+.crumb-sep {
+  color: var(--muted);
+  margin: 0 2px;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.save-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.save-status.error {
+  color: var(--danger);
+}
+
+/* The single scroller below the topbar: cover + page head + content scroll
+   away as one page; only the topbar stays. */
+.page-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+/* Inside .page-body the editor area no longer scrolls itself — it grows with
+   its content and still stretches to fill the viewport when short (keeps the
+   click-to-write area below the last block). */
+.editor-scroll {
+  flex: 1 0 auto;
+}
+
+.editor-inner {
+  max-width: var(--doc-width);
+  margin: 0 auto;
+  padding: 20px var(--doc-pad) 30vh;
+}
+
+.page-icon-row {
+  position: relative;
+  min-height: 28px;
+  flex-shrink: 0;
+  /* Lives outside .page-head now — carries the same centering itself. */
+  max-width: var(--doc-width);
+  margin: 0 auto;
+  width: 100%;
+  padding: 0 48px;
+}
+
+.page-icon-row--db {
+  max-width: none;
+  margin: 0;
+}
+
+.page-icon {
+  font-size: 60px;
+  line-height: 1.1;
+  border-radius: 8px;
+  padding: 2px 6px;
+}
+
+.page-icon:hover {
+  background: var(--hover);
+}
+
+.add-icon {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.editor-inner:hover .add-icon,
+.page-icon-row:hover .add-icon {
+  opacity: 1;
+}
+
+.add-icon:hover {
+  background: var(--hover);
+}
+
+/* Icon picker — emoji (searchable), Lucide icons (+ colour), image upload. */
+.icon-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 60;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+  width: 348px;
+  max-width: calc(100vw - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.icon-picker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.icon-picker-tabs button {
+  padding: 5px 11px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.icon-picker-tabs button:hover {
+  background: var(--hover);
+}
+.icon-picker-tabs button.on {
+  background: var(--active);
+  color: var(--fg);
+}
+.icon-picker-remove {
+  margin-left: auto;
+  color: var(--muted);
+  padding: 5px;
+  border-radius: 7px;
+  display: inline-flex;
+}
+.icon-picker-remove:hover {
+  background: var(--hover);
+  color: var(--danger);
+}
+
+.icon-search {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+}
+.icon-search:focus {
+  border-color: var(--accent);
+}
+
+.icon-colors {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+.icon-color {
+  padding: 2px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  line-height: 0;
+}
+.icon-color.on {
+  border-color: var(--accent);
+}
+.icon-color-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: block;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.12);
+}
+.icon-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.icon-style-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.icon-style-toggle button {
+  padding: 4px 11px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.icon-style-toggle button.on {
+  background: var(--active);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.icon-picker-body {
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.icon-cat-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 8px 2px 4px;
+}
+.icon-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.emoji-grid {
+  grid-template-columns: repeat(9, 1fr);
+}
+.icon-grid button {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border-radius: 7px;
+  color: var(--fg);
+}
+.icon-grid button:hover {
+  background: var(--hover);
+}
+.icon-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.icon-upload {
+  padding: 22px 10px;
+  text-align: center;
+}
+.icon-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+}
+.icon-upload-btn:disabled {
+  opacity: 0.6;
+}
+.icon-upload-hint {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* PageIcon: emoji renders as text (parent font-size); Lucide + images sized. */
+.page-icon-img {
+  object-fit: cover;
+  border-radius: 5px;
+  vertical-align: middle;
+}
+.page-icon-lucide {
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.inline-icon {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  /* Der Abstand stand bisher als Leerzeichen INNERHALB dieses Spans — in
+     einem inline-flex-Kasten wird Leerraum aber nicht gerendert, also klebte
+     das Emoji direkt am Text. */
+  margin-right: 0.45em;
+}
+
+.page-title {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 38px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  padding: 10px 0 12px;
+  font-family: inherit;
+  /* Auto-growing textarea: any-length titles wrap to as many lines as needed
+     (JS sets the height to scrollHeight), never clipped or side-scrolled. */
+  display: block;
+  box-sizing: border-box;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.page-title::placeholder {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* BlockNote integration */
+.bn-editor {
+  background: transparent !important;
+  padding-inline: 0 !important;
+}
+
+.bn-container {
+  background: transparent;
+}
+
+.editor-loading {
+  flex: 1;
+}
+
+.editor-error {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.empty-state {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.empty-emoji {
+  font-size: 52px;
+}
+
+.empty-state h2 {
+  color: var(--fg);
+  margin: 6px 0 0;
+}
+
+.btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 13.5px;
+  background: var(--card);
+}
+
+.btn:hover {
+  background: var(--hover);
+}
+
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  filter: brightness(1.06);
+}
+
+/* ---------- Search modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 6dvh 12px 3dvh;
+  z-index: 100;
+  overflow-y: auto;
+}
+
+/* Ist ein Dialog hoeher als der (gepolsterte) sichtbare Bereich — das Profil
+   mit Passwort-Bestaetigung, aktuellem Passwort und 2FA-Zeile auf einem kurzen
+   Laptop —, deckelt max-height ihn passend zum Overlay-Rand und er scrollt
+   INTERN. Vorher rutschte die Speichern-Zeile unter den Bildschirmrand und war
+   nicht erreichbar; blosses Overlay-Scrollen half nicht, weil die
+   Flex-Zentrierung den Scrollweg auffrass. */
+.modal-overlay > .dialog {
+  max-height: calc(100dvh - 9dvh);
+  overflow-y: auto;
+}
+
+.search-modal {
+  width: min(600px, 92vw);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.search-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 17px;
+  padding: 16px 18px;
+  font-family: inherit;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-results {
+  max-height: 44vh;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.search-result {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 8px;
+  align-items: flex-start;
+}
+
+.search-result.selected {
+  background: var(--hover);
+}
+
+.result-icon {
+  font-size: 17px;
+  margin-top: 1px;
+}
+
+.result-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.result-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.result-snippet {
+  font-size: 12.5px;
+  color: var(--muted);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.result-snippet mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.search-empty {
+  padding: 18px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+/* ---------- Login ---------- */
+
+.login-wrap {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 320px;
+  padding: 34px 30px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.login-logo {
+  font-size: 44px;
+}
+
+.login-card h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.login-card p {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.login-card input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+  font-family: inherit;
+}
+
+.login-card input:focus {
+  border-color: var(--accent);
+}
+
+.login-error {
+  color: var(--danger);
+  font-size: 12.5px;
+}
+
+/* ---------- Page head (shared by doc + collection) ---------- */
+
+.page-head {
+  max-width: var(--doc-width);
+  margin: 0 auto;
+  padding: 8px var(--doc-pad) 0;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* Database pages: the title/icon span the full width and align left with the
+   toolbar and table below — matching Notion, where only documents keep the
+   narrow centered column. */
+.page-head--db {
+  max-width: none;
+  margin: 0;
+  padding: 8px 48px 4px;
+}
+
+.page-head--db .page-title {
+  font-size: 30px;
+}
+
+@media (max-width: 640px) {
+  .page-head--db {
+    padding: 8px 16px 4px;
+  }
+}
+
+.collection-scroll {
+  /* No own vertical scrolling anymore — .page-body scrolls the whole page
+     (cover, title, rows together). Grows with content, but still fills the
+     remaining viewport when short. The sticky .collection-toolbar sticks
+     against .page-body once the header has scrolled past. */
+  flex: 1 0 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Nur im Board: schrumpfen duerfen, damit die Hoehe bis zu den Spalten
+   durchgereicht wird und diese einzeln scrollen (siehe .board). Tabelle,
+   Liste und Galerie behalten bewusst das Verhalten darueber — dort soll die
+   ganze Seite scrollen, Kopf inklusive. */
+.collection-scroll.is-board {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---------- User menu ---------- */
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-menu {
+  position: relative;
+  margin-top: 4px;
+}
+
+.user-menu-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.user-menu-btn:hover {
+  background: var(--hover);
+}
+
+.user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-menu-popup {
+  position: absolute;
+  /* Open upward: override the base .menu `top: 24px`, else top+bottom both
+     set stretches the menu and it opens downward into the mobile browser bar. */
+  top: auto;
+  bottom: calc(100% + 4px);
+  left: 8px;
+  right: 8px;
+}
+
+/* ---------- Dialogs ---------- */
+
+.dialog {
+  width: min(520px, 94vw);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.dialog.wide {
+  width: min(680px, 94vw);
+}
+
+.dialog h2 {
+  margin: 0 0 14px;
+}
+
+.dialog h3 {
+  margin: 16px 0 8px;
+  font-size: 14px;
+}
+
+.dialog-hint {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+.dialog-hint code,
+.dialog code {
+  background: var(--hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.dialog-close {
+  margin-top: 16px;
+}
+
+.dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
+}
+
+.user-row:hover {
+  background: var(--hover);
+}
+
+.user-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.user-row-email {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin-left: auto;
+  margin-right: 4px;
+}
+
+.badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.badge.agent-badge {
+  background: rgba(123, 79, 176, 0.16);
+  color: #7d4fb0;
+}
+
+.user-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.user-add input[type='text'],
+.user-add input[type='email'],
+.user-add input[type='password'],
+.user-add input:not([type]) {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 13.5px;
+  background: var(--bg);
+  color: var(--fg);
+  outline: none;
+  font-family: inherit;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--muted);
+}
+
+.token-fresh {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.token-fresh code {
+  word-break: break-all;
+  background: var(--bg);
+  padding: 8px;
+  border-radius: 6px;
+}
+
+/* ---------- Collections ---------- */
+
+.collection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 48px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 5;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.view-tab {
+  padding: 5px 12px;
+  border-radius: 7px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.view-tab:hover {
+  background: var(--hover);
+}
+
+.view-tab.active {
+  background: var(--active);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.collection-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-sm {
+  padding: 5px 11px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  background: var(--card);
+  white-space: nowrap;
+}
+
+.btn-sm:hover {
+  background: var(--hover);
+}
+
+.btn-sm.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Board */
+
+/* Spalten scrollen einzeln, die Seite bleibt stehen — wie in Trello.
+   Damit das greift, muss die Hoehe von .page-body bis hier durchgereicht
+   werden: jedes Glied braucht min-height:0, sonst weigert sich ein Flex-Kind
+   zu schrumpfen und das Board waechst auf die Hoehe seiner laengsten Spalte
+   (bei 300 Karten waren das 5969px, und die ganze Seite scrollte).
+   min-height auf .board haelt das Board bedienbar, falls der Seitenkopf mit
+   Cover und Beschreibung viel Platz nimmt — dann scrollt eben doch die
+   Seite, statt die Spalten auf ein paar Pixel zu quetschen. */
+.board {
+  display: flex;
+  gap: 12px;
+  padding: 16px 48px 20px;
+  align-items: stretch;
+  overflow-x: auto;
+  flex: 1 1 auto;
+  /* Mindestens fast Fensterhoehe: auf kleinen Monitoren liess der Seitenkopf
+     dem Board sonst nur einen schmalen Streifen, und die Spalten waren zu
+     kurz. Ist das Board hoeher als der Platz, scrollt .page-body den Kopf
+     weg — wie in Trello, wo die Spalten das Fenster fuellen. */
+  min-height: max(320px, calc(100dvh - var(--topbar-h) - 108px));
+  overscroll-behavior-x: contain;
+}
+/* Ein in ein Dokument eingebettetes Board (Notion-Stil) steht MITTEN im Text —
+   dort waere fast volle Fensterhoehe absurd. Es bekommt eine bescheidene
+   Mindesthoehe zurueck. */
+.bn-db-embed .board {
+  min-height: 240px;
+}
+
+.board-col {
+  width: 272px;
+  flex-shrink: 0;
+  background: var(--sidebar-bg);
+  border-radius: 10px;
+  padding: 8px;
+  border: 1.5px solid transparent;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.board-col.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-bg));
+}
+
+/* Die gezogene Karte bleibt als blasse Luecke an ihrem Platz — man sieht,
+   woher sie kommt, und die Spalte springt nicht zusammen. */
+.board-card.is-dragging {
+  opacity: 0.32;
+}
+.board-card.is-dragging * { pointer-events: none; }
+
+/* Waehrend eines Ziehens keine Textauswahl und ueberall der Greifen-Cursor. */
+.board.is-dragging, .board.is-dragging * {
+  user-select: none;
+  cursor: grabbing !important;
+}
+
+/* Die schwebende Karte folgt dem Zeiger. */
+.board-drag-ghost {
+  position: fixed;
+  z-index: 400;
+  pointer-events: none;
+  padding: 10px 13px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: rotate(2deg);
+}
+
+/* Karten laden zum Ziehen ein. */
+.board-card { touch-action: pan-y; } /* vertikal scrollen bleibt, horizontal = ziehen */
+
+.board-col-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 8px;
+  flex: 0 0 auto;
+}
+
+.board-chip {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.board-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.board-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  min-height: 0;
+  flex: 1 1 auto;
+  /* Platz fuer den Scrollbalken, damit die Karten beim Erscheinen nicht
+     springen. */
+  padding-right: 2px;
+  scrollbar-width: thin;
+}
+
+.board-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 13px;
+  cursor: grab; /* Karte ist ziehbar (W95) */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.board-card:hover {
+  border-color: var(--muted);
+}
+
+.board-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.board-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  flex: 1;
+  /* Long row titles clamp instead of dominating the card (Notion-style). */
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-move {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.card-move-btn {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 5px;
+  opacity: 0;
+}
+
+.board-card:hover .card-move-btn {
+  opacity: 1;
+}
+
+.card-move-btn:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.card-move-menu {
+  right: 0;
+  top: 22px;
+  min-width: 150px;
+}
+
+.card-move-menu button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.card-move-menu button:hover {
+  background: var(--hover);
+}
+
+/* On touch devices the move button is always visible (no hover). */
+@media (hover: none) {
+  .card-move-btn {
+    opacity: 1;
+  }
+}
+
+.board-card-props {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A long text property (e.g. Notion "Notizen") must not blow the card up to full
+   height — clamp it to two muted lines on its own row (rendered after the chips),
+   with a little breathing room above, like a Notion card description. */
+.board-card-props .prop-text-chip {
+  flex-basis: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.45;
+  margin-top: 2px;
+  order: 1;
+}
+
+.board-add {
+  padding: 7px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: left;
+}
+
+.board-add:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.board-empty,
+.db-empty {
+  padding: 40px 48px;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.load-more-row {
+  display: flex;
+  justify-content: center;
+  padding: 12px 48px 32px;
+}
+
+/* Table */
+
+.table-wrap {
+  padding: 12px 48px 40px;
+  overflow-x: auto;
+  flex: 1;
+  overscroll-behavior-x: contain;
+}
+
+.db-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13.5px;
+}
+
+.db-table th,
+.db-table td {
+  border: 1px solid var(--border);
+  padding: 7px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.db-table th {
+  background: var(--sidebar-bg);
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+/* Long text cells (e.g. Notion "Notizen") truncate to one line like Notion, so a
+   wall of text doesn't make every row tall. Clicking still opens the editor. */
+.db-table td .prop-text {
+  display: block;
+  max-width: 420px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.db-title-col {
+  min-width: 200px;
+}
+
+.db-title-link {
+  font-weight: 500;
+  color: var(--fg);
+  text-align: left;
+}
+
+.db-title-link:hover {
+  text-decoration: underline;
+}
+
+.db-empty {
+  text-align: center;
+  padding: 24px;
+}
+
+/* Property values */
+
+/* DB select chips are slightly SQUARE (rounded-rect, Notion-style) so they read
+   as structured data — visibly distinct from the fully-round #tags. */
+.prop-chip {
+  display: inline-block;
+  font-size: 13px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+/* Dates read as clean localized text (never raw ISO), consistent with chips. */
+.prop-date {
+  font-size: 13px;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.board-card-props .prop-date {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.prop-input-date {
+  width: auto;
+  font-size: 14px;
+  color: var(--fg);
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 5px;
+  border-radius: 6px;
+  font-family: inherit;
+}
+.prop-input-date:hover {
+  background: var(--hover);
+}
+
+/* "+ Add view" button + its (portaled) menu. */
+.view-add {
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.view-add:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.view-add-menu {
+  min-width: 172px;
+}
+.view-add-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.view-add-menu button:hover {
+  background: var(--hover);
+}
+.view-add-menu .view-tab-ic {
+  display: inline-flex;
+  color: var(--muted);
+}
+
+/* Property-visibility panel (Notion "Sichtbarkeit von Eigenschaften"): shown /
+   hidden sections, per-property eye toggle, type glyph, bulk show/hide. */
+.col-popover {
+  padding: 6px;
+  gap: 0;
+}
+.col-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 9px 8px 4px;
+}
+.col-bulk {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  text-transform: none;
+  letter-spacing: 0;
+}
+.col-bulk:hover {
+  text-decoration: underline;
+}
+.col-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  font-size: 14px;
+  text-align: left;
+  width: 100%;
+}
+.col-row:hover {
+  background: var(--hover);
+}
+.col-row-grip {
+  color: var(--muted);
+  opacity: 0.35;
+  flex-shrink: 0;
+}
+.col-row-ic {
+  color: var(--muted);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+.col-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col-row-eye {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.col-row-eye.off {
+  opacity: 0.5;
+}
+.col-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 8px 8px;
+  opacity: 0.7;
+}
+
+.prop-chip.toggle {
+  border: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+}
+
+.prop-multi {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.prop-multi-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.prop-text-chip {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.prop-select,
+.prop-input {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 13px;
+  background: transparent;
+  color: var(--fg);
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+}
+
+.prop-select:hover,
+.prop-input:hover {
+  background: var(--hover);
+}
+
+.prop-select:focus,
+.prop-input:focus {
+  border-color: var(--accent);
+  background: var(--bg);
+}
+
+.prop-text {
+  cursor: text;
+  display: inline-block;
+  min-width: 40px;
+  min-height: 18px;
+}
+
+.prop-empty {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+/* Schema editor */
+
+.schema-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.schema-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+}
+
+.schema-type {
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 80px;
+}
+
+.schema-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  /* Eigene Zeile unter Name+Typ, volle Breite. Vorher lag der Block in
+     derselben Zeile und wurde vom Namensfeld an den rechten Rand gequetscht —
+     die Chips standen als schmale, abgeschnittene Spalte da. */
+  padding: 2px 4px 8px 8px;
+}
+.opt-chip-wrap { position: relative; display: inline-flex; }
+.opt-chip {
+  cursor: pointer;
+  border: none;
+  font: inherit;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.opt-chip:hover { filter: brightness(0.96); }
+
+/* Farbauswahl-Popover am Options-Chip. */
+.opt-color-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.opt-color-pop {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 0;
+  z-index: 41;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 150px;
+}
+
+.opt-input,
+.schema-add .prop-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12.5px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+  outline: none;
+}
+
+.opt-input {
+  width: 90px;
+}
+
+.schema-add {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+  align-items: center;
+}
+
+.schema-add .prop-input {
+  flex: 1;
+}
+
+.schema-add .prop-select {
+  width: 140px;
+  border: 1px solid var(--border);
+}
+
+.board-toggle {
+  margin-top: 16px;
+}
+
+/* Schema editor: relation / rollup / formula config */
+
+.schema-item {
+  border-radius: 8px;
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
+}
+
+.schema-item .schema-row {
+  background: transparent;
+}
+
+.schema-type-select {
+  width: 118px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12.5px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.schema-config {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 10px 10px;
+}
+
+.schema-config label {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.schema-config .prop-select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 6px;
+  font-size: 12.5px;
+  background: var(--bg);
+  color: var(--fg);
+  max-width: 180px;
+}
+
+.formula-config {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.formula-input {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.formula-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.formula-token {
+  cursor: default;
+  margin: 0 2px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--hover);
+}
+
+/* Computed (rollup / formula) value display */
+
+.prop-computed {
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+}
+
+.prop-computed.error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+/* Relation picker */
+
+.relation-value {
+  position: relative;
+  display: inline-block;
+}
+
+.relation-open {
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 6px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  max-width: 240px;
+}
+
+.relation-open:hover {
+  background: var(--hover);
+}
+
+.relation-chip {
+  white-space: nowrap;
+}
+
+.relation-menu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 240px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.relation-menu .prop-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.relation-options {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.relation-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 5px 6px;
+  border-radius: 6px;
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.relation-option:hover {
+  background: var(--hover);
+}
+
+.relation-option.on {
+  background: var(--accent-soft);
+}
+
+.relation-check {
+  width: 14px;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.relation-empty {
+  padding: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* Table calc/aggregation footer */
+
+.db-calc-row {
+  position: sticky;
+  bottom: 0;
+}
+
+.db-calc-cell {
+  font-size: 11.5px;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  background: var(--sidebar-bg);
+  padding: 6px 10px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Error boundary fallback */
+
+.error-boundary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.error-boundary-card {
+  max-width: 460px;
+  text-align: center;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  background: var(--card);
+}
+
+.error-boundary-card h1 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.error-boundary-card p {
+  color: var(--muted);
+  margin-bottom: 14px;
+}
+
+.error-boundary-detail {
+  text-align: left;
+  font-size: 12px;
+  background: var(--hover);
+  border-radius: 8px;
+  padding: 10px;
+  overflow-x: auto;
+  color: var(--danger);
+  margin-bottom: 16px;
+}
+
+.error-boundary-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+
+/* Column visibility toggles */
+
+.col-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 2px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Calendar view */
+
+.calendar {
+  padding: 8px 12px 24px;
+}
+
+.calendar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.calendar-title {
+  font-weight: 600;
+  min-width: 160px;
+  text-transform: capitalize;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.calendar-dow {
+  background: var(--sidebar-bg);
+  padding: 6px 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+  text-align: center;
+  font-weight: 500;
+}
+
+.calendar-cell {
+  background: var(--bg);
+  min-height: 92px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.calendar-cell.empty {
+  background: var(--sidebar-bg);
+  opacity: 0.5;
+}
+
+.calendar-cell.today {
+  background: var(--accent-soft);
+}
+
+.calendar-daynum {
+  font-size: 11.5px;
+  color: var(--muted);
+  align-self: flex-end;
+}
+
+.calendar-event {
+  border: none;
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-radius: 5px;
+  padding: 2px 6px;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.calendar-event:hover {
+  filter: brightness(0.95);
+}
+
+@media (max-width: 640px) {
+  .calendar-cell {
+    min-height: 60px;
+  }
+  .calendar-event {
+    font-size: 10.5px;
+  }
+}
+
+/* Accessibility: visible keyboard focus (many controls set outline:none) */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ... aber NICHT auf Schreibflaechen. Die Regel oben ist fuer Knoepfe und
+   Eingabefelder gedacht; der Editor ist jedoch eine riesige Region, und der
+   Ring zog einen gruenen Kasten um das gesamte Dokument. Kein Textprogramm
+   macht das — bei Bear, Notion und Word zeigt der CURSOR den Fokus, und der
+   ist als Fokusanzeige fuer Textfelder auch anerkannt. Der Ring bleibt
+   ueberall dort, wo er wirklich gebraucht wird: Knoepfe, Menues, Kaestchen. */
+.ProseMirror:focus-visible,
+.bn-editor:focus-visible,
+[contenteditable]:focus-visible,
+.page-title:focus-visible,
+.page-desc:focus-visible,
+.cp-compose textarea:focus-visible {
+  outline: none;
+}
+
+/* Respect reduced-motion: kill non-essential transitions/animations. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Print: drop the app chrome, show the page content full width. */
+
+/* ---- Print / PDF: a clean typeset document, no app chrome (Welle 27) ---- */
+@page {
+  margin: 18mm 16mm;
+}
+@media print {
+  /* Force a light, print-friendly palette regardless of the on-screen theme. */
+  :root, :root[data-theme='dark'] {
+    --bg: #fff; --fg: #1a1a1a; --muted: #555; --border: #ddd; --card: #fff;
+    --hover: transparent; --active: transparent;
+  }
+  html, body { background: #fff !important; color: #1a1a1a !important; }
+
+  /* Hide everything that isn't the document itself. */
+  .sidebar, .sidebar-backdrop, .topbar, .tab-bar, .backlinks, .toaster,
+  .menu-btn, .upload-bar, .menu, .page-cover-actions, .cover-btn,
+  .page-tag-input, .page-tag-x, .add-icon, .icon-picker, .collection-toolbar,
+  .head-controls, .db-add-row, .comments-panel {
+    display: none !important;
+  }
+
+  .app, .main, .editor-page {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .main { margin: 0 !important; }
+
+  /* Centred, readable measure with generous line-height and print typography. */
+  .editor-scroll, .editor-inner, .bn-editor, .editor-page {
+    margin: 0 auto !important;
+    padding: 0 !important;
+    max-width: 172mm !important;
+    overflow: visible !important;
+    font-size: 11.5pt;
+    line-height: 1.55;
+    color: #1a1a1a;
+  }
+
+  .page-title {
+    font-size: 24pt !important;
+    font-weight: 700;
+    margin: 0 0 4mm !important;
+    color: #111 !important;
+  }
+  .page-description {
+    font-size: 12pt !important;
+    color: #555 !important;
+    margin-bottom: 6mm !important;
+  }
+  .page-description textarea { color: #555 !important; }
+  .page-cover { height: 40mm !important; margin-bottom: 6mm; }
+
+  /* Colour chips print with a thin outline so they read on b/w printers too. */
+  .page-tag, .row-tag { border: 0.4pt solid rgba(0,0,0,0.25); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* Keep structural blocks whole across page breaks. */
+  h1, h2, h3, h4, h5, h6 { break-after: avoid-page; page-break-after: avoid; }
+  img, table, pre, blockquote, .bn-callout, .bn-bookmark, .bn-table-block, li {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  img { max-width: 100% !important; height: auto !important; }
+  a { color: #1a1a1a !important; text-decoration: underline; }
+
+  /* Backgrounds (callouts, code) should actually print. */
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+.search-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 8px 12px 4px;
+}
+
+/* Custom blocks: callout, TOC, bookmark/embed */
+
+.bn-callout {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  background: var(--accent-soft);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.bn-callout-emoji {
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1.4;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.bn-callout-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.bn-toc {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: var(--sidebar-bg);
+}
+
+.bn-toc-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.bn-toc-empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.bn-toc-entry {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--fg);
+  font-size: 13.5px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bn-toc-entry:hover {
+  background: var(--hover);
+}
+
+.bn-bookmark-input {
+  width: 100%;
+}
+
+.bn-bookmark-input .prop-input {
+  width: 100%;
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.bn-bookmark {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-decoration: none;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.bn-bookmark:hover {
+  background: var(--hover);
+}
+
+.bn-bookmark-icon {
+  font-size: 18px;
+}
+
+.bn-bookmark-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.bn-bookmark-url {
+  font-size: 13.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.bn-bookmark-host {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.bn-embed {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #000;
+}
+
+.bn-embed iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* Admin settings / 2FA / invites */
+
+.settings-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* ---------- Instanz-Einstellungen (W36) ---------- */
+
+.settings-tabs {
+  display: flex;
+  gap: 2px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.settings-body {
+  min-height: 240px;
+}
+
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.settings-check input {
+  margin-top: 3px;
+}
+
+.settings-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.conf-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 4px 0;
+  /* settings-grid is a scrolling flex column — don't let it squeeze these. */
+  flex-shrink: 0;
+}
+
+.conf-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--sidebar-bg);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.conf-block pre {
+  margin: 0;
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  background: var(--card);
+}
+
+.conf-block code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  font-size: 13px;
+}
+
+.info-grid span {
+  color: var(--muted);
+}
+
+.info-grid strong {
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.settings-grid h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 12px 0 2px;
+}
+
+.settings-grid label {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.settings-grid .prop-input,
+.settings-grid .prop-select {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--fg);
+  width: 100%;
+}
+
+.settings-hint code {
+  background: var(--hover);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.totp-secret {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+  letter-spacing: 2px;
+  text-align: center;
+  background: var(--hover);
+  padding: 12px;
+  border-radius: 8px;
+  margin: 10px 0;
+  cursor: copy;
+  user-select: all;
+}
+
+.invite-link {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.invite-link .prop-input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.login-switch {
+  border: none;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 13.5px;
+  margin-top: 6px;
+}
+
+/* Lucide icons align with adjacent text labels */
+
+.sidebar-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.new-page,
+.trash-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn svg,
+.menu-btn svg,
+.btn-sm svg,
+.menu button svg,
+.user-menu-popup button svg {
+  vertical-align: -2px;
+}
+
+.menu button,
+.user-menu-popup button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.tree-icon svg {
+  color: var(--muted);
+}
+
+.view-tab,
+.collection-actions .btn-sm,
+.fs-controls .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.view-tab-ic {
+  display: inline-flex;
+}
+
+/* Upload progress bar + image lightbox */
+
+.upload-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 200;
+  background: transparent;
+}
+
+.upload-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.15s ease;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  cursor: zoom-out;
+}
+
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 6px;
+  cursor: default;
+}
+
+/* Confirm / prompt dialog */
+
+.confirm-dialog {
+  max-width: 380px;
+}
+
+.confirm-message {
+  font-size: 15px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}
+
+.confirm-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 15px;
+  background: var(--bg);
+  color: var(--fg);
+  margin-bottom: 14px;
+}
+
+/* All-pages index view */
+
+.sidebar-index {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--muted);
+  padding: 6px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.sidebar-index:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
+.index-view {
+  /* .app is overflow:hidden and .main is a flex column, so this pane has to own
+     its scrolling — otherwise everything below the fold is simply cut off
+     (most visible on phones, where the viewport is short). */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 40px 24px calc(60px + env(safe-area-inset-bottom));
+}
+
+.index-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.index-head h1 {
+  font-size: 26px;
+}
+
+.index-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.index-search {
+  flex: 1;
+  min-width: 180px;
+}
+
+.index-stat {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.index-table th {
+  cursor: default;
+}
+
+.index-badge {
+  font-size: 10px;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  vertical-align: middle;
+}
+
+/* Comments */
+
+.comment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 8px 0;
+}
+
+.comment {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+}
+
+.comment.resolved {
+  opacity: 0.55;
+}
+
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.comment-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.comment-body {
+  font-size: 13.5px;
+  margin: 4px 0 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.comment-actions {
+  display: flex;
+  gap: 6px;
+}
+
+/* Share-link expiry selector */
+
+.share-expiry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 6px 0;
+}
+
+.share-expiry .prop-select {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+/* API-token scope badge */
+
+.token-scope {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  vertical-align: middle;
+  font-weight: 500;
+}
+
+.token-scope.read {
+  background: var(--hover);
+  color: var(--muted);
+}
+
+.token-scope.write {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Collaboration cursors (BlockNote) */
+.bn-collaboration-cursor__caret {
+  border-left: 2px solid;
+  border-right: 2px solid;
+  margin-left: -1px;
+  margin-right: -1px;
+}
+
+.bn-collaboration-cursor__label {
+  font-size: 11px;
+  border-radius: 4px 4px 4px 0;
+  padding: 1px 5px;
+  color: #fff;
+}
+
+/* ---------- Inline page links (@mentions) ---------- */
+
+.page-link {
+  display: inline;
+  color: var(--accent);
+  font-weight: 500;
+  border-radius: 4px;
+  padding: 0 3px;
+  background: var(--accent-soft);
+  cursor: pointer;
+  white-space: normal;
+  line-height: inherit;
+  font-size: inherit;
+}
+
+.page-link:hover {
+  filter: brightness(1.08);
+  text-decoration: underline;
+}
+
+.page-link-icon {
+  font-size: 0.85em;
+  margin-right: 2px;
+  opacity: 0.7;
+}
+
+/* ---------- Backlinks ---------- */
+
+.backlinks {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.backlinks-head {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.backlink-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.backlink-item:hover {
+  background: var(--hover);
+}
+
+/* ---------- Favorites section ---------- */
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  padding: 8px 10px 2px;
+}
+
+.fav-section {
+  padding: 0 6px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+
+.icon-btn.active-star {
+  color: #e0a91b;
+}
+
+/* ---------- Page cover ---------- */
+
+.page-cover {
+  position: relative;
+  height: 200px;
+  width: 100%;
+  background: var(--hover);
+  /* .page-body is a flex column — never let the flex algorithm squeeze the
+     header stack when the content below is taller than the viewport. */
+  flex-shrink: 0;
+}
+
+.page-cover-actions {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.page-cover:hover .page-cover-actions {
+  opacity: 1;
+}
+
+.cover-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  backdrop-filter: blur(4px);
+}
+
+.cover-btn:hover {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.page-head.with-cover {
+  position: relative;
+}
+
+/* ---------- Collapsing cover (Notion/iOS-style) ----------
+   At rest the banner shows at full height. While scrolling it compresses to a
+   slim strip that stays pinned below the topbar; the big page emoji docks on
+   that strip (slightly scaled, always FULLY visible) and the DB view toolbar
+   docks right underneath. */
+.page-body {
+  --cover-full: 200px;
+  --cover-compact: 64px;
+}
+
+.page-body.has-cover .page-cover {
+  /* Negative sticky top = the cover scrolls up naturally but stops once only
+     the compact strip remains visible — no layout jumps, no scroll jitter. */
+  position: sticky;
+  top: calc(var(--cover-compact) - var(--cover-full));
+  z-index: 6;
+}
+
+/* Icon overlaps the banner bottom at rest (was margin-top on .page-head). */
+.page-body.has-cover .page-icon-row {
+  margin-top: -30px;
+}
+
+/* With an icon set, the row docks on the compact strip and stays there. The
+   row itself must not swallow clicks (it spans the full width and, docked,
+   overlaps the toolbar row) — only its children are interactive. */
+.page-body.has-cover .page-icon-row:has(.page-icon) {
+  position: sticky;
+  top: calc(var(--cover-compact) - 48px);
+  z-index: 7;
+  pointer-events: none;
+}
+
+.page-body.has-cover .page-icon-row > * {
+  pointer-events: auto;
+}
+
+.page-icon {
+  transition: transform 0.18s ease;
+  transform-origin: top left;
+}
+
+.page-body.has-cover.scrolled .page-icon {
+  transform: scale(0.6);
+}
+
+/* The DB view toolbar sticks below the compact strip instead of at 0. */
+.page-body.has-cover .collection-toolbar {
+  top: var(--cover-compact);
+}
+
+.head-controls {
+  position: relative;
+  display: inline-block;
+}
+
+.add-cover {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 4px 8px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.editor-inner:hover .add-cover,
+.page-head:hover .add-cover {
+  opacity: 1;
+}
+
+.add-cover:hover {
+  background: var(--hover);
+}
+
+.cover-menu {
+  position: absolute;
+  z-index: 60;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+  width: 260px;
+  max-width: calc(100vw - 24px);
+}
+
+/* Inside the cover's bottom-right action bar the menu must anchor RIGHT —
+   left-anchored it extended past the viewport edge ("Change cover" sits
+   ~16px from the right). */
+.page-cover-actions .cover-menu {
+  left: auto;
+  right: 0;
+}
+
+.cover-upload {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.cover-upload:hover {
+  background: var(--hover);
+}
+
+.cover-grid {
+  display: grid;
+  /* 18 Presets seit W96: sechs Spalten halten das Menue kompakt (3 Reihen). */
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cover-swatch {
+  height: 30px;
+  min-width: 34px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+}
+
+.cover-swatch:hover {
+  transform: scale(1.04);
+}
+
+/* ---------- Gallery view ---------- */
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+  padding: 16px 48px 40px;
+}
+
+.gallery-card {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  transition: box-shadow 0.15s;
+}
+
+.gallery-card:hover {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+}
+
+.gallery-cover {
+  height: 110px;
+  background: var(--hover);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.gallery-cover-icon {
+  font-size: 40px;
+  opacity: 0.6;
+}
+
+.gallery-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.gallery-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.gallery-props {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* ---------- Filter & sort controls ---------- */
+
+.fs-controls {
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+
+.btn-sm.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Filter/Sort popover is portaled to <body>; position comes from an inline
+   fixed style (JS-measured), so it can never be clipped or trapped by an
+   ancestor's overflow/transform. The backdrop catches outside clicks. */
+.fs-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 310;
+}
+
+.fs-popover {
+  z-index: 320;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 10px;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fs-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fs-label {
+  font-size: 13px;
+  min-width: 70px;
+}
+
+.fs-row .prop-select {
+  border: 1px solid var(--border);
+  flex: 1;
+}
+
+.fs-add {
+  border: 1px dashed var(--border) !important;
+}
+
+/* ---------- Mobile / responsive ---------- */
+
+@media (max-width: 768px) {
+  .menu-btn,
+  .sidebar-header .menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Sidebar becomes an off-canvas drawer. */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 84vw;
+    max-width: 320px;
+    z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  /* iOS Safari auto-zooms into any focused control whose font-size is < 16px.
+     Force 16px on every form control so tapping a field never zooms the page —
+     the single most important "feels like a native app" fix on mobile.
+     !important beats more-specific base rules (e.g. .login-card input);
+     the page-title keeps its large size. */
+  input:not(.page-title),
+  textarea:not(.page-title),
+  select {
+    font-size: 16px !important;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    z-index: 150;
+  }
+
+  .main {
+    width: 100%;
+  }
+
+  /* Tighter horizontal padding everywhere. Bottom paddings fold in the
+     home-indicator safe-area inset (these rules win by source order). */
+  .editor-inner {
+    padding: 16px 18px calc(30vh + env(safe-area-inset-bottom));
+  }
+
+  .page-head {
+    padding: 8px 18px 0;
+  }
+
+  .topbar {
+    padding: calc(8px + env(safe-area-inset-top)) 12px 8px;
+    gap: 8px;
+  }
+
+  .sidebar-footer {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+
+  .page-title {
+    /* The page title is the top-level heading — keep it larger than a body H1
+       (32px) on mobile too, so it never reads as smaller than the content. */
+    font-size: 34px;
+  }
+
+  .crumb {
+    max-width: 150px;
+  }
+
+  .collection-toolbar {
+    padding: 8px 14px;
+    /* One horizontally scrollable row (scrollbar hidden) so Filter/Sort/
+       Columns/+New stay reachable on narrow screens without wrapping. */
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .collection-toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .collection-toolbar > * {
+    flex-shrink: 0;
+  }
+
+  .board {
+    padding: 14px 14px calc(40px + env(safe-area-inset-bottom));
+    gap: 10px;
+    /* Columns snap into place instead of floating between positions. */
+    scroll-snap-type: x proximity;
+    scroll-padding-left: 14px;
+    scrollbar-width: none;
+  }
+
+  .board::-webkit-scrollbar,
+  .table-wrap::-webkit-scrollbar {
+    display: none;
+  }
+
+  .table-wrap {
+    scrollbar-width: none;
+  }
+
+  .board-col {
+    width: 78vw;
+    max-width: 300px;
+    scroll-snap-align: start;
+  }
+
+  .table-wrap {
+    padding: 12px 14px calc(40px + env(safe-area-inset-bottom));
+  }
+
+  .gallery {
+    padding: 14px 14px calc(40px + env(safe-area-inset-bottom));
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+
+  .page-cover {
+    height: 140px;
+  }
+
+  .page-body {
+    --cover-full: 140px;
+    --cover-compact: 56px;
+  }
+
+  .page-icon-row {
+    padding: 0 18px;
+  }
+
+  .page-icon-row--db {
+    padding: 0 16px;
+  }
+
+  /* On mobile the popover is a bottom sheet (position set inline by JS); the
+     backdrop gets a tint so it reads as a modal layer. */
+  .fs-backdrop {
+    background: rgba(0, 0, 0, 0.28);
+  }
+
+  .empty-menu-btn {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    font-size: 20px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    color: var(--muted);
+  }
+
+  .empty-menu-btn:hover {
+    background: var(--hover);
+  }
+
+  /* Dialogs and modals fill more of the small screen. */
+  .dialog,
+  .dialog.wide {
+    width: 96vw;
+    padding: 18px;
+  }
+
+  .modal-overlay {
+    padding-top: 8vh;
+    align-items: flex-start;
+  }
+
+  .search-modal {
+    width: 96vw;
+  }
+
+  .login-card {
+    width: 92vw;
+    max-width: 360px;
+  }
+
+  /* Give touch targets a little more room. */
+  .tree-item {
+    padding: 7px 6px;
+  }
+
+  .tree-actions {
+    display: inline-flex;
+  }
+}
+
+/* On real desktops, keep drawer transforms from ever applying — EXCEPT when
+   collapsed, where the collapse/hover-reveal transforms below must win. */
+@media (min-width: 769px) {
+  .app:not(.sidebar-collapsed) .sidebar {
+    transform: none !important;
+  }
+}
+
+/* ---------- Workspace switcher ---------- */
+
+.ws-switcher {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  font-size: 15px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.ws-btn strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-btn:hover {
+  background: var(--hover);
+}
+
+.ws-menu {
+  left: 6px;
+  top: 34px;
+  right: auto;
+  min-width: 200px;
+}
+
+.ws-menu button {
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+
+.ws-menu button:hover {
+  background: var(--hover);
+}
+
+.ws-menu button.active {
+  font-weight: 600;
+}
+
+/* ---------- Share menu ---------- */
+
+.share-wrap {
+  position: relative;
+}
+
+.share-menu {
+  right: 0;
+  top: 30px;
+  width: 280px;
+  padding: 10px;
+  gap: 8px;
+}
+
+.share-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.share-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: inherit;
+}
+
+.share-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* ---------- Toaster ---------- */
+
+.toaster {
+  position: fixed;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+}
+
+.toast {
+  background: var(--danger);
+  color: #fff;
+  padding: 9px 16px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  box-shadow: var(--shadow);
+  max-width: 90vw;
+}
+
+/* ---------- Scrollbars ---------- */
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--active);
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- Named tag colour palette (Welle 28), Notion-style ---- */
+.tag-gray   { background: hsl(220 14% 90%); color: hsl(220 10% 34%); }
+.tag-brown  { background: hsl(28 30% 87%);  color: hsl(25 40% 34%); }
+.tag-orange { background: hsl(32 85% 90%);  color: hsl(28 70% 36%); }
+.tag-yellow { background: hsl(48 90% 86%);  color: hsl(40 70% 32%); }
+.tag-green  { background: hsl(140 45% 89%); color: hsl(146 45% 30%); }
+.tag-blue   { background: hsl(210 80% 92%); color: hsl(212 60% 40%); }
+.tag-purple { background: hsl(270 55% 92%); color: hsl(270 45% 46%); }
+.tag-pink   { background: hsl(330 70% 93%); color: hsl(330 55% 44%); }
+.tag-red    { background: hsl(0 75% 93%);   color: hsl(0 60% 40%); }
+[data-theme='dark'] .tag-gray   { background: hsl(220 10% 27%); color: hsl(220 18% 80%); }
+[data-theme='dark'] .tag-brown  { background: hsl(25 25% 25%);  color: hsl(28 45% 76%); }
+[data-theme='dark'] .tag-orange { background: hsl(30 40% 25%);  color: hsl(32 80% 78%); }
+[data-theme='dark'] .tag-yellow { background: hsl(45 35% 26%);  color: hsl(48 75% 76%); }
+[data-theme='dark'] .tag-green  { background: hsl(146 30% 23%); color: hsl(140 55% 76%); }
+[data-theme='dark'] .tag-blue   { background: hsl(212 38% 27%); color: hsl(210 70% 80%); }
+[data-theme='dark'] .tag-purple { background: hsl(270 30% 30%); color: hsl(270 65% 84%); }
+[data-theme='dark'] .tag-pink   { background: hsl(330 32% 30%); color: hsl(330 65% 84%); }
+[data-theme='dark'] .tag-red    { background: hsl(0 35% 26%);   color: hsl(0 70% 82%); }
+
+/* Tag colour picker popover (on the editor chip) */
+.tag-color-menu { min-width: 168px; top: 26px; left: 0; right: auto; }
+.tag-color-opt {
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.tag-color-opt:hover { background: var(--hover); }
+.tag-color-opt .tag-color-name { flex: 1; }
+.tag-swatch { width: 16px; height: 16px; border-radius: 4px; flex: none; border: 1px solid rgba(0,0,0,0.12); }
+[data-theme='dark'] .tag-swatch { border-color: rgba(255,255,255,0.14); }
+.page-tag-label {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+/* Tags shown on a database row */
+.db-row-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.db-row-tags .row-tag { font-size: 11px; border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+
+/* ---- Page description (Welle 27) ---- */
+.page-description {
+  margin: 0 0 8px;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.page-description textarea {
+  width: 100%;
+  border: none;
+  background: none;
+  resize: none;
+  font: inherit;
+  color: var(--muted);
+  outline: none;
+  padding: 0;
+  overflow: hidden;
+}
+.page-description textarea::placeholder { color: var(--muted); opacity: 0.7; }
+
+/* Database-row property panel (Notion-style label · value under the title). */
+.row-props {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 14px 0 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.row-prop {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 2px 0;
+  min-height: 30px;
+}
+/* One consistent size for labels and every value type — no more 12px chips next
+   to 16px text. */
+.row-prop-label {
+  flex: 0 0 clamp(120px, 28%, 180px);
+  color: var(--muted);
+  font-size: 14px;
+  padding-top: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.row-prop-value {
+  flex: 1;
+  min-width: 0;
+  padding-top: 3px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.row-prop-value .prop-chip {
+  font-size: 13.5px;
+}
+/* Inside the panel, text/date cells read as full inline values (the table's
+   one-line clamp must not apply here). */
+.row-prop-value .prop-text {
+  display: inline-block;
+  max-width: 100%;
+  white-space: normal;
+  font-size: 14px;
+}
+.row-prop-value .prop-date {
+  font-size: 14px;
+}
+
+/* ---- Workspace image / icon in the switcher ---- */
+.ws-img { width: 18px; height: 18px; border-radius: 4px; object-fit: cover; flex: none; vertical-align: -4px; }
+.ws-emoji { font-size: 15px; line-height: 1; }
+
+/* Workspace switcher avatar + menu items (Welle 27) */
+.ws-caret { margin-left: auto; color: var(--muted); flex: none; }
+.ws-letter {
+  width: 18px; height: 18px; border-radius: 5px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+}
+.ws-menu-item {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+}
+.ws-menu-item .ws-menu-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ws-menu-item svg { flex: none; color: var(--muted); }
+.ws-menu .menu-item { display: flex; align-items: center; gap: 8px; }
+.ws-menu .menu-item svg { flex: none; color: var(--muted); }
+
+/* ---- Select / Multiselect cell editor (Welle 29) ---- */
+.select-cell { display: inline-block; max-width: 100%; }
+.select-cell-value {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.select-cell-value:hover { background: var(--hover); }
+.select-backdrop { position: fixed; inset: 0; z-index: 900; }
+.select-menu {
+  z-index: 901;
+  max-height: 340px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.select-search {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: 7px;
+  padding: 6px 9px;
+  font-size: 13px;
+  color: var(--fg);
+  outline: none;
+  margin-bottom: 6px;
+}
+.select-options { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.select-option { position: relative; display: flex; align-items: center; gap: 2px; border-radius: 6px; min-height: 34px; }
+.select-option:hover { background: var(--hover); }
+.select-option-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 8px;
+  text-align: left;
+  min-width: 0;
+}
+.select-back {
+  align-self: flex-start;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.select-back:hover { background: var(--hover); color: var(--fg); }
+.select-editing-name { padding: 4px 6px 8px; }
+.select-option-check { margin-left: auto; color: var(--muted); display: inline-flex; }
+.select-option-more {
+  padding: 4px 8px;
+  color: var(--muted);
+  border-radius: 5px;
+  font-size: 15px;
+  line-height: 1;
+}
+.select-option-more:hover { background: var(--active); color: var(--fg); }
+.select-create {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  margin-top: 4px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--accent);
+  text-align: left;
+}
+.select-create:hover { background: var(--hover); }
+.select-empty { padding: 8px; font-size: 12.5px; color: var(--muted); }
+.tag-color-opt.danger { color: var(--danger); }
+
+/* ---- Tags + editable select props on Board / Gallery / Calendar cards (Welle 30) ---- */
+.card-tags { margin: 4px 0 2px; }
+.card-prop-edit { display: block; }
+.card-prop-edit .select-cell { width: 100%; }
+.gallery-card { cursor: pointer; text-align: left; }
+.cal-event-tags { display: inline-flex; flex-wrap: wrap; gap: 3px; margin-left: 4px; }
+.cal-event-tags .row-tag { font-size: 10px; padding: 0 5px; }
+
+/* ---- Sidebar cleanup (Welle 31) ---- */
+.sidebar-footer-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sidebar-footer-row .user-menu { flex: 1; min-width: 0; }
+.theme-toggle { flex: none; color: var(--muted); }
+
+/* Desktop-only collapse: the sidebar slides off-screen but re-appears as an
+   overlay when the left-edge hover zone (or the sidebar itself) is hovered. The
+   topbar hamburger reveals the topbar hamburger for a persistent re-open. */
+@media (min-width: 769px) {
+  .app.sidebar-collapsed .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 210;
+    transform: translateX(-100%);
+    transition: transform 0.18s ease;
+    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
+  }
+  .app.sidebar-collapsed .sidebar-hotzone {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 12px;
+    z-index: 208;
+  }
+  /* Reveal on hovering the edge zone or the (revealed) sidebar itself, and on
+     keyboard focus entering the off-screen panel (so tabbing doesn't land on
+     invisible controls). `.hover-lock` is set right after the collapse click —
+     the pointer is still over the sidebar, and without the lock :hover would
+     re-reveal instantly, making the click feel like it did nothing. It clears
+     once the pointer actually moves away. */
+  .app.sidebar-collapsed:not(.hover-lock) .sidebar-hotzone:hover ~ .sidebar,
+  .app.sidebar-collapsed:not(.hover-lock) .sidebar:hover,
+  .app.sidebar-collapsed:not(.hover-lock) .sidebar:focus-within {
+    transform: translateX(0);
+  }
+  .app.sidebar-collapsed .topbar-menu,
+  .app.sidebar-collapsed .empty-menu-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+.sidebar-hotzone { display: none; }
+/* The collapse button is desktop-only (mobile uses the drawer's ✕). */
+@media (max-width: 768px) {
+  .collapse-btn { display: none; }
+}
+
+/* Tree section labels (Dokumente / Datenbanken split) */
+.tree-section-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+}
+.tree-section-db { margin-top: 10px; }
+
+/* Database expand affordance in the tree */
+.tree-db-rows { margin-left: 4px; }
+.tree-db-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.tree-db-row:hover { background: var(--hover); color: var(--fg); }
+.tree-db-empty { padding: 3px 8px; font-size: 12px; color: var(--muted); }
+
+/* Cleaner "create" area under the tree */
+.tree-create {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   W37 — Glow-Design (Taskade-inspiriert)
+   Bunte, leuchtende Buttons, Akzent-Rahmen mit Farb-Schatten,
+   Ambient-Farbflächen auf Login & Empty-State. Light + Dark.
+   ============================================================ */
+
+/* ---- Primäre Aktionen: Gradient-Pill mit Glow ---- */
+
+.btn,
+.btn-sm {
+  transition: box-shadow 0.18s ease, transform 0.12s ease, filter 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.btn.primary,
+.btn-sm.primary {
+  background: var(--grad-accent);
+  border: 1px solid transparent;
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.18),
+    0 2px 10px rgba(var(--accent-rgb), 0.35),
+    0 0 0 1px rgba(var(--accent-rgb), 0.35);
+}
+
+.btn.primary:hover,
+.btn-sm.primary:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+    0 4px 18px rgba(var(--accent-rgb), 0.5),
+    0 0 0 1px rgba(var(--accent-rgb), 0.45);
+}
+
+.btn.primary:active,
+.btn-sm.primary:active {
+  transform: translateY(0);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 1px 6px rgba(var(--accent-rgb), 0.35);
+}
+
+.btn.danger {
+  transition: box-shadow 0.18s ease;
+}
+
+.btn.danger:hover {
+  box-shadow: 0 2px 12px rgba(196, 85, 77, 0.35);
+}
+
+/* ---- Login: Ambient-Farbglühen + leuchtende Karte ---- */
+
+.login-wrap {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(600px 420px at 18% 22%, rgba(var(--glow-green), 0.14), transparent 65%),
+    radial-gradient(640px 460px at 84% 18%, rgba(var(--glow-blue), 0.12), transparent 65%),
+    radial-gradient(700px 500px at 78% 86%, rgba(var(--glow-purple), 0.12), transparent 65%),
+    radial-gradient(560px 420px at 12% 88%, rgba(var(--glow-pink), 0.1), transparent 65%),
+    var(--bg);
+}
+
+.login-card {
+  position: relative;
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 40px rgba(var(--accent-rgb), 0.16),
+    0 2px 16px rgba(var(--glow-purple), 0.08),
+    0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.login-card .btn.primary {
+  border-radius: 999px;
+  padding: 9px 16px;
+}
+
+/* ---- Empty-State: gleiche Bühne wie der Login ---- */
+
+.empty-state {
+  background:
+    radial-gradient(560px 400px at 22% 24%, rgba(var(--glow-green), 0.12), transparent 65%),
+    radial-gradient(600px 440px at 80% 20%, rgba(var(--glow-blue), 0.1), transparent 65%),
+    radial-gradient(640px 480px at 74% 84%, rgba(var(--glow-purple), 0.1), transparent 65%),
+    var(--bg);
+}
+
+.empty-actions .btn {
+  border-radius: 999px;
+}
+
+/* ---- Datenbank-View-Tabs: aktiver Tab als getönte Glow-Pille ---- */
+
+.view-tab {
+  border: 1px solid transparent;
+  transition: box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.view-tab.active {
+  background: linear-gradient(
+    120deg,
+    rgba(var(--accent-rgb), 0.1),
+    rgba(var(--accent-rgb), 0.05)
+  );
+  border-color: rgba(var(--accent-rgb), 0.3);
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.16);
+}
+
+/* ---- Tags & Chips: sanftes Leuchten in der eigenen Farbe ---- */
+
+/* Tag-Chips bewusst OHNE Schatten — die Farbe reicht (User-Feedback W43). */
+
+/* ---- Karten: Hover mit Lift + farbigem Schein ---- */
+
+.gallery-card {
+  transition: box-shadow 0.18s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+.gallery-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(var(--accent-rgb), 0.3);
+  box-shadow:
+    0 8px 26px rgba(var(--accent-rgb), 0.14),
+    0 2px 10px rgba(0, 0, 0, 0.08);
+}
+
+.board-card {
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.board-card:hover {
+  border-color: rgba(var(--accent-rgb), 0.28);
+  box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.12);
+}
+
+/* ---- Sidebar: Anlege-Buttons leuchten beim Hover ---- */
+
+.new-page {
+  border-radius: 8px;
+  transition: box-shadow 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.new-page:hover {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.22);
+}
+
+/* ---- Dialoge: feiner Akzentrahmen + Farbschein ---- */
+
+.dialog {
+  border: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border));
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.2),
+    0 4px 24px rgba(var(--accent-rgb), 0.1);
+}
+
+/* ---- Workspace-Knopf: Regenbogen-Ring beim Hover (Taskade-Badge) ---- */
+
+.ws-btn {
+  position: relative;
+  border-radius: 8px;
+  transition: box-shadow 0.18s ease;
+}
+
+.ws-btn:hover {
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 2px 12px rgba(var(--glow-purple), 0.18),
+    0 2px 12px rgba(var(--glow-pink), 0.12);
+}
+
+/* ---- Suchfeld: leuchtet beim Fokus/Hover dezent ---- */
+
+.sidebar-search {
+  transition: box-shadow 0.18s ease, border-color 0.15s ease;
+}
+
+.sidebar-search:hover {
+  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.14);
+}
+
+/* Dark Mode: Ambient etwas kräftiger, damit es auf Dunkel leuchtet. */
+[data-theme='dark'] .login-wrap {
+  background:
+    radial-gradient(600px 420px at 18% 22%, rgba(var(--glow-green), 0.2), transparent 65%),
+    radial-gradient(640px 460px at 84% 18%, rgba(var(--glow-blue), 0.16), transparent 65%),
+    radial-gradient(700px 500px at 78% 86%, rgba(var(--glow-purple), 0.18), transparent 65%),
+    radial-gradient(560px 420px at 12% 88%, rgba(var(--glow-pink), 0.14), transparent 65%),
+    var(--bg);
+}
+
+[data-theme='dark'] .empty-state {
+  background:
+    radial-gradient(560px 400px at 22% 24%, rgba(var(--glow-green), 0.16), transparent 65%),
+    radial-gradient(600px 440px at 80% 20%, rgba(var(--glow-blue), 0.14), transparent 65%),
+    radial-gradient(640px 480px at 74% 84%, rgba(var(--glow-purple), 0.15), transparent 65%),
+    var(--bg);
+}
+
+/* ============================================================
+   W39 — Eleganz-Pass (Taskade, aber richtig)
+   Prinzipien der Vorlage: Tints bei 4–9%, EIN Rainbow-Element,
+   schwarze Pille clean mit neutralem Schatten (Farbschein nur
+   beim Hover), Pastell-Buttons mit farbigem Text, Farbe trägt
+   das Icon — nicht der Rahmen.
+   ============================================================ */
+
+:root {
+  --pill-dark: #16161a;
+  --pill-dark-hover: #1f1f24;
+  --rainbow-linear: linear-gradient(
+    120deg,
+    #ff2d60,
+    #ff8a2d 25%,
+    #ffd12d 45%,
+    #22c55e 62%,
+    #3b82f6 80%,
+    #9333ea
+  );
+}
+
+/* ---- Große CTAs: cleane schwarze Pille, Rainbow nur als Hover-Schein ---- */
+
+.btn.primary {
+  position: relative;
+  background: var(--pill-dark);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  color: #fff;
+  font-weight: 600;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 8px 24px rgba(26, 26, 26, 0.16);
+}
+
+.btn.primary:hover {
+  background: var(--pill-dark-hover);
+  transform: translateY(-1px);
+  filter: none;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 10px 28px rgba(26, 26, 26, 0.18),
+    0 6px 28px rgba(255, 45, 96, 0.14),
+    0 6px 28px rgba(59, 130, 246, 0.12),
+    0 6px 28px rgba(147, 51, 234, 0.12);
+}
+
+.btn.primary:active {
+  transform: translateY(0);
+}
+
+[data-theme='dark'] .btn.primary {
+  background: #0d0d10;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+[data-theme='dark'] .btn.primary:hover {
+  background: #17171c;
+}
+
+/* ---- Kompakte CTAs (+ New): Pastell + farbiger Text + Ring ("Get Pro") ---- */
+
+.btn-sm.primary {
+  background: rgba(var(--accent-rgb), 0.13);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.4);
+}
+
+.btn-sm.primary:hover {
+  background: rgba(var(--accent-rgb), 0.2);
+  transform: translateY(-1px);
+  filter: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-rgb), 0.5),
+    0 4px 14px rgba(var(--accent-rgb), 0.22);
+}
+
+/* ---- View-Tabs: Farbe pro Typ, aber leise — das Icon trägt die Farbe ---- */
+
+.view-tab {
+  --vt: var(--accent-rgb);
+  border-radius: 999px;
+}
+
+.view-tab--board { --vt: 255, 45, 96; }
+.view-tab--table { --vt: 59, 130, 246; }
+.view-tab--gallery { --vt: 147, 51, 234; }
+.view-tab--calendar { --vt: 249, 115, 22; }
+.view-tab--list { --vt: 34, 197, 94; }
+
+.view-tab:hover {
+  background: rgba(var(--vt), 0.07);
+  color: var(--fg);
+}
+
+.view-tab.active {
+  background: rgba(var(--vt), 0.09);
+  border-color: rgba(var(--vt), 0.26);
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: 0 2px 10px rgba(var(--vt), 0.1);
+}
+
+.view-tab.active .view-tab-ic {
+  color: rgb(var(--vt));
+}
+
+/* Spaltenfarbe kommt aus der OPTION (--col-c, gesetzt in BoardView), nicht
+   mehr aus der Position. Der alte nth-child-Regenbogen faerbte nach Reihenfolge:
+   beim Umsortieren sprangen die Farben, und die seit W94 waehlbaren
+   Optionsfarben hatten auf die Spalte keinerlei Wirkung. Ohne gesetzte Farbe
+   bleibt die Spalte neutral — ruhiger als falsch-bunt. */
+.board-col {
+  background: color-mix(in srgb, var(--col-c, transparent) 6%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, var(--col-c, transparent) 16%, transparent);
+}
+[data-theme='dark'] .board-col {
+  background: color-mix(in srgb, var(--col-c, transparent) 10%, var(--sidebar-bg));
+  border-color: color-mix(in srgb, var(--col-c, transparent) 22%, transparent);
+}
+/* Der Drop-Highlight muss die Tint-Regel schlagen — im Dunkelmodus stand sie
+   spaeter in der Datei und bei gleicher Spezifitaet gewann sonst der Tint, der
+   Ziel-Rahmen war unsichtbar. Hoehere Spezifitaet (Attribut + zwei Klassen). */
+.board-col.drag-over,
+[data-theme='dark'] .board-col.drag-over {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--sidebar-bg));
+}
+
+/* ---- Galerie: neutraler Lift, feiner Akzentrahmen ---- */
+
+.gallery-card:hover {
+  transform: translateY(-2px);
+  border: 1px solid rgba(var(--accent-rgb), 0.28);
+  background: var(--card);
+  box-shadow:
+    0 10px 28px rgba(26, 26, 26, 0.12),
+    0 4px 18px rgba(var(--accent-rgb), 0.1);
+}
+
+/* ---- Sidebar: kleine ruhige Farbpunkte, einfarbiger Aktiv-Balken ---- */
+
+.tree-section-label::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #3b82f6;
+  opacity: 0.55;
+}
+
+.tree-section-db::before {
+  background: #9333ea;
+}
+
+.tags-section .section-toggle svg + svg {
+  color: #e0447e;
+  opacity: 0.8;
+}
+
+.tree-item.active {
+  position: relative;
+  background-color: rgba(var(--accent-rgb), 0.1);
+}
+
+.tree-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* ---- Dokument-Tabs: weicher einfarbiger Unterstrich ---- */
+
+.tab {
+  position: relative;
+}
+
+.tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+/* ---- Topbar-Icons: dezente Farb-Hovers ---- */
+
+.topbar-right > :nth-child(1):hover svg { color: #d99114; }
+.topbar-right > :nth-child(2):hover svg { color: #1f9d55; }
+.topbar-right > :nth-child(3):hover svg { color: #2f6fd6; }
+.topbar-right > :nth-child(4):hover svg,
+.topbar-right > :nth-child(5):hover svg { color: #7e3ad1; }
+
+/* ---- Login: DAS eine Rainbow-Element (Haarlinie) + ruhige Karte ---- */
+
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 26px;
+  right: 26px;
+  height: 2.5px;
+  border-radius: 0 0 3px 3px;
+  background: var(--rainbow-linear);
+  opacity: 0.75;
+}
+
+.login-card {
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  box-shadow:
+    0 10px 44px rgba(26, 26, 26, 0.12),
+    0 6px 28px rgba(var(--accent-rgb), 0.1),
+    0 4px 20px rgba(var(--glow-purple), 0.06);
+}
+
+.login-card input:focus {
+  outline: none;
+  border-color: rgba(var(--accent-rgb), 0.5);
+  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.14);
+}
+
+.login-wrap {
+  background:
+    radial-gradient(600px 420px at 18% 22%, rgba(var(--glow-green), 0.13), transparent 65%),
+    radial-gradient(640px 460px at 84% 18%, rgba(var(--glow-blue), 0.11), transparent 65%),
+    radial-gradient(700px 500px at 78% 86%, rgba(var(--glow-purple), 0.11), transparent 65%),
+    radial-gradient(560px 420px at 12% 88%, rgba(var(--glow-pink), 0.09), transparent 65%),
+    var(--bg);
+}
+
+[data-theme='dark'] .login-wrap {
+  background:
+    radial-gradient(600px 420px at 18% 22%, rgba(var(--glow-green), 0.18), transparent 65%),
+    radial-gradient(640px 460px at 84% 18%, rgba(var(--glow-blue), 0.15), transparent 65%),
+    radial-gradient(700px 500px at 78% 86%, rgba(var(--glow-purple), 0.16), transparent 65%),
+    radial-gradient(560px 420px at 12% 88%, rgba(var(--glow-pink), 0.12), transparent 65%),
+    var(--bg);
+}
+
+.empty-state {
+  background:
+    radial-gradient(560px 400px at 22% 24%, rgba(var(--glow-green), 0.11), transparent 65%),
+    radial-gradient(600px 440px at 80% 20%, rgba(var(--glow-blue), 0.09), transparent 65%),
+    radial-gradient(640px 480px at 74% 84%, rgba(var(--glow-purple), 0.09), transparent 65%),
+    var(--bg);
+}
+
+[data-theme='dark'] .empty-state {
+  background:
+    radial-gradient(560px 400px at 22% 24%, rgba(var(--glow-green), 0.15), transparent 65%),
+    radial-gradient(600px 440px at 80% 20%, rgba(var(--glow-blue), 0.13), transparent 65%),
+    radial-gradient(640px 480px at 74% 84%, rgba(var(--glow-purple), 0.13), transparent 65%),
+    var(--bg);
+}
+
+
+
+/* ---- Sidebar-Aktionen & Suche: einfarbig ruhig ---- */
+
+.new-page:hover {
+  color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.08);
+  box-shadow: inset 0 0 0 1px rgba(var(--accent-rgb), 0.2);
+}
+
+.sidebar-search:hover {
+  border-color: rgba(var(--accent-rgb), 0.3);
+  background: var(--hover);
+  box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.1);
+}
+
+/* ---- Dialoge: neutral-elegant (kein Rainbow) ---- */
+
+.dialog {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--accent) 12%, var(--border));
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.18),
+    0 4px 20px rgba(var(--accent-rgb), 0.07);
+}
+
+/* ---- W40: Öffentlicher Zugang (Karten + Status) ---- */
+
+.pa-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+  background: var(--card);
+}
+
+.pa-card > strong {
+  font-size: 13.5px;
+}
+
+.pa-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 9px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.pa-status .pa-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pa-running {
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.pa-running .pa-dot {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.pa-starting {
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+}
+
+.pa-starting .pa-dot {
+  background: #f97316;
+  animation: pa-pulse 1.2s ease-in-out infinite;
+}
+
+.pa-error {
+  background: rgba(196, 85, 77, 0.08);
+  border: 1px solid rgba(196, 85, 77, 0.3);
+}
+
+.pa-error .pa-dot {
+  background: var(--danger);
+}
+
+@keyframes pa-pulse {
+  50% { opacity: 0.4; }
+}
+
+.pa-status a {
+  color: var(--accent);
+  font-weight: 600;
+  word-break: break-all;
+}
+
+/* ---- W41: OAuth-Login ---- */
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-weight: 500;
+  padding: 8px 14px;
+}
+
+.oauth-btn:hover {
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.12);
+}
+
+.pa-warn {
+  color: #b45309;
+}
+
+[data-theme='dark'] .pa-warn {
+  color: #f0a94b;
+}
+
+.btn-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+a.btn {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* ---- W43: Anlege-Zeile unter dem Titel (Emoji / Cover / Beschreibung) ---- */
+
+.head-adders {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 2px;
+}
+
+.add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--muted);
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: var(--hover);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.add-btn:hover {
+  color: var(--fg);
+  background: var(--active);
+}
+
+/* ---- W44: Agent verbinden ---- */
+
+.agent-btn {
+  color: var(--accent);
+}
+
+.agent-btn:hover {
+  background: rgba(var(--accent-rgb), 0.12);
+}
+
+.agent-dialog {
+  max-width: 640px;
+}
+
+.agent-token {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+
+.agent-token-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.agent-token-row .prop-select {
+  flex: 1;
+  min-width: 130px;
+}
+
+.agent-token-fresh {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-token-fresh code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(var(--accent-rgb), 0.1);
+  border: 1px solid rgba(var(--accent-rgb), 0.3);
+  word-break: break-all;
+  cursor: copy;
+}
+
+.agent-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.agent-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.12s ease;
+}
+
+.agent-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.12);
+}
+
+.agent-card.active {
+  border-color: rgba(var(--accent-rgb), 0.55);
+  background: rgba(var(--accent-rgb), 0.07);
+  box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.16);
+}
+
+.agent-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+}
+
+.agent-emoji {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.agent-name {
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.agent-snippet pre {
+  max-height: 220px;
+  overflow: auto;
+}
+
+@media (max-width: 768px) {
+  .agent-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---- W44b: „Agents & MCP" im Sidebar-Footer — schillernder Farbtext ---- */
+
+.agents-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agents-menu-item:hover {
+  box-shadow:
+    inset 0 0 0 200px rgba(224, 95, 176, 0.05),
+    0 2px 10px rgba(74, 168, 255, 0.1);
+}
+
+/* Icon zykelt dynamisch durch alle Farbtöne. */
+.agents-ic {
+  display: inline-flex;
+  color: #e05fb0;
+  animation: agents-hue 7s linear infinite;
+}
+
+@keyframes agents-hue {
+  to { filter: hue-rotate(360deg); }
+}
+
+/* Der Schriftzug: wandernder Regenbogen-Verlauf (Taskade "Free AI"). */
+.agents-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  background: linear-gradient(
+    90deg,
+    #f6a14a,
+    #ef5da8 22%,
+    #8b7bff 45%,
+    #4aa8ff 68%,
+    #34d399 85%,
+    #f6a14a
+  );
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: agents-shimmer 6s linear infinite;
+}
+
+@keyframes agents-shimmer {
+  to { background-position: -300% 0; }
+}
+
+/* ---- W45: Index „Baum · Agent-Sicht" ---- */
+
+.index-modes {
+  display: inline-flex;
+  gap: 2px;
+  background: var(--hover);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.index-mode {
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.index-mode.active {
+  background: var(--card);
+  color: var(--fg);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.idx-tree-wrap {
+  padding: 0 4px;
+}
+
+.idx-tree-hint {
+  margin: 4px 2px 10px;
+}
+
+.idx-tree {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+
+.idx-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  border-radius: 6px;
+}
+
+.idx-node:hover {
+  background: var(--hover);
+}
+
+.idx-node-main {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.idx-node-icon {
+  flex-shrink: 0;
+}
+
+.idx-node-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+}
+
+.idx-node-title.idx-hit {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.idx-node-id {
+  color: var(--muted);
+  font-size: 11px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.idx-md {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+  padding: 1px 7px;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.idx-node:hover .idx-md {
+  opacity: 1;
+}
+
+.idx-md:hover {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.4);
+}
+
+/* ---- Form view (Notion-style "Formular") ---- */
+.form-view {
+  display: flex;
+  justify-content: center;
+  padding: 34px 20px 90px;
+  overflow-y: auto;
+}
+.form-card {
+  width: 100%;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+}
+.form-heading {
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 30px;
+  font-weight: 700;
+  padding: 0;
+  outline: none;
+  font-family: inherit;
+  width: 100%;
+  letter-spacing: -0.01em;
+}
+.form-heading::placeholder { color: var(--muted); opacity: 0.5; }
+.form-desc {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 15px;
+  padding: 8px 0 0;
+  margin-bottom: 24px;
+  outline: none;
+  resize: none;
+  font-family: inherit;
+  width: 100%;
+  line-height: 1.5;
+}
+.form-desc::placeholder { color: var(--muted); opacity: 0.5; }
+.form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 26px;
+}
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.form-field--check {
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.form-field--check .form-label { font-weight: 400; }
+.form-label {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.form-req { color: var(--danger); font-weight: 700; }
+.form-view .form-input {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 15px;
+  background: var(--card);
+  color: var(--fg);
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.form-view .form-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.form-select { cursor: pointer; }
+.form-checkbox { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; margin: 0; }
+.form-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.form-chip {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 12px;
+  font-size: 13.5px;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.form-chip:hover { background: var(--hover); }
+.form-chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.form-hint { font-size: 13px; color: var(--muted); }
+.form-actions { margin-top: 28px; }
+.form-submit {
+  font-size: 14.5px;
+  padding: 10px 22px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.form-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.form-done { align-items: center; text-align: center; padding-top: 56px; }
+.form-done-ic {
+  width: 62px; height: 62px; border-radius: 50%;
+  background: var(--accent-soft); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 18px;
+}
+.form-done h2 { font-size: 22px; margin: 0 0 6px; color: var(--fg); }
+.form-done p { color: var(--muted); margin: 0 0 24px; }
+
+@media (max-width: 640px) {
+  .form-view { padding: 20px 14px 70px; }
+  .form-heading { font-size: 25px; }
+}
+
+/* ---- Public form page (/form/{token}) + owner share bar ---- */
+.public-form-page {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background: var(--bg);
+  padding: 6vh 20px 80px;
+  overflow-y: auto;
+}
+.public-form-page .form-card {
+  max-width: 620px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  padding: 34px 32px 26px;
+}
+.public-form-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+.form-heading-static {
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
+  color: var(--fg);
+}
+.form-desc-static {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+  margin: 6px 0 22px;
+}
+.public-form-loading {
+  color: var(--muted);
+  padding: 40px;
+  text-align: center;
+}
+.public-form-footer {
+  margin-top: 26px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: center;
+}
+/* owner's share controls, top of the in-app form card */
+.form-share-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.form-share-bar .btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.form-share-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+  padding: 2px 4px;
+}
+.form-share-url {
+  width: 100%;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--accent-soft);
+  color: var(--fg);
+  margin-bottom: 16px;
+  outline: none;
+}
+
+@media (max-width: 640px) {
+  .public-form-page { padding: 3vh 12px 60px; }
+  .public-form-page .form-card { padding: 22px 18px 20px; }
+  .form-heading-static { font-size: 23px; }
+}
+
+/* ---- Number progress bar / ring (numberDisplay) ---- */
+.prop-number { font-variant-numeric: tabular-nums; }
+.prop-num-editable { cursor: text; display: inline-flex; align-items: center; }
+.prop-bar { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; }
+.prop-bar-track {
+  width: 72px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--hover);
+  overflow: hidden;
+  flex: none;
+}
+.prop-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.3s ease;
+}
+.prop-bar-label {
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.prop-ring { display: inline-flex; align-items: center; gap: 6px; }
+.prop-ring svg { flex: none; }
+.prop-ring-track { fill: none; stroke: var(--hover); stroke-width: 3; }
+.prop-ring-fill {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+/* ---- Timeline / Gantt view ---- */
+.timeline { width: 100%; }
+.tl-scroll { overflow-x: auto; overflow-y: hidden; }
+.tl-inner { position: relative; }
+.tl-header { display: flex; }
+.tl-corner {
+  position: sticky;
+  left: 0;
+  z-index: 4;
+  flex: none;
+  height: 32px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+}
+.tl-months {
+  position: relative;
+  height: 32px;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+}
+.tl-month {
+  position: absolute;
+  top: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  border-left: 1px solid var(--border);
+  box-sizing: border-box;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.tl-today-tick { position: absolute; top: 0; width: 2px; height: 32px; background: var(--danger); }
+.tl-row { display: flex; align-items: stretch; height: 40px; }
+.tl-label {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.tl-label:hover { background: var(--hover); }
+.tl-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+.tl-track { position: relative; flex: none; border-bottom: 1px solid var(--border); }
+.tl-today-line { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); opacity: 0.28; }
+.tl-bar {
+  position: absolute;
+  top: 7px;
+  height: 26px;
+  background: var(--accent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  padding: 0 9px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+  transition: filter 0.12s;
+}
+.tl-bar:hover { filter: brightness(1.07); }
+.tl-bar-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Sub-task tree (table hierarchy) ---- */
+.db-title-inner { display: inline-flex; align-items: center; gap: 2px; }
+.db-tree-toggle {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+  border-radius: 4px;
+  padding: 0;
+}
+.db-tree-toggle:hover { background: var(--hover); color: var(--fg); }
+.db-tree-spacer { flex: none; width: 18px; display: inline-block; }
+.subitems-select {
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  background: var(--card);
+  color: var(--fg);
+  font-family: inherit;
+  cursor: pointer;
+  max-width: 190px;
+}
+
+/* ---- Notes list (Bear-style middle column, W57) ---- */
+.notes-list {
+  width: 292px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  min-height: 0;
+}
+.notes-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 12px 12px 8px;
+}
+.notes-title { font-weight: 700; font-size: 14.5px; color: var(--fg); }
+.notes-count { font-size: 12px; color: var(--muted); }
+.notes-head-actions { margin-left: auto; display: flex; gap: 2px; }
+.notes-ic-btn {
+  width: 28px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--muted);
+  border-radius: 6px; cursor: pointer;
+}
+.notes-ic-btn:hover { background: var(--hover); color: var(--fg); }
+.notes-filters { display: flex; gap: 4px; padding: 0 12px 10px; }
+.notes-filters button {
+  border: none; background: transparent; color: var(--muted);
+  font-size: 12px; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+}
+.notes-filters button.on { background: var(--active); color: var(--fg); font-weight: 600; }
+.notes-scroll { flex: 1; overflow-y: auto; padding: 0 8px 20px; min-height: 0; }
+.note-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 9px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: var(--fg);
+}
+.note-card:hover { background: var(--hover); }
+.note-card.active { background: var(--active); }
+.note-card.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 9px; bottom: 9px;
+  width: 3px; border-radius: 2px;
+  background: var(--accent);
+}
+.note-card + .note-card { margin-top: 1px; }
+.note-card-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.note-card-title {
+  font-weight: 600; font-size: 13.5px;
+  display: flex; align-items: center; gap: 5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.note-card-ic { flex: none; display: inline-flex; }
+.note-card-snippet {
+  font-size: 12.5px; color: var(--muted); line-height: 1.4;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.note-card-meta { display: flex; align-items: center; gap: 6px; margin-top: 1px; min-width: 0; }
+.note-card-time { font-size: 11.5px; color: var(--muted); flex: none; }
+.note-card-meta .row-tag { font-size: 10.5px; }
+.note-card-thumb {
+  flex: none; width: 46px; height: 46px;
+  border-radius: 7px; object-fit: cover;
+  border: 1px solid var(--border);
+}
+.notes-empty { color: var(--muted); font-size: 13px; padding: 18px 12px; text-align: center; }
+.notes-reopen {
+  flex: none;
+  width: 22px;
+  border: none;
+  border-right: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 14px;
+}
+.notes-reopen:hover { color: var(--fg); background: var(--hover); }
+
+@media (max-width: 900px) {
+  .notes-list, .notes-reopen { display: none; }
+}
+
+/* Notes-mode tag filter chip (W58) */
+.notes-tagfilter { font-weight: 600; }
+
+/* UserMenu: Notizen-Modus toggle state dot (W59) */
+.mode-dot {
+  margin-left: auto;
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid var(--muted);
+  background: transparent;
+  flex: none;
+}
+.mode-dot.on { background: var(--accent); border-color: var(--accent); }
+
+/* Agent gallery: real brand logos (selfh.st/icons, lokal gebündelt). Mono =
+   schwarze Marken (Claude, OpenAI) — im Dark Mode invertiert. */
+.agent-img { width: 26px; height: 26px; object-fit: contain; border-radius: 6px; }
+[data-theme='dark'] .agent-img--mono { filter: invert(1); }
+
+/* 2FA setup: scannable QR (server-rendered PNG data URI) + manual fallback */
+.totp-qr {
+  display: block;
+  width: 200px;
+  height: 200px;
+  margin: 4px auto 10px;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px;
+  border: 1px solid var(--border);
+}
+.totp-manual-hint { margin-bottom: 4px; text-align: center; }
+
+/* ---- Sidebar sections (W66): collapsible topic blocks with count, per-section
+   filter and an inline "new" action. Replaces the flat, endlessly growing list. */
+.sb-section { margin: 2px 0; }
+/* Favoriten und Tags hängen direkt in der Seitenleiste, Dokumente/Datenbanken
+   liegen in `.tree` (8px Innenabstand). Ohne Ausgleich stünden ihre Icons
+   8px weiter links — die Topics säßen sichtbar nicht auf einer Achse. */
+.sidebar > .sb-section { padding: 0 8px; }
+.sb-section-head {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 2px;
+}
+/* Ein Topic ist eine vollwertige Zeile, nur kräftiger gesetzt als die Seiten
+   darunter — dieselbe Höhe, dasselbe Icon-Raster, derselbe Radius. Das ist der
+   ruhige Apple-Eindruck: EINE Zeilensprache, Hierarchie nur über Gewicht und
+   Einrückung, nicht über eine zweite Mikro-Typografie. */
+.sb-section-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  min-height: 38px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left; /* <button> zentriert sonst — der Titel muss linksbündig
+                       auf derselben Achse wie die Seitentitel darunter sitzen */
+}
+.sb-section-toggle:hover { background: var(--hover); }
+
+/* Gleiche 20px-Box wie .tree-icon, damit Topic-Icons und Seiten-Icons exakt
+   auf einer Achse sitzen. */
+.sb-section-icon {
+  flex: none;
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* Das Chevron sitzt rechts (Bear/iOS) und zeigt den Zustand, ohne den Blick
+   vom Titel wegzuziehen. */
+.sb-section-caret {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+  opacity: 0.7;
+}
+.sb-section-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Die Anzahl ist Nebeninformation — schlicht und grau, kein Badge, das mit dem
+   Titel um Aufmerksamkeit konkurriert (iOS-Manier). */
+.sb-section-count {
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Die Seiten einer Sektion rücken unter ihr Topic ein — die Einrückung trägt
+   die Hierarchie, seit die Überschrift keine eigene Typografie mehr hat. */
+.sb-section-body { padding-left: 10px; }
+
+.sb-section-add {
+  flex: none;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: none; background: transparent; color: var(--muted);
+  border-radius: 6px; cursor: pointer;
+  opacity: 0;                     /* hover-reveal keeps the header calm */
+  transition: opacity 0.12s;
+}
+.sb-section:hover .sb-section-add,
+.sb-section-add:focus-visible { opacity: 1; }
+.sb-section-add:hover { background: var(--hover); color: var(--fg); }
+.sb-empty { font-size: 12px; color: var(--muted); padding: 4px 12px 6px; }
+/* Filter hits render flat with their parent as context. */
+.sb-flat { padding-left: 6px; }
+.sb-flat-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.sb-flat-parent {
+  font-size: 10.5px;
+  color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ==========================================================================
+   Touch-Geräte: nichts darf hinter :hover versteckt sein
+   --------------------------------------------------------------------------
+   Ein Touchscreen kennt kein Hovern. iOS/Safari behilft sich damit, dass der
+   erste Tipp auf ein Element mit Hover-Regeln nur den Hover-Zustand setzt und
+   den Klick verschluckt — erst der zweite Tipp löst aus. In der Praxis hieß
+   das: "man muss alles doppelt antippen".
+
+   Deshalb gilt für Geräte ohne echten Hover: alles, was sonst per :hover
+   eingeblendet wird, ist dauerhaft sichtbar (der erste Tipp trifft also
+   direkt), und die rein dekorativen Hover-Effekte sind aus — die blieben nach
+   einem Tipp sonst hängen und sahen aus wie ein Darstellungsfehler.
+   ========================================================================== */
+@media (hover: none) {
+  /* Hover-Reveals — dauerhaft sichtbar statt erst nach dem "Hover-Tipp". */
+  .tree-actions {
+    display: inline-flex;
+  }
+  .tab-close,
+  .add-icon,
+  .card-move-btn,
+  .page-cover-actions,
+  .add-cover,
+  .idx-md,
+  .sb-section-add,
+  .page-tag-x {
+    opacity: 1;
+  }
+
+  /* Dekorative Lifts/Scales: ohne Pointer, der das Element wieder verlässt,
+     bleiben sie nach dem Antippen stehen. */
+  .btn.primary:hover,
+  .btn-sm.primary:hover,
+  .gallery-card:hover,
+  .agent-card:hover,
+  .cover-swatch:hover {
+    transform: none;
+  }
+
+  /* Fingerkuppen brauchen Fläche. Die kleinen Icon-Buttons wachsen auf ein
+     brauchbares Trefferfeld; ihr Icon bleibt gleich groß. */
+  .sb-section-add {
+    width: 32px;
+    height: 32px;
+  }
+  .tab-close {
+    padding: 5px;
+  }
+  .tree-actions button {
+    min-width: 30px;
+    min-height: 30px;
+  }
+  /* Volle Daumenhöhe für die Zeilen, die man am häufigsten trifft. */
+  .tree-item {
+    min-height: 44px;
+  }
+  .sidebar-header .icon-btn {
+    width: 38px;
+    height: 38px;
+  }
+  .idx-node,
+  .idx-node-main,
+  .db-title-link {
+    min-height: 36px;
+  }
+  .idx-md {
+    min-height: 26px;
+    padding: 4px 9px;
+  }
+  /* Tag-Chips sind im Ruhezustand nur ~21px hoch — als Filter tippt man sie
+     ständig an, also brauchen sie eine echte Fingerfläche. */
+  .tag-chip {
+    min-height: 32px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+}
+
+/* Doppeltipp-zum-Zoomen abschalten: Safari wartet sonst auf einen möglichen
+   zweiten Tipp, bevor es den Klick zustellt — das fühlt sich träge an. */
+button,
+a,
+[role='button'],
+.tree-item,
+.idx-node,
+.note-card,
+.board-card {
+  touch-action: manipulation;
+}
+
+/* ---- Tag-Vorschläge -------------------------------------------------------
+   Ohne Vorschlagsliste tippt man denselben Tag jedes Mal neu und leicht anders;
+   der Workspace zerfasert dann in „projekt" / „Projekte" / „Projekt". Die Liste
+   zeigt Vorhandenes samt Häufigkeit — und markiert Tippfehler-Verdächtige. */
+.tag-input-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.tag-suggest {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 220px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.tag-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.tag-suggest-item:hover,
+.tag-suggest-item.on {
+  background: var(--hover);
+}
+
+.tag-suggest-item .tag-chip {
+  flex: none;
+  pointer-events: none; /* der ganze Eintrag ist der Klick */
+}
+
+.tag-suggest-count {
+  flex: 1;
+  text-align: right;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* „ähnlich" heißt: steht nicht im Getippten, sieht aber nach Vertipper aus. */
+.tag-suggest-hint {
+  flex: none;
+  font-size: 10.5px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 6px;
+}
+
+/* ---- Listen-Ansicht -------------------------------------------------------
+   Bewusst kein Spaltenraster: eine ruhige Zeilenliste, in der der Titel führt
+   und die Eigenschaften dezent dahinter stehen. Wer Werte spaltenweise
+   vergleichen will, nimmt die Tabelle — das ist der Unterschied. */
+.list-view {
+  display: flex;
+  flex-direction: column;
+}
+
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.list-row:last-child {
+  border-bottom: none;
+}
+
+.list-row:hover {
+  background: var(--hover);
+}
+
+.list-row-icon {
+  flex: none;
+  width: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+}
+
+/* Der Titel bekommt den Platz und darf umbrechen statt abzuschneiden — in
+   einer Notizenliste ist der Titel die Information. */
+.list-row-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list-row-tags,
+.list-row-props {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.list-row-props {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+/* Auf schmalen Schirmen zählt der Titel; Eigenschaften rutschen darunter. */
+@media (max-width: 768px) {
+  .list-row {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .list-row-title {
+    flex: 1 1 100%;
+    white-space: normal;
+  }
+  .list-row-icon {
+    order: -1;
+  }
+}
+
+/* Das Logo ersetzt das frühere 🧂-Emoji. Es erbt die Textfarbe (siehe Logo.tsx),
+   deshalb braucht es hier nur Ausrichtung — im Dark Mode wird es von allein hell. */
+.login-logo svg,
+.app-loading svg,
+.empty-emoji svg {
+  display: block;
+  margin: 0 auto;
+}
+
+/* Im Fließtext einer Überschrift sitzt das Zeichen sonst auf der Grundlinie. */
+.inline-logo {
+  vertical-align: -0.15em;
+}
+
+/* ---- Design-Wahl: Hell / Automatisch / Dunkel ----------------------------
+   Segmentierte Dreier-Wahl statt eines Umschalters. Der aktive Zustand muss
+   ohne Beschriftung erkennbar sein — deshalb nicht nur Farbe, sondern eine
+   abgesetzte Fläche mit Rahmen. */
+.theme-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--hover);
+}
+
+.theme-switch-opt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.theme-switch-opt:hover {
+  color: var(--fg);
+}
+
+.theme-switch-opt.on {
+  background: var(--card);
+  color: var(--fg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+/* Auf den Anmeldemasken gibt es keine Seitenleiste — der Schalter schwebt in
+   der Ecke, mit Abstand zur Safe-Area (Notch/Homeindikator). */
+.auth-theme-switch {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  z-index: 20;
+}
+
+/* Touch: dieselbe Fingerfläche wie überall sonst. */
+@media (hover: none) {
+  .theme-switch-opt {
+    width: 34px;
+    height: 34px;
+  }
+}
+
+/* ---- Eingebettete Datenbank ---------------------------------------------
+   Notions Modell: eine Datenbank ist ein Block, keine eigene Seitenart. Sie
+   darf mitten im Dokument stehen, mit Text darüber und darunter. Der Rahmen
+   grenzt sie sichtbar vom Fließtext ab, ohne wie ein Fremdkörper zu wirken. */
+.bn-db-embed {
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+}
+
+.bn-db-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bn-db-title:hover {
+  background: var(--hover);
+}
+
+/* Der Sprung zur Vollseite ist eine Nebenaktion — erst bei Hover sichtbar. */
+.bn-db-open {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+
+.bn-db-title:hover .bn-db-open {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .bn-db-open {
+    opacity: 1;
+  }
+}
+
+.bn-db-picker {
+  margin: 12px 0;
+  padding: 10px;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+}
+
+.bn-db-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.bn-db-picker-list button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border: none;
+  background: transparent;
+  color: var(--fg);
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bn-db-picker-list button:hover {
+  background: var(--hover);
+}
+
+.bn-db-picker-empty,
+.bn-db-missing {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.bn-db-missing {
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  margin: 12px 0;
+}
+
+/* ---------- Kanban: Dichte und Lesbarkeit (Trello-Vorbild) ---------- */
+
+/* Leere Auswahlfelder verschwinden und kommen beim Ueberfahren zurueck. Ohne
+   das steht unter jedem Titel eine Reihe Platzhalter. Auf Touch gibt es kein
+   Ueberfahren — dort oeffnet man die Karte, wie in Trello auch. */
+.card-prop-edit.is-empty {
+  display: none;
+}
+.board-card:hover .card-prop-edit.is-empty,
+.card-prop-edit.is-empty:focus-within {
+  display: block;
+  opacity: 0.65;
+}
+
+/* Faelligkeit zeigt Dringlichkeit, statt nur ein Datum zu sein. */
+.prop-date.is-overdue {
+  color: #c2410c;
+  font-weight: 600;
+}
+.prop-date.is-soon {
+  color: #a16207;
+  font-weight: 600;
+}
+@media (prefers-color-scheme: dark) {
+  .prop-date.is-overdue { color: #fb923c; }
+  .prop-date.is-soon { color: #fbbf24; }
+}
+:root[data-theme='dark'] .prop-date.is-overdue { color: #fb923c; }
+:root[data-theme='dark'] .prop-date.is-soon { color: #fbbf24; }
+:root[data-theme='light'] .prop-date.is-overdue { color: #c2410c; }
+:root[data-theme='light'] .prop-date.is-soon { color: #a16207; }
+
+/* URL als kompakter Verweis statt als volle Zeile Rohtext. */
+.prop-url-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prop-url-chip:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Karten dichter: mehr Karten im Blick, ohne dass es gedraengt wirkt. */
+.board-card {
+  padding: 9px 11px;
+}
+.board-card-top {
+  margin-bottom: 5px;
+}
+.board-card-props {
+  gap: 4px;
+}
+
+/* Der "Neu"-Knopf sitzt fest am Spaltenende. */
+.board-add {
+  flex: 0 0 auto;
+  margin-top: 6px;
+}
+
+/* ---------- Kommentare: Abschnitt am Dokumentende (W92) ---------- */
+
+/* Keine Spalte mehr. Die Kommentare stehen unten im Dokument, in derselben
+   Spalte wie der Text — so wie Notion es macht. Eine Spalte daneben nahm
+   Breite weg und zeigte bei einer Seite ohne Kommentare nur eine leere
+   Meldung. */
+.comments-wrap {
+  max-width: var(--doc-width);
+  margin: 0 auto;
+  padding: 0 var(--doc-pad) 22vh;
+  width: 100%;
+}
+
+.comments-section {
+  border-top: 1px solid var(--border);
+  padding-top: 20px;
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.cp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 14px;
+}
+.cp-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 0;
+}
+.cp-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.cp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.cp-item.is-resolved { opacity: 0.5; }
+.cp-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.cp-avatar,
+.presence-dot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #fff;
+  flex: 0 0 auto;
+}
+.cp-author { font-weight: 600; font-size: 13px; }
+.cp-time { font-size: 11.5px; color: var(--muted); }
+.cp-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+  padding-left: 30px;
+}
+.cp-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+  padding-left: 30px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.cp-item:hover .cp-actions,
+.cp-item:focus-within .cp-actions { opacity: 1; }
+@media (hover: none) { .cp-actions { opacity: 1; } }
+.cp-act {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.cp-act:hover { color: var(--fg); text-decoration: underline; }
+.cp-act.danger:hover { color: #d44c47; }
+
+.cp-compose {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 18px;
+}
+.cp-compose textarea {
+  flex: 1 1 auto;
+  resize: none;
+  min-height: 40px;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+.cp-compose textarea:focus { outline: none; border-color: var(--muted); }
+/* Der Knopf erscheint erst, wenn es etwas zu senden gibt. */
+.cp-send { display: none; }
+.cp-send:not(:disabled) { display: block; }
+
+/* Zaehler am Kopfzeilen-Knopf. Bewusst als schlichte Zahl neben dem Symbol
+   statt als roter Punkt: es ist eine Auskunft, keine Warnung. */
+.badge-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 3px;
+}
+.topbar-right .icon-btn.active-star .badge-count { color: inherit; }
+
+/* Wer sonst gerade hier ist — leicht ueberlappend wie in Notion. */
+.presence {
+  display: flex;
+  align-items: center;
+  margin-right: 6px;
+}
+.presence .presence-dot {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--bg);
+  margin-left: -7px;
+}
+.presence .presence-dot:first-child { margin-left: 0; }
+.presence .presence-dot.more { background: var(--muted); }
+
+/* Kommentarzahl auf Kanban-Karten. */
+.card-comments {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* ---------- W96: Avatare als Bild, Profil-Dialog ---------- */
+
+/* Ein hochgeladenes Profilbild fuellt den Kreis — ueberall dieselbe Form,
+   damit eine Person in Menue, Praesenz und Kommentaren wiedererkennbar ist. */
+.avatar,
+.presence-dot,
+.cp-avatar {
+  overflow: hidden;
+}
+.avatar img,
+.presence-dot img,
+.cp-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: 50%;
+}
+
+.profile-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 6px 0 14px;
+}
+.profile-avatar-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.profile-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 12px 0 4px;
+}
+.profile-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--bg);
+}
+.profile-colors {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.profile-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.profile-swatch.active {
+  border-color: var(--fg);
+}
+
+/* ---------- W97: Profil-2FA-Zeile, Passwort-Fehler, Nutzerverwaltung ---------- */
+
+.profile-2fa-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13.5px;
+}
+.profile-input.is-invalid {
+  border-color: #d44c47;
+}
+
+/* Nutzerverwaltung: eine Zeile pro Nutzer mit Workspace-Zugehoerigkeit. */
+.user-row--rich {
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+}
+.user-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.user-row-ws {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.user-ws-pill {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.user-ws-pill.role-admin {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+}
+.user-ws-none {
+  font-size: 11px;
+  color: var(--muted);
+  font-style: italic;
+}
+.user-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+/* ---------- W98: zweispaltige Nutzerverwaltung ---------- */
+
+.users-dialog {
+  width: min(920px, 94vw);
+  max-width: none;
+  display: flex;
+  flex-direction: column;
+}
+.users-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.users-head h2 { margin: 0; }
+
+.users-body {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  min-height: 0;
+  /* Feste, grosszuegige Hoehe; die Panes scrollen INNEN. */
+  height: min(64dvh, 560px);
+}
+.users-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  padding-right: 12px;
+}
+.users-search {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  background: var(--bg);
+  color: var(--fg);
+  margin-bottom: 8px;
+  font: inherit;
+}
+.users-list-scroll {
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.users-list-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+}
+.users-list-item:hover { background: var(--hover); }
+.users-list-item.active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.users-li-text { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.users-li-name {
+  display: flex; align-items: center; gap: 6px;
+  font-weight: 600; font-size: 13.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.users-li-email {
+  font-size: 11.5px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.users-detail-pane {
+  overflow-y: auto;
+  min-height: 0;
+  padding-right: 4px;
+}
+.users-detail-head {
+  display: flex; align-items: center; gap: 14px; margin-bottom: 14px;
+}
+.users-detail-id { min-width: 0; }
+.users-detail-name {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 18px; font-weight: 700;
+}
+.users-detail-email { color: var(--muted); font-size: 13px; }
+.users-detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
+
+.users-section-title {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+  margin: 0 0 10px;
+}
+.ws-access-list { display: flex; flex-direction: column; gap: 8px; }
+.ws-access-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 8px 10px; border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.ws-access-row.has-access {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+.ws-access-name { font-weight: 600; font-size: 13.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Rollenauswahl als Segment-Schalter — ein Klick setzt die Rolle. */
+.ws-role-seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.ws-role-btn {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11.5px;
+  padding: 5px 9px;
+  cursor: pointer;
+  border-left: 1px solid var(--border);
+  white-space: nowrap;
+}
+.ws-role-btn:first-child { border-left: none; }
+.ws-role-btn:hover { background: var(--hover); color: var(--fg); }
+.ws-role-btn.active { background: var(--accent); color: #fff; font-weight: 600; }
+
+.users-empty { margin-top: 40px; text-align: center; }
+.invite-avatar-placeholder {
+  width: 48px; height: 48px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; color: var(--muted);
+  border: 2px dashed var(--border);
+  flex: 0 0 auto;
+}
+.invite-panel { display: flex; flex-direction: column; }
+.invite-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+@media (max-width: 720px) {
+  .users-body { grid-template-columns: 1fr; height: auto; }
+  .users-list-pane {
+    border-right: none; border-bottom: 1px solid var(--border);
+    padding-right: 0; padding-bottom: 10px; max-height: 30dvh;
+  }
+  .ws-access-row { flex-direction: column; align-items: stretch; gap: 8px; }
+  .ws-role-seg { width: 100%; }
+  .ws-role-btn { flex: 1; text-align: center; }
+}

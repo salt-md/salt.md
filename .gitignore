@@ -1,0 +1,7 @@
+node_modules/
+web/dist/*
+!web/dist/.gitkeep
+data/
+/salt
+*.log
+.DS_Store

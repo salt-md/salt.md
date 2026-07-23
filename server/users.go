@@ -1,0 +1,733 @@
+package server
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/argon2"
+)
+
+const sessionCookie = "salt_session"
+
+// sessionCookieValue liefert den Sitzungswert aus dem Cookie.
+func sessionCookieValue(r *http.Request) (string, bool) {
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
+		return c.Value, true
+	}
+	return "", false
+}
+
+type user struct {
+	ID      string `json:"id"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Color   string `json:"color"`
+	Avatar  string `json:"avatar"`
+	IsAdmin bool   `json:"isAdmin"`
+	// TokenScope is set only when the request authenticated via an API token:
+	// "write" (full) or "read" (read-only). Empty for cookie/session auth,
+	// which is always full access. Not serialized.
+	TokenScope string `json:"-"`
+	// TokenWorkspaces restricts a token to specific workspaces. nil means
+	// unrestricted (all the user's workspaces); non-nil is the allow-list.
+	// Cookie/session auth is always nil (unrestricted). Not serialized.
+	TokenWorkspaces []string `json:"-"`
+}
+
+type ctxKey int
+
+const userCtxKey ctxKey = 0
+
+func requestUser(r *http.Request) *user {
+	u, _ := r.Context().Value(userCtxKey).(*user)
+	return u
+}
+
+// ---- password hashing (argon2id, PHC string format) ----
+
+const (
+	argonTime    = 1
+	argonMemory  = 64 * 1024
+	argonThreads = 4
+	argonKeyLen  = 32
+)
+
+func hashPassword(password string) string {
+	salt := make([]byte, 16)
+	if _, err := rand.Read(salt); err != nil {
+		panic(err)
+	}
+	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+	return fmt.Sprintf("$argon2id$v=19$m=%d,t=%d,p=%d$%s$%s",
+		argonMemory, argonTime, argonThreads,
+		base64.RawStdEncoding.EncodeToString(salt),
+		base64.RawStdEncoding.EncodeToString(key))
+}
+
+// dummyHash is verified against for unknown emails so a login attempt costs
+// the same argon2 work whether or not the account exists (no enumeration via
+// timing). Computed once at startup.
+var dummyHash = hashPassword("salt-dummy-password-placeholder")
+
+func verifyPassword(password, phc string) bool {
+	parts := strings.Split(phc, "$")
+	if len(parts) != 6 || parts[1] != "argon2id" {
+		return false
+	}
+	var m, t uint32
+	var p uint8
+	if _, err := fmt.Sscanf(parts[3], "m=%d,t=%d,p=%d", &m, &t, &p); err != nil {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(parts[4])
+	if err != nil {
+		return false
+	}
+	want, err := base64.RawStdEncoding.DecodeString(parts[5])
+	if err != nil {
+		return false
+	}
+	got := argon2.IDKey([]byte(password), salt, t, m, p, uint32(len(want)))
+	return subtle.ConstantTimeCompare(got, want) == 1
+}
+
+// ---- sessions & API tokens ----
+
+func tokenHash(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
+
+func (s *Server) createSession(userID string) (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+	expires := time.Now().UTC().Add(time.Duration(s.sessionDays()) * 24 * time.Hour).Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		tokenHash(token), userID, now(), expires)
+	return token, err
+}
+
+func (s *Server) userByID(id string) *user {
+	var u user
+	var isAdmin int
+	err := s.db.QueryRow(`SELECT id, email, name, color, avatar, is_admin FROM users WHERE id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin)
+	if err != nil {
+		return nil
+	}
+	u.IsAdmin = isAdmin != 0
+	return &u
+}
+
+// currentUser resolves the request's user from the session cookie or an
+// API bearer token. Returns nil when unauthenticated.
+func (s *Server) currentUser(r *http.Request) *user {
+	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
+		tok := strings.TrimPrefix(auth, "Bearer ")
+		var userID, id, scope, wsScope string
+		err := s.db.QueryRow(`SELECT id, user_id, scope, workspace_scope FROM api_tokens WHERE token_hash = ?`, tokenHash(tok)).Scan(&id, &userID, &scope, &wsScope)
+		if err == nil {
+			s.db.Exec(`UPDATE api_tokens SET last_used_at = ? WHERE id = ?`, now(), id)
+			u := s.userByID(userID)
+			if u != nil {
+				if scope != "read" {
+					scope = "write"
+				}
+				u.TokenScope = scope
+				if strings.TrimSpace(wsScope) != "" {
+					for _, w := range strings.Split(wsScope, ",") {
+						if w = strings.TrimSpace(w); w != "" {
+							u.TokenWorkspaces = append(u.TokenWorkspaces, w)
+						}
+					}
+				}
+			}
+			return u
+		}
+		return nil
+	}
+	val, ok := sessionCookieValue(r)
+	if !ok {
+		return nil
+	}
+	var userID, expires string
+	err := s.db.QueryRow(`SELECT user_id, expires_at FROM sessions WHERE token_hash = ?`, tokenHash(val)).Scan(&userID, &expires)
+	if err != nil {
+		return nil
+	}
+	if exp, err := time.Parse(time.RFC3339Nano, expires); err != nil || time.Now().After(exp) {
+		s.db.Exec(`DELETE FROM sessions WHERE token_hash = ?`, tokenHash(val))
+		return nil
+	}
+	return s.userByID(userID)
+}
+
+func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u := s.currentUser(r)
+		if u == nil {
+			httpError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		// A read-only API token may not perform mutating HTTP methods. Cookie
+		// sessions (TokenScope=="") are unaffected. This is the single REST
+		// choke point that mirrors the per-tool MCP check.
+		if u.TokenScope == "read" {
+			switch r.Method {
+			case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+				httpError(w, http.StatusForbidden, "token is read-only")
+				return
+			}
+		}
+		next(w, r.WithContext(context.WithValue(r.Context(), userCtxKey, u)))
+	}
+}
+
+func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {
+	return s.auth(func(w http.ResponseWriter, r *http.Request) {
+		if !requestUser(r).IsAdmin {
+			httpError(w, http.StatusForbidden, "admin only")
+			return
+		}
+		next(w, r)
+	})
+}
+
+func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    token,
+		Path:     "/",
+		MaxAge:   maxAge,
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+}
+
+// isHTTPS reports whether the request reached us over TLS, directly or via a
+// terminating proxy. Enables the cookie Secure flag without breaking plain
+// HTTP LAN deployments.
+func isHTTPS(r *http.Request) bool {
+	return r.TLS != nil ||
+		r.Header.Get("X-Forwarded-Proto") == "https" ||
+		r.Header.Get("X-Forwarded-Ssl") == "on"
+}
+
+// ---- handlers ----
+
+func (s *Server) userCount() (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&n)
+	return n, err
+}
+
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	n, err := s.userCount()
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	u := s.currentUser(r)
+	writeJSON(w, map[string]any{
+		"setupRequired":       n == 0,
+		"authenticated":       u != nil,
+		"user":                u,
+		"version":             Version,
+		"allowUserWorkspaces": s.loadSettings().AllowUserWorkspaces,
+	})
+}
+
+var userColors = []string{
+	"#2f7d4f", "#c4554d", "#3b6fb5", "#b58a3b", "#7d4fb0",
+	"#3ba0a8", "#b5527e", "#6b8f3b", "#8a6650", "#5560c4",
+}
+
+// validUserColor laesst nur die vorgegebene Palette oder ein reines #hex zu —
+// kein Platz fuer CSS-Funktionen (url(), expression(), …).
+func validUserColor(c string) bool {
+	for _, p := range userColors {
+		if strings.EqualFold(c, p) {
+			return true
+		}
+	}
+	if len(c) != 4 && len(c) != 7 {
+		return false
+	}
+	if c[0] != '#' {
+		return false
+	}
+	for _, ch := range c[1:] {
+		if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) nextColor() string {
+	n, _ := s.userCount()
+	return userColors[n%len(userColors)]
+}
+
+func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	n, err := s.userCount()
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if n > 0 {
+		httpError(w, 403, "setup already completed")
+		return
+	}
+	var body struct {
+		Name     string `json:"name"`
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	if err := validateAccount(body.Name, body.Email, body.Password); err != "" {
+		httpError(w, 400, err)
+		return
+	}
+	// Serialize setup so two concurrent requests can't both mint an admin.
+	s.loginMu.Lock()
+	defer s.loginMu.Unlock()
+	if n, err := s.userCount(); err != nil || n > 0 {
+		httpError(w, 403, "setup already completed")
+		return
+	}
+	id := newID()
+	_, err = s.db.Exec(`INSERT INTO users (id, email, name, color, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+		id, strings.ToLower(strings.TrimSpace(body.Email)), strings.TrimSpace(body.Name), s.nextColor(), hashPassword(body.Password), now())
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	// The first admin gets a workspace and is its admin member. Reuse an
+	// existing (upgrade-migrated) workspace if one is already present.
+	var wsID string
+	if s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&wsID) != nil || wsID == "" {
+		wsID = newID()
+		s.db.Exec(`INSERT INTO workspaces (id, name, created_at) VALUES (?, 'Workspace', ?)`, wsID, now())
+	}
+	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin') ON CONFLICT DO NOTHING`, wsID, id)
+	// Claim any orphaned pages (e.g. the seeded welcome page created before a
+	// workspace existed) into this workspace, owned by the first admin.
+	s.db.Exec(`UPDATE pages SET workspace_id = ?, owner_id = COALESCE(NULLIF(owner_id,''), ?) WHERE workspace_id = ''`, wsID, id)
+	token, err := s.createSession(id)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	setSessionCookie(w, r, token, s.sessionDays()*24*3600)
+	writeJSON(w, s.userByID(id))
+}
+
+func validateAccount(name, email, password string) string {
+	if strings.TrimSpace(name) == "" {
+		return "name is required"
+	}
+	email = strings.TrimSpace(email)
+	if email == "" || !strings.Contains(email, "@") {
+		return "a valid email is required"
+	}
+	if len(password) < 8 {
+		return "password must be at least 8 characters"
+	}
+	return ""
+}
+
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+		Code     string `json:"code"` // TOTP, when 2FA is enabled
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	// Brute-force throttle per client IP (token bucket): stops password guessing
+	// / spraying before it reaches the (expensive) argon2 verification.
+	if !s.loginRate.allow(s.clientIP(r)) {
+		httpError(w, http.StatusTooManyRequests, "too many login attempts, please wait")
+		return
+	}
+	// Bound concurrent password verifications: argon2 is intentionally
+	// memory-heavy (64 MiB each), so unbounded parallel logins could exhaust
+	// RAM. Acquire the slot BEFORE hashing.
+	s.loginSem <- struct{}{}
+	defer func() { <-s.loginSem }()
+
+	var id, hash, totpSecret string
+	var totpEnabled int
+	err := s.db.QueryRow(`SELECT id, password_hash, totp_secret, totp_enabled FROM users WHERE email = ?`,
+		strings.ToLower(strings.TrimSpace(body.Email))).Scan(&id, &hash, &totpSecret, &totpEnabled)
+	if err != nil {
+		hash = dummyHash // verify anyway so timing doesn't reveal account existence
+	}
+	if !verifyPassword(body.Password, hash) || err != nil {
+		httpError(w, http.StatusUnauthorized, "wrong credentials")
+		return
+	}
+	// Second factor: password was correct, now require a valid TOTP code. The
+	// distinct 401 body lets the client show a code field without re-asking for
+	// the password.
+	if totpEnabled != 0 {
+		if body.Code == "" {
+			httpError(w, http.StatusUnauthorized, "2fa required")
+			return
+		}
+		if !verifyTOTP(totpSecret, body.Code) {
+			httpError(w, http.StatusUnauthorized, "invalid 2fa code")
+			return
+		}
+	}
+	token, err := s.createSession(id)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	setSessionCookie(w, r, token, s.sessionDays()*24*3600)
+	writeJSON(w, s.userByID(id))
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	if val, ok := sessionCookieValue(r); ok {
+		s.db.Exec(`DELETE FROM sessions WHERE token_hash = ?`, tokenHash(val))
+	}
+	setSessionCookie(w, r, "", -1)
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.db.Query(`SELECT id, email, name, color, avatar, is_admin FROM users ORDER BY created_at`)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	defer rows.Close()
+	users := []user{}
+	for rows.Next() {
+		var u user
+		var isAdmin int
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+		u.IsAdmin = isAdmin != 0
+		users = append(users, u)
+	}
+	writeJSON(w, users)
+}
+
+func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name       string `json:"name"`
+		Email      string `json:"email"`
+		Password   string `json:"password"`
+		IsAdmin    bool   `json:"isAdmin"`
+		Workspaces []struct {
+			ID   string `json:"id"`
+			Role string `json:"role"`
+		} `json:"workspaces"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	if msg := validateAccount(body.Name, body.Email, body.Password); msg != "" {
+		httpError(w, 400, msg)
+		return
+	}
+	id := newID()
+	admin := 0
+	if body.IsAdmin {
+		admin = 1
+	}
+	_, err := s.db.Exec(`INSERT INTO users (id, email, name, color, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, strings.ToLower(strings.TrimSpace(body.Email)), strings.TrimSpace(body.Name), s.nextColor(), hashPassword(body.Password), admin, now())
+	if err != nil {
+		httpError(w, 400, "email already in use")
+		return
+	}
+	if len(body.Workspaces) > 0 {
+		// Ausdrueckliche Zuweisung: nur diese Workspaces, mit gewaehlter Rolle.
+		for _, ws := range body.Workspaces {
+			if ws.Role == "none" || ws.ID == "" {
+				continue
+			}
+			// Der Nutzer wurde eben angelegt; eine unbekannte Workspace-Id faellt
+			// am Foreign Key aus, ohne Schaden.
+			s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
+				ws.ID, id, normalizeRole(ws.Role))
+		}
+	} else {
+		// Ohne Angabe wie bisher: der Neue tritt allen Workspaces des anlegenden
+		// Admins bei (als Mitglied), damit der geteilte Workspace geteilt bleibt.
+		for _, ws := range s.visibleWorkspaces(requestUser(r).ID) {
+			s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, ws, id, "member")
+		}
+	}
+	writeJSON(w, s.userByID(id))
+}
+
+func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	me := requestUser(r)
+	if me.ID != id && !me.IsAdmin {
+		httpError(w, 403, "forbidden")
+		return
+	}
+	var body struct {
+		Name            *string `json:"name"`
+		Email           *string `json:"email"`
+		Color           *string `json:"color"`
+		Avatar          *string `json:"avatar"`
+		Password        *string `json:"password"`
+		CurrentPassword *string `json:"currentPassword"`
+		IsAdmin         *bool   `json:"isAdmin"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	// ---- ERST ALLES PRUEFEN, dann alles anwenden. Vorher committete jedes
+	// Feld einzeln; scheiterte ein spaeteres an der Pruefung, blieb die Zeile
+	// halb geaendert (z. B. isAdmin schon gesetzt, obwohl der Aufruf 409 gab).
+	changingSensitive := body.Password != nil || body.Email != nil
+	if me.ID == id && changingSensitive {
+		var hash string
+		s.db.QueryRow(`SELECT password_hash FROM users WHERE id = ?`, id).Scan(&hash)
+		if body.CurrentPassword == nil || !verifyPassword(*body.CurrentPassword, hash) {
+			httpError(w, 403, "current password is incorrect")
+			return
+		}
+	}
+	if body.IsAdmin != nil && me.IsAdmin && !*body.IsAdmin {
+		// Sich SELBST die Admin-Rechte zu nehmen sperrt einen aus dem offenen
+		// Verwaltungsdialog aus (jede weitere Aktion faellt auf 403) — und man
+		// kann sich nicht selbst wieder befoerdern. Also verbieten.
+		if me.ID == id {
+			httpError(w, 400, "you cannot remove your own admin rights — ask another admin")
+			return
+		}
+		var others int
+		s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?`, id).Scan(&others)
+		if others == 0 {
+			httpError(w, 400, "cannot remove the last admin")
+			return
+		}
+	}
+	var newEmail string
+	if body.Email != nil {
+		newEmail = strings.ToLower(strings.TrimSpace(*body.Email))
+		if !strings.Contains(newEmail, "@") || len(newEmail) < 5 || strings.ContainsAny(newEmail, " \t") {
+			httpError(w, 400, "that does not look like an email address")
+			return
+		}
+		var clash int
+		s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ? AND id != ?`, newEmail, id).Scan(&clash)
+		if clash > 0 {
+			httpError(w, 409, "another account already uses this email")
+			return
+		}
+	}
+	var newAvatar string
+	if body.Avatar != nil {
+		newAvatar = strings.TrimSpace(*body.Avatar)
+		if newAvatar != "" && (!strings.HasPrefix(newAvatar, "/files/") || strings.ContainsAny(newAvatar, "()'\"")) {
+			httpError(w, 400, "avatar must be an uploaded file")
+			return
+		}
+	}
+	if body.Color != nil && !validUserColor(*body.Color) {
+		httpError(w, 400, "invalid color")
+		return
+	}
+	if body.Password != nil && len(*body.Password) < 8 {
+		httpError(w, 400, "password must be at least 8 characters")
+		return
+	}
+
+	// ---- Ab hier ist alles geprueft; jetzt anwenden.
+	if body.IsAdmin != nil && me.IsAdmin {
+		v := 0
+		if *body.IsAdmin {
+			v = 1
+		}
+		s.db.Exec(`UPDATE users SET is_admin = ? WHERE id = ?`, v, id)
+	}
+	if body.Email != nil {
+		s.db.Exec(`UPDATE users SET email = ?, email_verified = 0 WHERE id = ?`, newEmail, id)
+	}
+	if body.Avatar != nil {
+		s.db.Exec(`UPDATE users SET avatar = ? WHERE id = ?`, newAvatar, id)
+	}
+	if body.Name != nil && strings.TrimSpace(*body.Name) != "" {
+		s.db.Exec(`UPDATE users SET name = ? WHERE id = ?`, strings.TrimSpace(*body.Name), id)
+	}
+	if body.Color != nil {
+		s.db.Exec(`UPDATE users SET color = ? WHERE id = ?`, *body.Color, id)
+	}
+	if body.Password != nil {
+		s.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, hashPassword(*body.Password), id)
+		// Ein Passwortwechsel entwertet alle Sitzungen und Tokens des Kontos.
+		s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id)
+		s.db.Exec(`DELETE FROM api_tokens WHERE user_id = ?`, id)
+		if me.ID == id {
+			if token, err := s.createSession(id); err == nil {
+				setSessionCookie(w, r, token, s.sessionDays()*24*3600)
+			}
+		}
+	}
+	writeJSON(w, s.userByID(id))
+}
+
+func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == requestUser(r).ID {
+		httpError(w, 400, "you cannot delete yourself")
+		return
+	}
+	var admins int
+	s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?`, id).Scan(&admins)
+	if admins == 0 {
+		httpError(w, 400, "cannot delete the last admin")
+		return
+	}
+	if _, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// ---- API tokens ----
+
+type apiToken struct {
+	ID         string   `json:"id"`
+	Name       string   `json:"name"`
+	Scope      string   `json:"scope"`
+	Workspaces []string `json:"workspaces"` // empty = all the user's workspaces
+	CreatedAt  string   `json:"createdAt"`
+	LastUsedAt *string  `json:"lastUsedAt"`
+}
+
+func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
+	rows, err := s.db.Query(`SELECT id, name, scope, workspace_scope, created_at, last_used_at FROM api_tokens WHERE user_id = ? ORDER BY created_at`, requestUser(r).ID)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	defer rows.Close()
+	tokens := []apiToken{}
+	for rows.Next() {
+		var t apiToken
+		var wsScope string
+		if err := rows.Scan(&t.ID, &t.Name, &t.Scope, &wsScope, &t.CreatedAt, &t.LastUsedAt); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+		t.Workspaces = []string{}
+		for _, wid := range strings.Split(wsScope, ",") {
+			if wid = strings.TrimSpace(wid); wid != "" {
+				t.Workspaces = append(t.Workspaces, wid)
+			}
+		}
+		tokens = append(tokens, t)
+	}
+	writeJSON(w, tokens)
+}
+
+func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name       string   `json:"name"`
+		Scope      string   `json:"scope"`
+		Workspaces []string `json:"workspaces"` // empty = all the user's workspaces
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	if strings.TrimSpace(body.Name) == "" {
+		body.Name = "API token"
+	}
+	scope := "write"
+	if body.Scope == "read" {
+		scope = "read"
+	}
+	// Workspace scope: keep only ids the caller is actually a member of, so a
+	// token can never be minted for a workspace the user cannot reach. Empty →
+	// unrestricted (all the user's current + future workspaces).
+	userID := requestUser(r).ID
+	member := map[string]bool{}
+	for _, wid := range s.visibleWorkspaces(userID) {
+		member[wid] = true
+	}
+	seen := map[string]bool{}
+	var scoped []string
+	for _, wid := range body.Workspaces {
+		wid = strings.TrimSpace(wid)
+		if wid != "" && member[wid] && !seen[wid] {
+			seen[wid] = true
+			scoped = append(scoped, wid)
+		}
+	}
+	// FAIL CLOSED: the caller asked to restrict to specific workspaces but none
+	// of them survived the membership filter — do NOT store an empty scope, which
+	// reads back as "unrestricted" (all workspaces). Reject instead, so a
+	// deliberately-narrowed token can never silently become maximally privileged.
+	if len(body.Workspaces) > 0 && len(scoped) == 0 {
+		httpError(w, 400, "none of the selected workspaces are available to you")
+		return
+	}
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	token := "salt_" + hex.EncodeToString(b)
+	id := newID()
+	_, err := s.db.Exec(`INSERT INTO api_tokens (id, user_id, name, token_hash, scope, workspace_scope, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		id, userID, strings.TrimSpace(body.Name), tokenHash(token), scope, strings.Join(scoped, ","), now())
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	// The clear-text token is returned exactly once.
+	writeJSON(w, map[string]any{"id": id, "token": token, "scope": scope, "workspaces": scoped})
+}
+
+func (s *Server) handleDeleteToken(w http.ResponseWriter, r *http.Request) {
+	res, err := s.db.Exec(`DELETE FROM api_tokens WHERE id = ? AND user_id = ?`, r.PathValue("id"), requestUser(r).ID)
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		httpError(w, 404, "token not found")
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// deleteExpiredSessions is a small housekeeping pass run at startup.
+func (s *Server) deleteExpiredSessions() {
+	s.db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, now())
+}

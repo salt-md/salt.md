@@ -1,0 +1,1732 @@
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { api } from '../api';
+import Portal from './Portal';
+import { useBoardDrag } from '../boardDrag';
+import { tagColorClass } from '../tags';
+import type {
+  CollectionConfig,
+  Filter,
+  FilterOp,
+  Page,
+  PageMeta,
+  PropDef,
+  PropOption,
+  PropType,
+  Sort,
+  ViewDef,
+} from '../types';
+import PropertyValue from './PropertyValue';
+import SchemaEditor from './SchemaEditor';
+import GalleryView from './GalleryView';
+import ListView from './ListView';
+import { PageIcon } from '../pageIcon';
+import { toast } from '../toast';
+import {
+  Table2,
+  Columns3,
+  LayoutGrid,
+  CalendarDays,
+  List,
+  Settings2,
+  Plus,
+  Filter as FilterIcon,
+  ArrowUpDown,
+  Eye,
+  EyeOff,
+  AlignLeft,
+  Calendar,
+  Hash,
+  CircleDot,
+  Tags,
+  SquareCheck,
+  User,
+  Link2,
+  Sigma,
+  ClipboardList,
+  Check,
+  Send,
+  Share2,
+  Globe,
+  GanttChartSquare,
+  MessageSquare,
+} from 'lucide-react';
+
+// Small type glyph shown next to each property (Notion-style visibility panel).
+function propTypeIcon(t: PropDef['type']) {
+  const s = 14;
+  switch (t) {
+    case 'select':
+      return <CircleDot size={s} />;
+    case 'multiselect':
+      return <Tags size={s} />;
+    case 'date':
+      return <Calendar size={s} />;
+    case 'number':
+      return <Hash size={s} />;
+    case 'checkbox':
+      return <SquareCheck size={s} />;
+    case 'person':
+      return <User size={s} />;
+    case 'relation':
+      return <Link2 size={s} />;
+    case 'rollup':
+    case 'formula':
+      return <Sigma size={s} />;
+    default:
+      return <AlignLeft size={s} />;
+  }
+}
+
+interface Props {
+  collectionId: string;
+  pages: Map<string, PageMeta>;
+  tagColors: Record<string, string>;
+  onNavigate: (id: string) => void;
+  onPagesChanged: () => void;
+}
+
+interface Row {
+  id: string;
+  title: string;
+  icon: string;
+  cover: string;
+  props: Record<string, unknown>;
+  position: number;
+  tags?: string[];
+}
+
+const UNSET = '__unset__';
+
+// The value to store for a group option, respecting the property's type.
+function groupValueFor(schema: PropDef[], propId: string, optId: string): unknown {
+  const prop = schema.find((p) => p.id === propId);
+  return prop?.type === 'multiselect' ? [optId] : optId;
+}
+
+function isEmptyVal(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length === 0;
+  return v === undefined || v === '' || v === null || v === false;
+}
+
+function matchesFilter(row: Row, f: Filter): boolean {
+  const v = row.props[f.property];
+  const op = f.op ?? (f.value === '' ? 'is_not_empty' : 'is');
+  switch (op) {
+    case 'is_empty':
+      return isEmptyVal(v);
+    case 'is_not_empty':
+      return !isEmptyVal(v);
+    case 'contains': {
+      const needle = f.value.toLowerCase();
+      if (Array.isArray(v)) return v.some((x) => String(x).toLowerCase().includes(needle));
+      return String(v ?? '').toLowerCase().includes(needle);
+    }
+    case 'gt':
+    case 'lt': {
+      const nv = Number(v);
+      const nf = Number(f.value);
+      const cmp =
+        !Number.isNaN(nv) && !Number.isNaN(nf) ? nv - nf : String(v ?? '').localeCompare(f.value);
+      return op === 'gt' ? cmp > 0 : cmp < 0;
+    }
+    case 'is_not':
+      if (Array.isArray(v)) return !v.includes(f.value);
+      if (f.value === 'true' || f.value === 'false') return String(v === true) !== f.value;
+      return String(v ?? '') !== f.value;
+    case 'is':
+    default:
+      // Checkbox filters compare against a boolean; a never-toggled box has no
+      // stored value, which must count as "false" (unchecked), not "no match".
+      if (Array.isArray(v)) return v.includes(f.value);
+      if (f.value === 'true' || f.value === 'false') return String(v === true) === f.value;
+      if (typeof v === 'boolean') return String(v) === f.value;
+      return String(v ?? '') === f.value;
+  }
+}
+
+// Apply a view's filters and sort to the row set.
+function applyView(rows: Row[], view: ViewDef): Row[] {
+  let out = rows;
+  for (const f of view.filters ?? []) {
+    out = out.filter((r) => matchesFilter(r, f));
+  }
+  const sort = view.sort;
+  if (sort) {
+    out = [...out].sort((a, b) => {
+      const av = a.props[sort.property];
+      const bv = b.props[sort.property];
+      const as = Array.isArray(av) ? av.join(',') : String(av ?? '');
+      const bs = Array.isArray(bv) ? bv.join(',') : String(bv ?? '');
+      const cmp =
+        typeof av === 'number' && typeof bv === 'number' ? av - bv : as.localeCompare(bs);
+      return sort.dir === 'desc' ? -cmp : cmp;
+    });
+  }
+  return out;
+}
+
+export default function CollectionView({ collectionId, pages, tagColors, onNavigate, onPagesChanged }: Props) {
+  const [config, setConfig] = useState<CollectionConfig | null>(null);
+  const [rows, setRows] = useState<Row[]>([]);
+  const [viewId, setViewId] = useState<string>('');
+  const [schemaOpen, setSchemaOpen] = useState(false);
+
+  // Offene Kommentare je Zeile. Trello zeigt an jeder Karte, ob dort etwas
+  // besprochen wurde — bei einem Vertriebsboard steckt der Gespraechsverlauf
+  // genau dort und nicht in der Beschreibung. In EINER Abfrage fuer den ganzen
+  // Workspace, nicht pro Karte (siehe handleCommentCounts).
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  const workspaceId = pages.get(collectionId)?.workspaceId ?? '';
+  useEffect(() => {
+    if (!workspaceId) return;
+    let alive = true;
+    api
+      .commentCounts(workspaceId)
+      .then((c) => alive && setCommentCounts(c))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // Absichtlich nur an workspaceId haengen: `pages` bekommt bei jeder
+    // Aenderung eine neue Identitaet und wuerde hier eine Endlosschleife
+    // ausloesen.
+  }, [workspaceId]);
+
+  const loadConfig = useCallback(() => {
+    void api.getCollection(collectionId).then((c) => {
+      setConfig(c);
+      setViewId((v) => v || c.views[0]?.id || '');
+    });
+  }, [collectionId]);
+
+  const [total, setTotal] = useState(0);
+  const [addViewOpen, setAddViewOpen] = useState(false);
+  const addViewBtnRef = useRef<HTMLButtonElement>(null);
+  const [addViewPos, setAddViewPos] = useState<React.CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (!addViewOpen || !addViewBtnRef.current) {
+      setAddViewPos(null);
+      return;
+    }
+    const r = addViewBtnRef.current.getBoundingClientRect();
+    setAddViewPos({
+      position: 'fixed',
+      left: Math.max(8, Math.min(r.left, window.innerWidth - 188)),
+      top: r.bottom + 4,
+      zIndex: 320,
+    });
+  }, [addViewOpen]);
+  const PAGE = 200;
+
+  // Rows are fetched from the server (filtered/paginated there), NOT from the
+  // global page list — a database can have tens of thousands of rows that must
+  // not choke the sidebar tree load.
+  const view0 = config?.views.find((v) => v.id === viewId) ?? config?.views[0];
+  // Server-side filter/sort (real Q25): the view's filters/sort become query
+  // params so a 50k-row database is filtered in SQLite, not in the browser.
+  const serverFilters = (view0?.filters ?? []).map((f) => ({ property: f.property, op: f.op, value: f.value }));
+  const serverSort = view0?.sort ?? null;
+  const fsKey = JSON.stringify([serverFilters, serverSort]);
+
+  // Laedt ALLE Zeilen, in 200er-Schritten nacheinander. Vorher blieb es bei
+  // der ersten Seite plus einem "Load more"-Knopf — mit der Folge, dass ein
+  // Board mit 656 Karten "Verloren / Erstattet 0" zeigte, obwohl dort 395
+  // lagen: die Spalte war nicht leer, sie war blind. Die Schritte schuetzen
+  // weiterhin den Server (und zeichnen frueh etwas auf den Schirm); die
+  // Epoche verwirft veraltete Antworten, wenn waehrenddessen Filter oder
+  // Datenbank wechseln.
+  const epochRef = useRef(0);
+  const loadRows = useCallback(async () => {
+    const epoch = ++epochRef.current;
+    let acc: Row[] = [];
+    for (;;) {
+      const res = await api.collectionRows(collectionId, {
+        limit: PAGE,
+        offset: acc.length,
+        filters: serverFilters,
+        sort: serverSort,
+      });
+      if (epoch !== epochRef.current) return; // inzwischen neu geladen
+      const mapped: Row[] = res.rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        icon: r.icon,
+        cover: r.cover || '',
+        props: r.props || {},
+        position: r.position,
+        tags: r.tags ?? [],
+      }));
+      acc = [...acc, ...mapped];
+      setTotal(res.total);
+      setRows(acc);
+      if (acc.length >= res.total || mapped.length === 0) return;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionId, fsKey]);
+
+  // Laedt ALLE Zeilen — aber NICHT bei jeder Aenderung irgendwo im Workspace.
+  // Frueher hing dieser Effekt an `pages`, und `pages` bekommt bei jedem
+  // SSE-Ereignis eine neue Identitaet: eine Datenbank mit 50k Zeilen crawlte
+  // sich dann nach jeder fremden Umbenennung komplett neu. Jetzt nur bei
+  // Wechsel der Datenbank oder von Filter/Sortierung.
+  useEffect(() => {
+    void loadRows();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionId, fsKey]);
+
+  useEffect(loadConfig, [loadConfig]);
+
+  const view = view0;
+  const schema = config?.schema ?? [];
+
+  const saveConfig = async (next: CollectionConfig) => {
+    setConfig(next);
+    await api.putCollection(collectionId, next);
+  };
+
+  const addRow = async (presetProps?: Record<string, unknown>) => {
+    const p = await api.createPage(collectionId, 'Untitled', 'doc', presetProps);
+    onPagesChanged();
+    onNavigate(p.id);
+  };
+
+  // Persist an inline change to a select/multiselect property's options (create,
+  // recolour, delete) — the cell editor edits the schema, not just the value.
+  const setPropOptions = (propId: string, options: PropOption[]) => {
+    if (!config) return;
+    void saveConfig({
+      ...config,
+      schema: config.schema.map((p) => (p.id === propId ? { ...p, options } : p)),
+    });
+  };
+
+  const setRowProp = async (rowId: string, propId: string, value: unknown) => {
+    setRows((prev) =>
+      prev.map((r) => (r.id === rowId ? { ...r, props: { ...r.props, [propId]: value } } : r)),
+    );
+    // Send only the changed key (field-level merge) so two devices editing
+    // different properties of the same row don't overwrite each other.
+    try {
+      await api.updatePage(rowId, { propsPatch: { [propId]: value } });
+    } catch {
+      toast('Änderung nicht gespeichert');
+    }
+  };
+
+  // Setting the group property from a drag/preset respects the property type:
+  // a multi-select stores an array, a select stores a scalar.
+  const setGroupValue = async (rowId: string, propId: string, optId: string) => {
+    const prop = schema.find((p) => p.id === propId);
+    if (prop?.type === 'multiselect') {
+      await setRowProp(rowId, propId, optId === UNSET ? [] : [optId]);
+    } else {
+      await setRowProp(rowId, propId, optId === UNSET ? '' : optId);
+    }
+  };
+
+  if (!config || !view) return <div className="editor-loading" />;
+
+  const updateView = (patch: Partial<ViewDef>) => {
+    const next = {
+      ...config,
+      views: config.views.map((v) => (v.id === view.id ? { ...v, ...patch } : v)),
+    };
+    void saveConfig(next);
+  };
+
+  const addView = (type: ViewDef['type']) => {
+    const labels: Record<ViewDef['type'], string> = {
+      table: 'Tabelle',
+      board: 'Board',
+      gallery: 'Galerie',
+      calendar: 'Kalender',
+      list: 'Liste',
+      form: 'Formular',
+      timeline: 'Timeline',
+    };
+    const nv: ViewDef = { id: 'v' + Math.random().toString(36).slice(2, 9), name: labels[type], type };
+    if (type === 'board') nv.groupBy = schema.find((p) => p.type === 'select' || p.type === 'multiselect')?.id;
+    if (type === 'calendar') nv.dateProp = schema.find((p) => p.type === 'date')?.id;
+    if (type === 'timeline') {
+      const dates = schema.filter((p) => p.type === 'date');
+      nv.dateProp = dates[0]?.id;
+      nv.endDateProp = dates[1]?.id;
+    }
+    void saveConfig({ ...config, views: [...config.views, nv] });
+    setViewId(nv.id);
+    setAddViewOpen(false);
+  };
+
+  const viewRows = applyView(rows, view);
+  const emptyLabel =
+    rows.length > 0 && viewRows.length === 0
+      ? 'No rows match the current filter.'
+      : 'No rows yet — click ＋ New above.';
+  const tabIcon = (t: ViewDef['type']) => {
+    const sz = 14;
+    if (t === 'board') return <Columns3 size={sz} />;
+    if (t === 'gallery') return <LayoutGrid size={sz} />;
+    if (t === 'calendar') return <CalendarDays size={sz} />;
+    if (t === 'list') return <List size={sz} />;
+    if (t === 'form') return <ClipboardList size={sz} />;
+    if (t === 'timeline') return <GanttChartSquare size={sz} />;
+    return <Table2 size={sz} />;
+  };
+
+  // Columns hidden in this view are dropped from every renderer.
+  const hidden = new Set(view.hidden ?? []);
+  const visibleSchema = schema.filter((p) => !hidden.has(p.id));
+  // Relation props that point back at this same collection — candidates for the
+  // sub-item (task hierarchy) relation that the table can render as a tree.
+  const selfRelProps = schema.filter((p) => p.type === 'relation' && p.relationCollection === collectionId);
+  // Date props — the timeline's Start/End pickers choose from these.
+  const dateProps = schema.filter((p) => p.type === 'date');
+
+  const viewSwitcher = (
+    <div className="collection-toolbar">
+      <div className="view-tabs">
+        {config.views.map((v) => (
+          <button
+            key={v.id}
+            className={'view-tab view-tab--' + v.type + (v.id === view.id ? ' active' : '')}
+            onClick={() => setViewId(v.id)}
+          >
+            <span className="view-tab-ic">{tabIcon(v.type)}</span>
+            {v.name}
+          </button>
+        ))}
+        <button
+          ref={addViewBtnRef}
+          className="view-add"
+          title="Ansicht hinzufügen"
+          onClick={() => setAddViewOpen((o) => !o)}
+        >
+          <Plus size={15} />
+        </button>
+      </div>
+      {addViewOpen && addViewPos && (
+        <Portal>
+          <div className="fs-backdrop" onClick={() => setAddViewOpen(false)} />
+          <div className="menu view-add-menu" style={addViewPos}>
+            {(['table', 'board', 'gallery', 'calendar', 'timeline', 'list', 'form'] as const).map((t) => (
+              <button key={t} onClick={() => addView(t)}>
+                <span className="view-tab-ic">{tabIcon(t)}</span>
+                {{ table: 'Tabelle', board: 'Board', gallery: 'Galerie', calendar: 'Kalender', timeline: 'Timeline', list: 'Liste', form: 'Formular' }[t]}
+              </button>
+            ))}
+          </div>
+        </Portal>
+      )}
+      <div className="collection-actions">
+        {view.type === 'timeline' && (
+          <>
+            <select
+              className="subitems-select"
+              title="Startdatum der Balken"
+              value={view.dateProp ?? ''}
+              onChange={(e) => updateView({ dateProp: e.target.value || undefined })}
+            >
+              <option value="">Start: —</option>
+              {dateProps.map((p) => (
+                <option key={p.id} value={p.id}>
+                  Start: {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="subitems-select"
+              title="Enddatum der Balken (leer = 1-Tag-Balken)"
+              value={view.endDateProp ?? ''}
+              onChange={(e) => updateView({ endDateProp: e.target.value || undefined })}
+            >
+              <option value="">Ende: (keins)</option>
+              {dateProps.map((p) => (
+                <option key={p.id} value={p.id}>
+                  Ende: {p.name}
+                </option>
+              ))}
+            </select>
+          </>
+        )}
+        {view.type === 'table' && selfRelProps.length > 0 && (
+          <select
+            className="subitems-select"
+            title="Unteraufgaben-Relation für die Baum-Ansicht"
+            value={view.subItemProp ?? ''}
+            onChange={(e) => updateView({ subItemProp: e.target.value || undefined })}
+          >
+            <option value="">Keine Unteraufgaben</option>
+            {selfRelProps.map((p) => (
+              <option key={p.id} value={p.id}>
+                ⿴ {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {view.type !== 'form' && <FilterSortControls schema={schema} view={view} onChange={updateView} />}
+        <ColumnsControl schema={schema} view={view} onChange={updateView} />
+        <button className="btn-sm" onClick={() => setSchemaOpen(true)}>
+          <Settings2 size={14} /> Properties
+        </button>
+        {view.type !== 'form' && (
+          <button className="btn-sm primary" onClick={() => void addRow()}>
+            <Plus size={14} /> New
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className={'collection-scroll' + (view.type === 'board' ? ' is-board' : '')}>
+      {viewSwitcher}
+      {view.type === 'form' ? (
+        <FormView
+          collectionId={collectionId}
+          schema={visibleSchema}
+          view={view}
+          onUpdateView={updateView}
+          onSubmitted={onPagesChanged}
+        />
+      ) : view.type === 'board' ? (
+        <BoardView
+          rows={viewRows}
+          schema={visibleSchema}
+          groupBy={view.groupBy || schema.find((p) => p.type === 'select')?.id || ''}
+          tagColors={tagColors}
+          commentCounts={commentCounts}
+          onNavigate={onNavigate}
+          onSetProp={setRowProp}
+          onSetOptions={setPropOptions}
+          onDrop={(rowId, groupBy, optId) => {
+            void setGroupValue(rowId, groupBy, optId);
+          }}
+          onAddInColumn={(groupBy, optId) =>
+            void addRow(optId === UNSET ? {} : { [groupBy]: groupValueFor(schema, groupBy, optId) })
+          }
+        />
+      ) : view.type === 'gallery' ? (
+        <GalleryView
+          rows={viewRows}
+          schema={visibleSchema}
+          emptyLabel={emptyLabel}
+          tagColors={tagColors}
+          onNavigate={onNavigate}
+          onSetProp={setRowProp}
+          onSetOptions={setPropOptions}
+        />
+      ) : view.type === 'calendar' ? (
+        <CalendarView
+          rows={viewRows}
+          schema={visibleSchema}
+          dateProp={view.dateProp || schema.find((p) => p.type === 'date')?.id || ''}
+          tagColors={tagColors}
+          onNavigate={onNavigate}
+        />
+      ) : view.type === 'list' ? (
+        <ListView
+          rows={viewRows}
+          schema={visibleSchema}
+          emptyLabel={emptyLabel}
+          tagColors={tagColors}
+          onNavigate={onNavigate}
+          onSetProp={setRowProp}
+          onSetOptions={setPropOptions}
+        />
+      ) : view.type === 'timeline' ? (
+        <TimelineView
+          rows={viewRows}
+          schema={visibleSchema}
+          startProp={view.dateProp || schema.find((p) => p.type === 'date')?.id || ''}
+          endProp={view.endDateProp || ''}
+          tagColors={tagColors}
+          onNavigate={onNavigate}
+        />
+      ) : (
+        <TableView
+          rows={viewRows}
+          schema={visibleSchema}
+          emptyLabel={emptyLabel}
+          tagColors={tagColors}
+          subItemProp={
+            view.subItemProp && selfRelProps.some((p) => p.id === view.subItemProp) ? view.subItemProp : undefined
+          }
+          onNavigate={onNavigate}
+          onSetProp={setRowProp}
+          onSetOptions={setPropOptions}
+        />
+      )}
+      {schemaOpen && (
+        <SchemaEditor
+          config={config}
+          collections={[...pages.values()]
+            .filter((p) => p.type === 'collection' && !p.trashed)
+            .map((p) => ({ id: p.id, title: p.title }))}
+          onSave={saveConfig}
+          onClose={() => setSchemaOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ---- Form view ----
+// A Notion-style form: renders the collection's editable properties as fields;
+// submitting creates a new row with the entered values. Computed types
+// (relation/rollup/formula) can't be filled in and are skipped.
+const FORM_TYPES: PropType[] = ['text', 'number', 'select', 'multiselect', 'date', 'checkbox', 'person'];
+
+function FormView({
+  collectionId,
+  schema,
+  view,
+  onUpdateView,
+  onSubmitted,
+}: {
+  collectionId: string;
+  schema: PropDef[];
+  view: ViewDef;
+  onUpdateView: (patch: Partial<ViewDef>) => void;
+  onSubmitted: () => void;
+}) {
+  const fields = schema.filter((p) => FORM_TYPES.includes(p.type));
+  const [title, setTitle] = useState('');
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const [shared, setShared] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+
+  useEffect(() => {
+    api.formShareStatus(collectionId).then((s) => setShared(s.shared)).catch(() => {});
+  }, [collectionId]);
+
+  const doShare = async () => {
+    setShareBusy(true);
+    try {
+      const { url } = await api.createFormShare(collectionId);
+      // Backend returns an absolute URL on the external domain when one is
+      // configured; only fall back to the current origin for a bare path.
+      const full = url.startsWith('http') ? url : window.location.origin + url;
+      setShareUrl(full);
+      setShared(true);
+      try {
+        await navigator.clipboard?.writeText(full);
+        toast('Öffentlicher Link kopiert');
+      } catch {
+        toast('Öffentlicher Link erstellt');
+      }
+    } catch {
+      toast('Teilen fehlgeschlagen');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const doUnshare = async () => {
+    setShareBusy(true);
+    try {
+      await api.deleteFormShare(collectionId);
+      setShared(false);
+      setShareUrl(null);
+      toast('Öffentlicher Link aufgehoben');
+    } catch {
+      toast('Fehlgeschlagen');
+    } finally {
+      setShareBusy(false);
+    }
+  };
+
+  const set = (id: string, v: unknown) => setValues((prev) => ({ ...prev, [id]: v }));
+  const reset = () => {
+    setTitle('');
+    setValues({});
+    setDone(false);
+  };
+
+  const submit = async () => {
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    try {
+      const props: Record<string, unknown> = {};
+      for (const f of fields) {
+        const v = values[f.id];
+        if (v === undefined || v === '' || v === null) continue;
+        if (Array.isArray(v) && v.length === 0) continue;
+        props[f.id] = v;
+      }
+      await api.createPage(collectionId, title.trim(), 'doc', props);
+      onSubmitted();
+      setDone(true);
+    } catch {
+      toast('Senden fehlgeschlagen');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (done) {
+    return (
+      <div className="form-view">
+        <div className="form-card form-done">
+          <div className="form-done-ic">
+            <Check size={30} />
+          </div>
+          <h2>Gesendet</h2>
+          <p>Deine Antwort wurde gespeichert.</p>
+          <button className="btn-sm primary" onClick={reset}>
+            Noch eine Antwort senden
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="form-view">
+      <div className="form-card">
+        <div className="form-share-bar">
+          {!shared ? (
+            <button className="btn-sm" disabled={shareBusy} onClick={() => void doShare()}>
+              <Share2 size={14} /> Öffentlich teilen
+            </button>
+          ) : (
+            <>
+              <span className="form-share-live">
+                <Globe size={13} /> Öffentlich
+              </span>
+              <button className="btn-sm" disabled={shareBusy} onClick={() => void doShare()}>
+                Link kopieren
+              </button>
+              <button className="btn-sm" disabled={shareBusy} onClick={() => void doUnshare()}>
+                Aufheben
+              </button>
+            </>
+          )}
+        </div>
+        {shareUrl && (
+          <input
+            className="form-share-url"
+            readOnly
+            value={shareUrl}
+            onFocus={(e) => e.currentTarget.select()}
+          />
+        )}
+        <input
+          className="form-heading"
+          value={view.formTitle ?? ''}
+          placeholder="Formular"
+          onChange={(e) => onUpdateView({ formTitle: e.target.value })}
+        />
+        <textarea
+          className="form-desc"
+          value={view.formDesc ?? ''}
+          placeholder="Beschreibung (optional) — erklärt, wofür das Formular ist."
+          rows={2}
+          onChange={(e) => onUpdateView({ formDesc: e.target.value })}
+        />
+        <div className="form-fields">
+          <label className="form-field">
+            <span className="form-label">
+              Titel <b className="form-req">*</b>
+            </span>
+            <input
+              className="form-input"
+              value={title}
+              placeholder="Name des Eintrags"
+              onChange={(e) => setTitle(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void submit();
+              }}
+            />
+          </label>
+          {fields.map((f) => (
+            <label key={f.id} className={'form-field' + (f.type === 'checkbox' ? ' form-field--check' : '')}>
+              <span className="form-label">{f.name}</span>
+              {formField(f, values[f.id], (v) => set(f.id, v))}
+            </label>
+          ))}
+        </div>
+        <div className="form-actions">
+          <button className="btn-sm primary form-submit" disabled={busy || !title.trim()} onClick={() => void submit()}>
+            <Send size={14} /> {view.formSubmit?.trim() || 'Absenden'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function formField(def: PropDef, value: unknown, onChange: (v: unknown) => void) {
+  switch (def.type) {
+    case 'number':
+      return (
+        <input
+          className="form-input"
+          type="number"
+          value={(value as number) ?? ''}
+          onChange={(e) => onChange(e.target.value === '' ? null : Number(e.target.value))}
+        />
+      );
+    case 'date':
+      return (
+        <input
+          className="form-input"
+          type="date"
+          value={(value as string) || ''}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      );
+    case 'checkbox':
+      return (
+        <input
+          className="form-checkbox"
+          type="checkbox"
+          checked={value === true}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+      );
+    case 'select':
+      return (
+        <select className="form-input form-select" value={(value as string) || ''} onChange={(e) => onChange(e.target.value || null)}>
+          <option value="">—</option>
+          {def.options?.map((o) => (
+            <option key={o.id} value={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+      );
+    case 'multiselect': {
+      const vals = Array.isArray(value) ? (value as string[]) : [];
+      if (!def.options?.length) return <span className="form-hint">Keine Optionen angelegt</span>;
+      return (
+        <div className="form-chips">
+          {def.options.map((o) => {
+            const on = vals.includes(o.id);
+            return (
+              <button
+                type="button"
+                key={o.id}
+                className={'form-chip' + (on ? ' on' : '')}
+                onClick={() => onChange(on ? vals.filter((x) => x !== o.id) : [...vals, o.id])}
+              >
+                {o.name}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+    case 'text':
+    case 'person':
+    default:
+      return (
+        <input className="form-input" value={(value as string) || ''} onChange={(e) => onChange(e.target.value)} />
+      );
+  }
+}
+
+// ---- Filter & sort controls ----
+
+function FilterSortControls({
+  schema,
+  view,
+  onChange,
+}: {
+  schema: PropDef[];
+  view: ViewDef;
+  onChange: (patch: Partial<ViewDef>) => void;
+}) {
+  const [open, setOpen] = useState<'filter' | 'sort' | null>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  // Popover position, computed against the viewport. Portaled to <body> so no
+  // transformed/overflow-clipping ancestor (the scrollable mobile toolbar, the
+  // page-body) can trap or hide it — the bug where the field vanished behind a
+  // grey overlay on mobile.
+  const [pos, setPos] = useState<React.CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !controlsRef.current) {
+      setPos(null);
+      return;
+    }
+    const r = controlsRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (vw <= 640) {
+      setPos({ position: 'fixed', left: 8, right: 8, bottom: 8, maxHeight: vh * 0.72 });
+    } else {
+      const width = 300;
+      const left = Math.max(8, Math.min(r.right - width, vw - width - 8));
+      setPos({ position: 'fixed', left, width, top: r.bottom + 6, maxHeight: vh - r.bottom - 24 });
+    }
+  }, [open]);
+  const filters = view.filters ?? [];
+  const sort = view.sort ?? null;
+  const propName = (id: string) => schema.find((p) => p.id === id)?.name ?? id;
+
+  const valuesFor = (propId: string): { value: string; label: string }[] => {
+    const prop = schema.find((p) => p.id === propId);
+    if (!prop) return [];
+    if (prop.type === 'select' || prop.type === 'multiselect') {
+      return (prop.options ?? []).map((o) => ({ value: o.id, label: o.name }));
+    }
+    if (prop.type === 'checkbox') {
+      return [
+        { value: 'true', label: 'Checked' },
+        { value: 'false', label: 'Unchecked' },
+      ];
+    }
+    return [];
+  };
+
+  // Operators offered per property type.
+  const opsFor = (propId: string): { value: FilterOp; label: string }[] => {
+    const prop = schema.find((p) => p.id === propId);
+    const t = prop?.type;
+    const base: { value: FilterOp; label: string }[] = [
+      { value: 'is', label: 'is' },
+      { value: 'is_not', label: 'is not' },
+    ];
+    if (t === 'number' || t === 'rollup' || t === 'formula') {
+      base.push({ value: 'gt', label: '>' }, { value: 'lt', label: '<' });
+    } else if (t === 'date') {
+      base.push({ value: 'gt', label: 'after' }, { value: 'lt', label: 'before' });
+    } else if (t === 'text' || t === 'person' || t === undefined) {
+      base.push({ value: 'contains', label: 'contains' });
+    }
+    base.push({ value: 'is_empty', label: 'is empty' }, { value: 'is_not_empty', label: 'is not empty' });
+    return base;
+  };
+
+  const hasValueInput = (op: FilterOp | undefined) => op !== 'is_empty' && op !== 'is_not_empty';
+
+  return (
+    <div className="fs-controls" ref={controlsRef}>
+      <button
+        className={'btn-sm' + (filters.length ? ' active' : '')}
+        onClick={() => setOpen(open === 'filter' ? null : 'filter')}
+      >
+        <FilterIcon size={14} /> Filter{filters.length ? ` (${filters.length})` : ''}
+      </button>
+      <button
+        className={'btn-sm' + (sort ? ' active' : '')}
+        onClick={() => setOpen(open === 'sort' ? null : 'sort')}
+      >
+        <ArrowUpDown size={14} /> Sort
+      </button>
+
+      {open && pos && (
+        <Portal>
+          <div className="fs-backdrop" onClick={() => setOpen(null)} />
+          <div className="fs-popover" style={pos}>
+            {open === 'filter' && (
+              <>
+          {filters.map((f, i) => {
+            const op = f.op ?? (f.value === '' ? 'is_not_empty' : 'is');
+            const options = valuesFor(f.property);
+            const patch = (u: Partial<Filter>) => {
+              const next = filters.slice();
+              next[i] = { ...f, ...u };
+              onChange({ filters: next });
+            };
+            return (
+              <div key={i} className="fs-row">
+                <span className="fs-label">{propName(f.property)}</span>
+                <select
+                  className="prop-select"
+                  value={op}
+                  onChange={(e) => {
+                    const nextOp = e.target.value as FilterOp;
+                    patch({ op: nextOp, value: hasValueInput(nextOp) ? f.value : '' });
+                  }}
+                >
+                  {opsFor(f.property).map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                {hasValueInput(op) &&
+                  (options.length > 0 ? (
+                    <select className="prop-select" value={f.value} onChange={(e) => patch({ value: e.target.value })}>
+                      <option value="">—</option>
+                      {options.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      className="prop-input"
+                      value={f.value}
+                      placeholder="value"
+                      onChange={(e) => patch({ value: e.target.value })}
+                    />
+                  ))}
+                <button
+                  className="icon-btn danger"
+                  onClick={() => onChange({ filters: filters.filter((_, j) => j !== i) })}
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+          <select
+            className="prop-select fs-add"
+            value=""
+            onChange={(e) => {
+              if (!e.target.value) return;
+              onChange({ filters: [...filters, { property: e.target.value, op: 'is', value: '' }] });
+            }}
+          >
+            <option value="">+ Add filter…</option>
+            {schema.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+              </>
+            )}
+            {open === 'sort' && (
+              <>
+          <div className="fs-row">
+            <select
+              className="prop-select"
+              value={sort?.property ?? ''}
+              onChange={(e) =>
+                onChange({
+                  sort: e.target.value ? { property: e.target.value, dir: sort?.dir ?? 'asc' } : null,
+                })
+              }
+            >
+              <option value="">No sort</option>
+              {schema.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            {sort && (
+              <select
+                className="prop-select"
+                value={sort.dir}
+                onChange={(e) =>
+                  onChange({ sort: { ...sort, dir: e.target.value as Sort['dir'] } })
+                }
+              >
+                <option value="asc">Ascending</option>
+                <option value="desc">Descending</option>
+              </select>
+            )}
+          </div>
+              </>
+            )}
+          </div>
+        </Portal>
+      )}
+    </div>
+  );
+}
+
+// ---- Board (Kanban) ----
+
+function BoardView({
+  rows,
+  schema,
+  groupBy,
+  tagColors,
+  commentCounts,
+  onNavigate,
+  onSetProp,
+  onSetOptions,
+  onDrop,
+  onAddInColumn,
+}: {
+  rows: Row[];
+  schema: PropDef[];
+  groupBy: string;
+  tagColors: Record<string, string>;
+  commentCounts: Record<string, number>;
+  onNavigate: (id: string) => void;
+  onSetProp: (rowId: string, propId: string, value: unknown) => void;
+  onSetOptions: (propId: string, options: PropOption[]) => void;
+  onDrop: (rowId: string, groupBy: string, optId: string) => void;
+  onAddInColumn: (groupBy: string, optId: string) => void;
+}) {
+  // Keyed by "columnId:rowId" so a card that appears in multiple columns
+  // (multiselect grouping) opens only the tapped copy's menu.
+  const [moveMenu, setMoveMenu] = useState<string | null>(null);
+  // Zeiger-basiertes Ziehen statt des ruckeligen nativen Drags (siehe boardDrag).
+  const { drag, startDrag, consumeClick } = useBoardDrag((rowId, toCol) =>
+    onDrop(rowId, groupBy, toCol),
+  );
+  useEffect(() => {
+    if (!moveMenu) return;
+    const onDown = (e: MouseEvent) => {
+      if (!(e.target as Element).closest?.('.card-move')) setMoveMenu(null);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [moveMenu]);
+  const prop = schema.find((p) => p.id === groupBy);
+  if (!prop || (prop.type !== 'select' && prop.type !== 'multiselect')) {
+    return (
+      <div className="board-empty">
+        This board needs a <b>Select</b> property to group by. Open ⚙ Properties to add one.
+      </div>
+    );
+  }
+  const options: PropOption[] = prop.options ?? [];
+  const optionIds = new Set(options.map((o) => o.id));
+  const columns = [...options, { id: UNSET, name: 'No ' + prop.name, color: '#999' }];
+
+  // A row whose value references a removed option would otherwise vanish from
+  // every column; the UNSET column catches those so no card is lost.
+  const isUngrouped = (v: unknown) => {
+    if (v === undefined || v === '' || v === null) return true;
+    if (Array.isArray(v)) return v.length === 0 || !v.some((x) => optionIds.has(x as string));
+    return !optionIds.has(v as string);
+  };
+
+  const rowsFor = (optId: string) =>
+    rows.filter((r) => {
+      const v = r.props[groupBy];
+      if (optId === UNSET) return isUngrouped(v);
+      if (Array.isArray(v)) return v.includes(optId);
+      return v === optId;
+    });
+
+  return (
+    <div className={'board' + (drag ? ' is-dragging' : '')}>
+      {columns.map((col) => (
+        <div
+          key={col.id}
+          data-col={col.id}
+          className={
+            'board-col' +
+            // Zielspalte hervorheben, aber nicht die Herkunftsspalte — dorthin
+            // zurueckzulegen ist keine Aenderung.
+            (drag && drag.over === col.id && drag.fromCol !== col.id ? ' drag-over' : '')
+          }
+          // Die Spalte traegt die Farbe IHRER Option (waehlbar im
+          // Properties-Dialog seit W94) — vorher kam die Toenung aus einem
+          // positionsbasierten Regenbogen, den niemand beeinflussen konnte.
+          style={col.id !== UNSET ? ({ '--col-c': col.color } as React.CSSProperties) : undefined}
+        >
+          <div className="board-col-head">
+            <span className="board-chip" style={{ background: col.color + '33', color: col.color }}>
+              {col.name}
+            </span>
+            <span className="board-count">{rowsFor(col.id).length}</span>
+          </div>
+          <div className="board-cards">
+            {rowsFor(col.id).map((r) => (
+              <div
+                key={r.id}
+                className={'board-card' + (drag?.rowId === r.id && drag.fromCol === col.id ? ' is-dragging' : '')}
+                onPointerDown={(e) => startDrag(e, r.id, col.id, r.title || 'Untitled')}
+                onClick={() => {
+                  // Nach einem Ziehen NICHT oeffnen — sonst springt jede
+                  // Verschiebung direkt in die Karte.
+                  if (consumeClick()) return;
+                  onNavigate(r.id);
+                }}
+              >
+                <div className="board-card-top">
+                  <div className="board-card-title">
+                    {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
+                    {r.title || 'Untitled'}
+                  </div>
+                  {/* Touch devices can't HTML5-drag: a move menu is the
+                      accessible way to change a card's column. */}
+                  <div className="card-move" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className="card-move-btn"
+                      title="Move to…"
+                      onClick={() =>
+                        setMoveMenu(moveMenu === `${col.id}:${r.id}` ? null : `${col.id}:${r.id}`)
+                      }
+                    >
+                      ⋯
+                    </button>
+                    {moveMenu === `${col.id}:${r.id}` && (
+                      <div className="menu card-move-menu">
+                        {columns
+                          .filter((c) => !rowsFor(c.id).some((x) => x.id === r.id))
+                          .map((c) => (
+                            <button
+                              key={c.id}
+                              onClick={() => {
+                                setMoveMenu(null);
+                                onDrop(r.id, groupBy, c.id);
+                              }}
+                            >
+                              → {c.name}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {!!r.tags?.length && (
+                  <div className="db-row-tags card-tags">
+                    {r.tags.map((t) => (
+                      <span key={t} className={'row-tag ' + tagColorClass(t, tagColors)}>#{t}</span>
+                    ))}
+                  </div>
+                )}
+                {!!commentCounts[r.id] && (
+                  <div className="card-comments" title={commentCounts[r.id] + ' offene Kommentare'}>
+                    <MessageSquare size={11} /> {commentCounts[r.id]}
+                  </div>
+                )}
+                <div className="board-card-props">
+                  {schema
+                    .filter((p) => p.id !== groupBy)
+                    // Chips first, long text (Notizen) last — like a Notion card:
+                    // title, coloured chips, then the description underneath.
+                    .slice()
+                    .sort((a, b) => (a.type === 'text' ? 1 : 0) - (b.type === 'text' ? 1 : 0))
+                    .map((p) => {
+                      const v = r.props[p.id];
+                      const editable = p.type === 'select' || p.type === 'multiselect';
+                      if (!editable && (v === undefined || v === '' || (Array.isArray(v) && v.length === 0)))
+                        return null;
+                      if (editable) {
+                        // Ein leeres Auswahlfeld hinterliess auf JEDER Karte
+                        // einen Platzhalter — bei drei Feldern also „— — —"
+                        // unter jedem Titel. Das ist der Hauptgrund, warum das
+                        // Board neben Trello unruhig wirkte. Leere Felder
+                        // verschwinden deshalb und kommen beim Ueberfahren der
+                        // Karte zurueck, damit man sie weiter direkt setzen
+                        // kann, ohne die Karte zu oeffnen.
+                        const empty =
+                          v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
+                        return (
+                          <div
+                            key={p.id}
+                            className={'card-prop-edit' + (empty ? ' is-empty' : '')}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <PropertyValue
+                              def={p}
+                              value={v}
+                              onChange={(nv) => onSetProp(r.id, p.id, nv)}
+                              onOptionsChange={(opts) => onSetOptions(p.id, opts)}
+                            />
+                          </div>
+                        );
+                      }
+                      return <PropertyValue key={p.id} def={p} value={v} readOnly compact />;
+                    })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Ausserhalb von .board-cards: der Knopf bleibt am Spaltenende
+              stehen, statt mit den Karten wegzuscrollen — bei 100 Karten
+              waere er sonst unerreichbar weit unten. */}
+          <button className="board-add" onClick={() => onAddInColumn(groupBy, col.id)}>
+            ＋ New
+          </button>
+        </div>
+      ))}
+
+      {/* Die schwebende Karte folgt dem Zeiger. Als letztes Kind mit
+          position:fixed, damit sie ueber allem liegt; pointer-events:none,
+          damit sie die Trefferpruefung darunter nicht stoert. */}
+      {drag && drag.title && (
+        <div
+          className="board-drag-ghost"
+          style={{ width: drag.width, left: drag.x - drag.dx, top: drag.y - drag.dy }}
+        >
+          {drag.title}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Table ----
+
+function TableView({
+  rows,
+  schema,
+  emptyLabel,
+  tagColors,
+  subItemProp,
+  onNavigate,
+  onSetProp,
+  onSetOptions,
+}: {
+  rows: Row[];
+  schema: PropDef[];
+  emptyLabel: string;
+  tagColors: Record<string, string>;
+  subItemProp?: string;
+  onNavigate: (id: string) => void;
+  onSetProp: (rowId: string, propId: string, value: unknown) => void;
+  onSetOptions: (propId: string, options: PropOption[]) => void;
+}) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleTree = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  // When a sub-item (self-relation) prop is active, flatten the rows into a
+  // DFS-ordered list carrying each row's tree depth + whether it has children,
+  // honouring collapse state. Otherwise every row is a depth-0 leaf. A visited
+  // set per branch prevents an accidental relation cycle from looping forever.
+  const rowById = new Map(rows.map((r) => [r.id, r]));
+  const childIdsOf = (r: Row): string[] =>
+    subItemProp && Array.isArray(r.props[subItemProp])
+      ? (r.props[subItemProp] as string[]).filter((cid) => rowById.has(cid))
+      : [];
+  const ordered: { row: Row; depth: number; hasKids: boolean }[] = [];
+  if (subItemProp) {
+    const childSet = new Set<string>();
+    for (const r of rows) for (const cid of childIdsOf(r)) childSet.add(cid);
+    const roots = rows.filter((r) => !childSet.has(r.id));
+    const visit = (r: Row, depth: number, seen: Set<string>) => {
+      const kids = childIdsOf(r);
+      ordered.push({ row: r, depth, hasKids: kids.length > 0 });
+      if (kids.length && !collapsed.has(r.id)) {
+        for (const cid of kids) {
+          if (!seen.has(cid)) visit(rowById.get(cid)!, depth + 1, new Set([...seen, r.id]));
+        }
+      }
+    };
+    for (const r of roots) visit(r, 0, new Set([r.id]));
+  } else {
+    for (const r of rows) ordered.push({ row: r, depth: 0, hasKids: false });
+  }
+
+  // Per-column footer aggregate: numeric columns (number/rollup/formula) show a
+  // sum, everything else a count of filled cells — a lightweight Notion-style
+  // calc row so a table gives totals at a glance.
+  const footer = (p: PropDef): string => {
+    const isNumeric = p.type === 'number' || p.type === 'rollup' || p.type === 'formula';
+    if (isNumeric) {
+      let sum = 0;
+      let any = false;
+      for (const r of rows) {
+        const n = Number(r.props[p.id]);
+        if (r.props[p.id] != null && r.props[p.id] !== '' && !Number.isNaN(n)) {
+          sum += n;
+          any = true;
+        }
+      }
+      if (!any) return '';
+      return 'Σ ' + String(Math.round(sum * 1e6) / 1e6);
+    }
+    const filled = rows.filter((r) => {
+      const v = r.props[p.id];
+      if (Array.isArray(v)) return v.length > 0;
+      return v !== undefined && v !== '' && v !== null && v !== false;
+    }).length;
+    return filled ? `${filled} gefüllt` : '';
+  };
+
+  return (
+    <div className="table-wrap">
+      <table className="db-table">
+        <thead>
+          <tr>
+            <th className="db-title-col">Name</th>
+            {schema.map((p) => (
+              <th key={p.id}>{p.name}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {ordered.map(({ row: r, depth, hasKids }) => (
+            <tr key={r.id}>
+              <td className="db-title-col">
+                <span className="db-title-inner" style={depth ? { paddingLeft: depth * 20 } : undefined}>
+                  {subItemProp ? (
+                    hasKids ? (
+                      <button
+                        className="db-tree-toggle"
+                        onClick={() => toggleTree(r.id)}
+                        aria-label={collapsed.has(r.id) ? 'Aufklappen' : 'Zuklappen'}
+                      >
+                        {collapsed.has(r.id) ? '▸' : '▾'}
+                      </button>
+                    ) : (
+                      <span className="db-tree-spacer" />
+                    )
+                  ) : null}
+                  <button className="db-title-link" onClick={() => onNavigate(r.id)}>
+                    {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
+                    {r.title || 'Untitled'}
+                  </button>
+                </span>
+                {!!r.tags?.length && (
+                  <span className="db-row-tags">
+                    {r.tags.map((t) => (
+                      <span key={t} className={'row-tag ' + tagColorClass(t, tagColors)}>#{t}</span>
+                    ))}
+                  </span>
+                )}
+              </td>
+              {schema.map((p) => (
+                <td key={p.id}>
+                  <PropertyValue
+                    def={p}
+                    value={r.props[p.id]}
+                    onChange={(v) => onSetProp(r.id, p.id, v)}
+                    onOptionsChange={(opts) => onSetOptions(p.id, opts)}
+                  />
+                </td>
+              ))}
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={schema.length + 1} className="db-empty">
+                {emptyLabel}
+              </td>
+            </tr>
+          )}
+        </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr className="db-calc-row">
+              <td className="db-title-col db-calc-cell">{rows.length} Zeilen</td>
+              {schema.map((p) => (
+                <td key={p.id} className="db-calc-cell">
+                  {footer(p)}
+                </td>
+              ))}
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </div>
+  );
+}
+
+// ---- Column visibility control ----
+
+function ColumnsControl({
+  schema,
+  view,
+  onChange,
+}: {
+  schema: PropDef[];
+  view: ViewDef;
+  onChange: (patch: Partial<ViewDef>) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const [pos, setPos] = useState<React.CSSProperties | null>(null);
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) {
+      setPos(null);
+      return;
+    }
+    const r = btnRef.current.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    if (vw <= 640) {
+      setPos({ position: 'fixed', left: 8, right: 8, bottom: 8, maxHeight: vh * 0.72 });
+    } else {
+      const width = 268;
+      setPos({
+        position: 'fixed',
+        width,
+        left: Math.max(8, Math.min(r.right - width, vw - width - 8)),
+        top: r.bottom + 6,
+        maxHeight: vh - r.bottom - 24,
+      });
+    }
+  }, [open]);
+
+  const hidden = new Set(view.hidden ?? []);
+  const shown = schema.filter((p) => !hidden.has(p.id));
+  const hiddenProps = schema.filter((p) => hidden.has(p.id));
+  const toggle = (id: string) => {
+    const next = new Set(hidden);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    onChange({ hidden: [...next] });
+  };
+  const propRow = (p: PropDef, isHidden: boolean) => (
+    <button key={p.id} className="col-row" onClick={() => toggle(p.id)}>
+      <span className="col-row-ic">{propTypeIcon(p.type)}</span>
+      <span className="col-row-name">{p.name}</span>
+      {isHidden ? <EyeOff className="col-row-eye off" size={16} /> : <Eye className="col-row-eye" size={16} />}
+    </button>
+  );
+
+  return (
+    <div className="fs-controls">
+      <button ref={btnRef} className={'btn-sm' + (hidden.size ? ' active' : '')} onClick={() => setOpen((o) => !o)}>
+        <Eye size={14} /> Eigenschaften{hidden.size ? ` (${shown.length}/${schema.length})` : ''}
+      </button>
+      {open && pos && (
+        <Portal>
+          <div className="fs-backdrop" onClick={() => setOpen(false)} />
+          <div className="fs-popover col-popover" style={pos}>
+            <div className="col-section-head">
+              <span>Angezeigt</span>
+              {shown.length > 0 && (
+                <button className="col-bulk" onClick={() => onChange({ hidden: schema.map((p) => p.id) })}>
+                  Alle ausblenden
+                </button>
+              )}
+            </div>
+            {shown.map((p) => propRow(p, false))}
+            {shown.length === 0 && <div className="col-empty">Nichts angezeigt</div>}
+            <div className="col-section-head">
+              <span>Ausgeblendet</span>
+              {hiddenProps.length > 0 && (
+                <button className="col-bulk" onClick={() => onChange({ hidden: [] })}>
+                  Alle anzeigen
+                </button>
+              )}
+            </div>
+            {hiddenProps.map((p) => propRow(p, true))}
+            {hiddenProps.length === 0 && <div className="col-empty">Nichts ausgeblendet</div>}
+          </div>
+        </Portal>
+      )}
+    </div>
+  );
+}
+
+// ---- Calendar view ----
+
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ---- Timeline / Gantt view ----
+// Rows are positioned on a horizontal day-grid by a start date property, and
+// span to an optional end date (else a single-day bar). The title column is
+// sticky so it stays visible while the time axis scrolls.
+function TimelineView({
+  rows,
+  schema,
+  startProp,
+  endProp,
+  onNavigate,
+}: {
+  rows: Row[];
+  schema: PropDef[];
+  startProp: string;
+  endProp: string;
+  tagColors: Record<string, string>;
+  onNavigate: (id: string) => void;
+}) {
+  if (!startProp || !schema.some((p) => p.id === startProp && p.type === 'date')) {
+    return (
+      <div className="board-empty">
+        Diese Timeline braucht eine <b>Datums</b>-Eigenschaft als Start. Öffne ⚙ Properties, um eine anzulegen.
+      </div>
+    );
+  }
+
+  const DAY = 26; // px per day
+  const LABELW = 190; // sticky title column width
+  const dayNum = (iso: string) => {
+    const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+    return Math.floor(Date.UTC(y, m - 1, d) / 86400000);
+  };
+
+  type Item = { row: Row; start: number; end: number };
+  const items: Item[] = [];
+  for (const r of rows) {
+    const sv = r.props[startProp];
+    if (typeof sv !== 'string' || !sv) continue;
+    const start = dayNum(sv);
+    let end = start;
+    if (endProp) {
+      const ev = r.props[endProp];
+      if (typeof ev === 'string' && ev) end = Math.max(start, dayNum(ev));
+    }
+    items.push({ row: r, start, end });
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="board-empty">
+        Noch keine Einträge mit Datum. Setze ein Startdatum, damit sie auf der Timeline erscheinen.
+      </div>
+    );
+  }
+
+  const today = dayNum(ymd(new Date()));
+  const min = Math.min(today, ...items.map((i) => i.start)) - 3;
+  const max = Math.max(today, ...items.map((i) => i.end)) + 4;
+  const totalDays = max - min + 1;
+  const gridWidth = totalDays * DAY;
+
+  // Month header segments across the visible range.
+  const months: { label: string; left: number; width: number }[] = [];
+  let cursor = min;
+  while (cursor <= max) {
+    const d = new Date(cursor * 86400000);
+    const y = d.getUTCFullYear();
+    const mo = d.getUTCMonth();
+    const nextMonthDay = Math.floor(Date.UTC(y, mo + 1, 1) / 86400000);
+    const segEnd = Math.min(nextMonthDay - 1, max);
+    months.push({
+      label: new Date(Date.UTC(y, mo, 1)).toLocaleDateString(undefined, { month: 'short', year: '2-digit' }),
+      left: (cursor - min) * DAY,
+      width: (segEnd - cursor + 1) * DAY,
+    });
+    cursor = nextMonthDay;
+  }
+  const todayLeft = (today - min) * DAY;
+
+  return (
+    <div className="timeline">
+      <div className="tl-scroll">
+        <div className="tl-inner" style={{ width: LABELW + gridWidth }}>
+          <div className="tl-header">
+            <div className="tl-corner" style={{ width: LABELW }} />
+            <div className="tl-months" style={{ width: gridWidth }}>
+              {months.map((m, i) => (
+                <div key={i} className="tl-month" style={{ left: m.left, width: m.width }}>
+                  {m.label}
+                </div>
+              ))}
+              <div className="tl-today-tick" style={{ left: todayLeft }} title="Heute" />
+            </div>
+          </div>
+          <div className="tl-body">
+            {items.map(({ row, start, end }) => {
+              const left = (start - min) * DAY;
+              const width = Math.max(DAY - 4, (end - start + 1) * DAY - 4);
+              return (
+                <div key={row.id} className="tl-row">
+                  <div
+                    className="tl-label"
+                    style={{ width: LABELW }}
+                    onClick={() => onNavigate(row.id)}
+                    title={row.title}
+                  >
+                    {row.icon && (
+                      <span className="inline-icon">
+                        <PageIcon icon={row.icon} size={14} />
+                      </span>
+                    )}
+                    <span className="tl-label-text">{row.title || 'Untitled'}</span>
+                  </div>
+                  <div className="tl-track" style={{ width: gridWidth }}>
+                    <div className="tl-today-line" style={{ left: todayLeft }} />
+                    <div
+                      className="tl-bar"
+                      style={{ left, width }}
+                      onClick={() => onNavigate(row.id)}
+                      title={row.title}
+                    >
+                      <span className="tl-bar-label">{row.title || 'Untitled'}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarView({
+  rows,
+  schema,
+  dateProp,
+  tagColors,
+  onNavigate,
+}: {
+  rows: Row[];
+  schema: PropDef[];
+  dateProp: string;
+  tagColors: Record<string, string>;
+  onNavigate: (id: string) => void;
+}) {
+  const [month, setMonth] = useState(() => {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), 1);
+  });
+
+  if (!dateProp || !schema.some((p) => p.id === dateProp && p.type === 'date')) {
+    return (
+      <div className="board-empty">
+        This calendar needs a <b>Date</b> property. Open ⚙ Properties to add one.
+      </div>
+    );
+  }
+
+  // Bucket rows by their YYYY-MM-DD date value.
+  const byDate = new Map<string, Row[]>();
+  for (const r of rows) {
+    const v = r.props[dateProp];
+    if (typeof v !== 'string' || !v) continue;
+    const key = v.slice(0, 10);
+    (byDate.get(key) ?? byDate.set(key, []).get(key)!).push(r);
+  }
+
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const startWeekday = (first.getDay() + 6) % 7; // Monday-first
+  const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+  const cells: (Date | null)[] = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(month.getFullYear(), month.getMonth(), d));
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const today = ymd(new Date());
+  const monthLabel = month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const step = (delta: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + delta, 1));
+
+  return (
+    <div className="calendar">
+      <div className="calendar-head">
+        <button className="btn-sm" onClick={() => step(-1)} aria-label="Previous month">‹</button>
+        <span className="calendar-title">{monthLabel}</span>
+        <button className="btn-sm" onClick={() => step(1)} aria-label="Next month">›</button>
+        <button className="btn-sm" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Today</button>
+      </div>
+      <div className="calendar-grid">
+        {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
+          <div key={d} className="calendar-dow">{d}</div>
+        ))}
+        {cells.map((d, i) => {
+          const key = d ? ymd(d) : '';
+          const dayRows = d ? byDate.get(key) ?? [] : [];
+          return (
+            <div key={i} className={'calendar-cell' + (d ? '' : ' empty') + (key === today ? ' today' : '')}>
+              {d && <div className="calendar-daynum">{d.getDate()}</div>}
+              {dayRows.map((r) => (
+                <button key={r.id} className="calendar-event" onClick={() => onNavigate(r.id)} title={r.title}>
+                  {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
+                  {r.title || 'Untitled'}
+                  {!!r.tags?.length && (
+                    <span className="cal-event-tags">
+                      {r.tags.map((t) => (
+                        <span key={t} className={'row-tag ' + tagColorClass(t, tagColors)}>#{t}</span>
+                      ))}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+export type { Row, Page };

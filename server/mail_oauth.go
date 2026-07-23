@@ -1,0 +1,349 @@
+package server
+
+import (
+	"bytes"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+)
+
+// Mail-Versand über Google/Microsoft (Welle 42): dieselben OAuth-Clients wie
+// der Login, aber ein separater Admin-Consent-Flow mit Sende-Scope
+// (gmail.send bzw. Mail.Send) + offline_access. Das Refresh-Token wird als
+// Setting-Secret gespeichert; sendMail bevorzugt den verbundenen Provider und
+// fällt sonst auf SMTP zurück. Kein SMTP-Gefummel mehr nötig.
+
+const mailOauthCookie = "salt_mail_oauth"
+
+func mailScopes(provider string) string {
+	if provider == "google" {
+		return "openid email https://www.googleapis.com/auth/gmail.send"
+	}
+	return "openid email offline_access Mail.Send"
+}
+
+// mailProviderConfigured reports the connected provider ("" if none).
+func (s *Server) mailProviderConfigured() (provider, address string) {
+	p := s.setting("mail_provider", "")
+	if p == "" {
+		return "", ""
+	}
+	if s.setting("mail_oauth_refresh", "") == "" {
+		return "", ""
+	}
+	return p, s.setting("mail_oauth_address", "")
+}
+
+// ---- Admin-Consent-Flow ----
+
+func (s *Server) handleMailOAuthStart(w http.ResponseWriter, r *http.Request) {
+	if !requestUser(r).IsAdmin {
+		httpError(w, 403, "admin only")
+		return
+	}
+	pname := r.PathValue("provider")
+	prov, ok := oauthProviders[pname]
+	if !ok {
+		httpError(w, 404, "unknown provider")
+		return
+	}
+	clientID, clientSecret := s.oauthClient(pname)
+	if clientID == "" || clientSecret == "" {
+		httpError(w, 400, "Zuerst Client-ID/-Secret im Zugang-Tab hinterlegen.")
+		return
+	}
+	// Gleicher Kanonisierungs-Hop wie beim Login (Cookie ist host-scoped).
+	if base := s.setting("public_base_url", ""); base != "" {
+		if u, err := url.Parse(base); err == nil && u.Host != "" && u.Host != r.Host {
+			http.Redirect(w, r, strings.TrimRight(base, "/")+"/api/admin/mail-oauth/"+pname+"/start", http.StatusFound)
+			return
+		}
+	}
+
+	state := randB64(16)
+	verifier := randB64(32)
+	sum := sha256Sum(verifier)
+	tx, _ := json.Marshal(oauthTx{Provider: pname, State: state, Verifier: verifier, Exp: time.Now().Add(10 * time.Minute).Unix()})
+	http.SetCookie(w, &http.Cookie{
+		Name:     mailOauthCookie,
+		Value:    b64url(tx),
+		Path:     "/api/admin/mail-oauth/",
+		MaxAge:   600,
+		HttpOnly: true,
+		Secure:   isHTTPS(r),
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	q := url.Values{}
+	q.Set("client_id", clientID)
+	q.Set("redirect_uri", s.baseURL(r)+"/api/admin/mail-oauth/"+pname+"/callback")
+	q.Set("response_type", "code")
+	q.Set("scope", mailScopes(pname))
+	q.Set("state", state)
+	q.Set("code_challenge", sum)
+	q.Set("code_challenge_method", "S256")
+	if pname == "google" {
+		// Offline-Zugriff + erzwungener Consent (sonst liefert Google kein
+		// Refresh-Token) + Kontoauswahl: der Admin kann hier ein BELIEBIGES
+		// Postfach wählen — es muss nicht sein Login-Konto sein.
+		q.Set("access_type", "offline")
+		q.Set("prompt", "consent select_account")
+	} else {
+		q.Set("prompt", "select_account")
+	}
+	http.Redirect(w, r, prov.authURL+"?"+q.Encode(), http.StatusFound)
+}
+
+func (s *Server) handleMailOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	// Session-Cookie kommt bei Top-Level-Redirects mit (SameSite=Lax) — der
+	// Callback bleibt also admin-gebunden.
+	if !requestUser(r).IsAdmin {
+		httpError(w, 403, "admin only")
+		return
+	}
+	pname := r.PathValue("provider")
+	prov, ok := oauthProviders[pname]
+	if !ok {
+		httpError(w, 404, "unknown provider")
+		return
+	}
+	defer http.SetCookie(w, &http.Cookie{Name: mailOauthCookie, Path: "/api/admin/mail-oauth/", MaxAge: -1})
+
+	fail := func(msg string) {
+		http.Redirect(w, r, "/?mailOauth="+url.QueryEscape(msg), http.StatusFound)
+	}
+	if e := r.URL.Query().Get("error"); e != "" {
+		fail("Abgebrochen (" + e + ")")
+		return
+	}
+	c, err := r.Cookie(mailOauthCookie)
+	if err != nil {
+		fail("Abgelaufen — bitte erneut verbinden.")
+		return
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
+	var tx oauthTx
+	if err != nil || json.Unmarshal(raw, &tx) != nil || tx.Provider != pname ||
+		tx.Exp < time.Now().Unix() || tx.State == "" || tx.State != r.URL.Query().Get("state") {
+		fail("Ungültiger State — bitte erneut verbinden.")
+		return
+	}
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		fail("Kein Autorisierungscode.")
+		return
+	}
+
+	clientID, clientSecret := s.oauthClient(pname)
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
+	form.Set("redirect_uri", s.baseURL(r)+"/api/admin/mail-oauth/"+pname+"/callback")
+	form.Set("code_verifier", tx.Verifier)
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.PostForm(prov.tokenURL, form)
+	if err != nil {
+		fail("Token-Austausch fehlgeschlagen.")
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	var tok struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		IDToken      string `json:"id_token"`
+		Error        string `json:"error"`
+		ErrorDesc    string `json:"error_description"`
+	}
+	if json.Unmarshal(body, &tok) != nil || tok.Error != "" {
+		msg := tok.ErrorDesc
+		if msg == "" {
+			msg = "Token-Antwort unlesbar"
+		}
+		fail(msg)
+		return
+	}
+	if tok.RefreshToken == "" {
+		fail("Kein Refresh-Token erhalten — bitte Zugriff in den Kontoeinstellungen entfernen und erneut verbinden.")
+		return
+	}
+	email, _, _ := parseIDToken(tok.IDToken)
+	if email == "" && prov.userinfoURL != "" && tok.AccessToken != "" {
+		email, _ = s.fetchUserinfo(prov.userinfoURL, tok.AccessToken, "")
+	}
+
+	s.setSetting("mail_provider", pname)
+	s.setSetting("mail_oauth_refresh", tok.RefreshToken)
+	s.setSetting("mail_oauth_address", strings.ToLower(strings.TrimSpace(email)))
+	http.Redirect(w, r, "/?mailOauth=ok", http.StatusFound)
+}
+
+func (s *Server) handleMailOAuthDisconnect(w http.ResponseWriter, r *http.Request) {
+	if !requestUser(r).IsAdmin {
+		httpError(w, 403, "admin only")
+		return
+	}
+	s.setSetting("mail_provider", "")
+	s.setSetting("mail_oauth_refresh", "")
+	s.setSetting("mail_oauth_address", "")
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleMailTest sends a test message to the calling admin via whatever is
+// configured (provider or SMTP) — instant feedback for the settings dialog.
+func (s *Server) handleMailTest(w http.ResponseWriter, r *http.Request) {
+	u := requestUser(r)
+	if !u.IsAdmin {
+		httpError(w, 403, "admin only")
+		return
+	}
+	if err := s.sendMail(u.Email, "Salt.md Test-Mail", "Der Mail-Versand funktioniert! 🧂"); err != nil {
+		httpError(w, 400, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "to": u.Email})
+}
+
+// ---- Versand über Provider-APIs ----
+
+// refreshedAccessToken tauscht das gespeicherte Refresh-Token gegen ein
+// frisches Access-Token (Mails sind selten — kein Cache nötig).
+func (s *Server) refreshedAccessToken(provider string) (string, error) {
+	prov := oauthProviders[provider]
+	clientID, clientSecret := s.oauthClient(provider)
+	refresh := s.setting("mail_oauth_refresh", "")
+	if clientID == "" || refresh == "" {
+		return "", fmt.Errorf("Mail-Provider nicht verbunden")
+	}
+	form := url.Values{}
+	form.Set("grant_type", "refresh_token")
+	form.Set("refresh_token", refresh)
+	form.Set("client_id", clientID)
+	form.Set("client_secret", clientSecret)
+	if provider == "microsoft" {
+		form.Set("scope", mailScopes(provider))
+	}
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.PostForm(prov.tokenURL, form)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var tok struct {
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+		Error        string `json:"error"`
+		ErrorDesc    string `json:"error_description"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&tok); err != nil {
+		return "", err
+	}
+	if tok.Error != "" || tok.AccessToken == "" {
+		msg := tok.ErrorDesc
+		if msg == "" {
+			msg = tok.Error
+		}
+		return "", fmt.Errorf("Token-Refresh fehlgeschlagen: %s — ggf. neu verbinden", msg)
+	}
+	// Microsoft rotiert Refresh-Tokens — das neue behalten.
+	if tok.RefreshToken != "" && tok.RefreshToken != refresh {
+		s.setSetting("mail_oauth_refresh", tok.RefreshToken)
+	}
+	return tok.AccessToken, nil
+}
+
+// rfc2047 encodes a header value (Umlaute im Betreff!).
+func rfc2047(v string) string {
+	ascii := true
+	for _, r := range v {
+		if r > 127 {
+			ascii = false
+			break
+		}
+	}
+	if ascii {
+		return v
+	}
+	return "=?UTF-8?B?" + base64.StdEncoding.EncodeToString([]byte(v)) + "?="
+}
+
+func (s *Server) sendViaGoogle(to, subject, body string) error {
+	access, err := s.refreshedAccessToken("google")
+	if err != nil {
+		return err
+	}
+	// Optionaler Absender-Alias (muss in Gmail unter „Send mail as" verifiziert
+	// sein), sonst das verbundene Postfach.
+	from := s.setting("mail_from_override", "")
+	if from == "" {
+		from = s.setting("mail_oauth_address", "me")
+	}
+	raw := "From: " + from + "\r\nTo: " + to + "\r\nSubject: " + rfc2047(subject) +
+		"\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + body
+	payload, _ := json.Marshal(map[string]string{"raw": base64.RawURLEncoding.EncodeToString([]byte(raw))})
+	req, _ := http.NewRequest("POST", "https://gmail.googleapis.com/gmail/v1/users/me/messages/send", bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("Gmail-Versand fehlgeschlagen (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
+	}
+	return nil
+}
+
+func (s *Server) sendViaMicrosoft(to, subject, body string) error {
+	access, err := s.refreshedAccessToken("microsoft")
+	if err != nil {
+		return err
+	}
+	message := map[string]any{
+		"subject": subject,
+		"body":    map[string]string{"contentType": "Text", "content": body},
+		"toRecipients": []map[string]any{
+			{"emailAddress": map[string]string{"address": to}},
+		},
+	}
+	// Optionaler Absender-Alias (braucht Send-As-Recht auf der Adresse).
+	if from := s.setting("mail_from_override", ""); from != "" {
+		message["from"] = map[string]any{"emailAddress": map[string]string{"address": from}}
+	}
+	payload, _ := json.Marshal(map[string]any{
+		"message":         message,
+		"saveToSentItems": true,
+	})
+	req, _ := http.NewRequest("POST", "https://graph.microsoft.com/v1.0/me/sendMail", bytes.NewReader(payload))
+	req.Header.Set("Authorization", "Bearer "+access)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: 20 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return fmt.Errorf("Microsoft-Versand fehlgeschlagen (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
+	}
+	return nil
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n] + "…"
+}
