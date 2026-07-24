@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/coder/websocket"
 )
@@ -52,6 +53,17 @@ const (
 	// closeReset tells clients the server-side doc was replaced and they must
 	// reload the page instead of pushing local (now stale) state.
 	closeReset websocket.StatusCode = 4001
+
+	// Keepalive. Reverse proxies (nginx: 60s, Cloudflare: 100s) silently kill
+	// idle WebSockets; a viewer who only reads sends nothing and would be cut
+	// off without noticing — edits from others then never arrive until a full
+	// reload. A ping every pingInterval keeps the connection busy in both
+	// directions and detects dead peers server-side within pingTimeout.
+	pingInterval = 20 * time.Second
+	pingTimeout  = 10 * time.Second
+	// writeTimeout bounds a single frame write so a stalled TCP peer cannot
+	// pin the writer goroutine for minutes of kernel retry.
+	writeTimeout = 30 * time.Second
 )
 
 type outMsg struct {
@@ -64,6 +76,15 @@ type collabConn struct {
 	out  chan outMsg
 	done chan struct{}
 	once sync.Once
+
+	// Awareness bookkeeping, guarded by the room's mu. The server never
+	// interprets CRDT data, but presence must not depend on the client saying
+	// goodbye (a killed tab never does): we remember which awareness client
+	// IDs this connection announced (and their clocks) so leave() can
+	// broadcast their removal, and keep the last announced frame so joiners
+	// see who is already here without waiting for the next 15s re-announce.
+	aware     map[uint64]uint64
+	lastAware []byte
 }
 
 // enqueue queues a frame for the writer goroutine. Non-blocking: a client
@@ -80,7 +101,12 @@ func (c *collabConn) enqueue(m outMsg) {
 func (c *collabConn) shutdown(code websocket.StatusCode, reason string) {
 	c.once.Do(func() {
 		close(c.done)
-		c.ws.Close(code, reason)
+		// Close blockiert (Close-Handshake, gegen einen steckengebliebenen Peer
+		// bis ~5s) — und shutdown wird aus Broadcast-Pfaden gerufen, die
+		// room.mu (und in leave sogar hub.mu) halten. Ein einziger toter Peer
+		// mit vollem out-Puffer würde sonst sekundenlang JEDEN Join/Leave
+		// aller Räume anhalten. Deshalb asynchron schließen.
+		go c.ws.Close(code, reason)
 	})
 }
 
@@ -90,12 +116,135 @@ func (c *collabConn) writeLoop(ctx context.Context) {
 		case <-c.done:
 			return
 		case m := <-c.out:
-			if err := c.ws.Write(ctx, m.typ, m.data); err != nil {
+			wctx, cancel := context.WithTimeout(ctx, writeTimeout)
+			err := c.ws.Write(wctx, m.typ, m.data)
+			cancel()
+			if err != nil {
 				c.shutdown(websocket.StatusInternalError, "write failed")
 				return
 			}
 		}
 	}
+}
+
+// pingLoop keeps the connection alive through idle-killing proxies and
+// detects dead peers. The protocol-level ping (browser answers automatically)
+// proves liveness to the server; the JSON ping gives the client's watchdog
+// visible traffic, since browsers cannot observe protocol pings.
+func (c *collabConn) pingLoop(ctx context.Context) {
+	t := time.NewTicker(pingInterval)
+	defer t.Stop()
+	appPing := []byte(`{"ping":true}`)
+	misses := 0
+	for {
+		select {
+		case <-c.done:
+			return
+		case <-t.C:
+			pctx, cancel := context.WithTimeout(ctx, pingTimeout)
+			err := c.ws.Ping(pctx)
+			cancel()
+			if err != nil {
+				// Der Pong wird von der Read-Schleife dieser Verbindung
+				// verarbeitet — und die kann gerade hinter room.mu warten
+				// (z. B. großer Snapshot-INSERT). Ein einzelner Fehlschlag
+				// beweist also keinen toten Peer; erst der zweite in Folge.
+				misses++
+				if misses >= 2 {
+					c.shutdown(websocket.StatusGoingAway, "ping timeout")
+					return
+				}
+				continue
+			}
+			misses = 0
+			c.enqueue(outMsg{websocket.MessageText, appPing})
+		}
+	}
+}
+
+// --- lib0 varint helpers -----------------------------------------------
+//
+// Awareness updates are lib0-encoded by y-protocols:
+//   varUint entryCount, then per entry: varUint clientID, varUint clock,
+//   varString stateJSON ("null" marks the client as gone).
+// This is the one Yjs wire format the server does understand — just enough
+// to know which client IDs a connection announced, never the state itself.
+
+func readVarUint(buf []byte) (v uint64, n int) {
+	var shift uint
+	for i, b := range buf {
+		v |= uint64(b&0x7f) << shift
+		if b < 0x80 {
+			return v, i + 1
+		}
+		shift += 7
+		if shift > 63 {
+			return 0, 0
+		}
+	}
+	return 0, 0
+}
+
+func appendVarUint(dst []byte, v uint64) []byte {
+	for v >= 0x80 {
+		dst = append(dst, byte(v)|0x80)
+		v >>= 7
+	}
+	return append(dst, byte(v))
+}
+
+func appendVarString(dst []byte, s string) []byte {
+	dst = appendVarUint(dst, uint64(len(s)))
+	return append(dst, s...)
+}
+
+type awarenessEntry struct {
+	clientID uint64
+	clock    uint64
+	removed  bool
+}
+
+// parseAwareness decodes an awareness payload (without the frame type byte).
+// ok=false means the frame is malformed; it is then relayed untouched but not
+// tracked.
+func parseAwareness(p []byte) (entries []awarenessEntry, ok bool) {
+	count, n := readVarUint(p)
+	if n == 0 || count > 1024 {
+		return nil, false
+	}
+	p = p[n:]
+	for i := uint64(0); i < count; i++ {
+		id, n := readVarUint(p)
+		if n == 0 {
+			return nil, false
+		}
+		p = p[n:]
+		clock, n := readVarUint(p)
+		if n == 0 {
+			return nil, false
+		}
+		p = p[n:]
+		strLen, n := readVarUint(p)
+		if n == 0 || uint64(len(p)-n) < strLen {
+			return nil, false
+		}
+		state := string(p[n : n+int(strLen)])
+		p = p[n+int(strLen):]
+		entries = append(entries, awarenessEntry{clientID: id, clock: clock, removed: state == "null"})
+	}
+	return entries, true
+}
+
+// encodeAwarenessRemoval builds the update that tells clients these client
+// IDs are gone (state "null", clock bumped past the last seen value).
+func encodeAwarenessRemoval(aware map[uint64]uint64) []byte {
+	buf := appendVarUint(nil, uint64(len(aware)))
+	for id, clock := range aware {
+		buf = appendVarUint(buf, id)
+		buf = appendVarUint(buf, clock+1)
+		buf = appendVarString(buf, "null")
+	}
+	return buf
 }
 
 type collabRoom struct {
@@ -149,11 +298,18 @@ func (h *collabHub) join(pageID string, c *collabConn) *collabRoom {
 
 // leave removes the connection and drops the room if it became empty, all
 // atomically under the hub lock so a concurrent joiner cannot orphan a room.
+// Survivors are told which awareness clients died with the connection —
+// otherwise a killed tab (crash, proxy timeout, mobile sleep) would leave a
+// ghost "is here" avatar until the 30s client-side awareness timeout.
 func (h *collabHub) leave(r *collabConn, room *collabRoom) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	room.mu.Lock()
 	delete(room.conns, r)
+	if len(r.aware) > 0 {
+		removal := append([]byte{frameAwareness}, encodeAwarenessRemoval(r.aware)...)
+		room.broadcastLocked(r, outMsg{websocket.MessageBinary, removal})
+	}
 	if room.seedConn == r && !room.seeded {
 		room.seedConn = nil // hand the seed role to the next joiner
 	}
@@ -251,8 +407,9 @@ func (s *Server) handleCollab(w http.ResponseWriter, r *http.Request) {
 	// above realistic doc sizes while still bounding a malicious client.
 	ws.SetReadLimit(wsReadLimit)
 	ctx := r.Context()
-	conn := &collabConn{ws: ws, out: make(chan outMsg, outBuffer), done: make(chan struct{})}
+	conn := &collabConn{ws: ws, out: make(chan outMsg, outBuffer), done: make(chan struct{}), aware: map[uint64]uint64{}}
 	go conn.writeLoop(ctx)
+	go conn.pingLoop(ctx)
 
 	room := s.collab.join(pageID, conn)
 
@@ -310,6 +467,13 @@ func (s *Server) handleCollab(w http.ResponseWriter, r *http.Request) {
 	for _, u := range updates {
 		conn.enqueue(outMsg{websocket.MessageBinary, append([]byte{frameUpdate}, u.data...)})
 	}
+	// Replay current presence so the joiner sees who is already here right
+	// away instead of waiting for their next periodic awareness re-announce.
+	for c := range room.conns {
+		if c != conn && len(c.lastAware) > 0 {
+			conn.enqueue(outMsg{websocket.MessageBinary, append([]byte{frameAwareness}, c.lastAware...)})
+		}
+	}
 	conn.enqueue(outMsg{websocket.MessageText, []byte(`{"synced":true}`)})
 	room.mu.Unlock()
 
@@ -329,6 +493,20 @@ func (s *Server) handleCollab(w http.ResponseWriter, r *http.Request) {
 			s.persistUpdate(ctx, room, conn, data)
 		case frameAwareness:
 			room.mu.Lock()
+			if entries, ok := parseAwareness(data[1:]); ok {
+				for _, e := range entries {
+					if e.removed {
+						delete(conn.aware, e.clientID)
+					} else {
+						conn.aware[e.clientID] = e.clock
+					}
+				}
+				if len(conn.aware) == 0 {
+					conn.lastAware = nil // client said goodbye; nothing to replay
+				} else {
+					conn.lastAware = data[1:]
+				}
+			}
 			room.broadcastLocked(conn, outMsg{websocket.MessageBinary, data})
 			room.mu.Unlock()
 		case frameSnapshot:

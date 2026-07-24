@@ -36,7 +36,7 @@ if (mailOauthMsg) {
 
 // Kept in sync with server.Version. A stale open tab after a deploy sees a
 // different server version (via /api/me and the SSE hello) and is told to reload.
-const BUILD_VERSION = '1.0.0';
+const BUILD_VERSION = '1.0.1';
 
 function pageIdFromLocation(): string | null {
   const m = window.location.pathname.match(/^\/p\/([0-9a-f]+)$/);

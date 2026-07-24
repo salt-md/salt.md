@@ -1102,10 +1102,16 @@ interface CollabProps {
 
 function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabProps) {
   const [ready, setReady] = useState(false);
-  const providerRef = useRef<SaltProvider | null>(null);
+  const [provider, setProvider] = useState<SaltProvider | null>(null);
+  const seedRef = useRef<unknown[] | null>(null);
 
-  // One provider per mounted page.
-  const provider = useMemo(() => {
+  // Der Provider lebt im Effekt, nicht im Render. Der frühere useMemo-Ansatz
+  // brach unter StrictMode doppelt: der Doppel-Render leakte eine
+  // Geister-Verbindung samt Presence (useRef ist im zweiten Durchlauf frisch,
+  // der Guard sah nie etwas), und der setup→cleanup→setup-Zyklus zerstörte
+  // den committeten Provider endgültig — dev hing an einem toten Y.Doc.
+  // setup→cleanup→setup erzeugt hier schlicht einen zweiten Provider.
+  useEffect(() => {
     const p = new SaltProvider(
       page.id,
       (isNew) => {
@@ -1117,7 +1123,24 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
       },
       onReset,
     );
-    p.awareness.setLocalStateField('user', { name: user.name, color: user.color, avatar: user.avatar });
+
+    // Presence heißt "schaut gerade auf diese Seite": ein Tab im versteckten
+    // Fenster darf nicht stundenlang als Peer auftauchen. Doc-Sync bleibt
+    // verbunden; nur der Awareness-State wird zurückgezogen. WICHTIG:
+    // setLocalState statt setLocalStateField — Letzteres ist nach
+    // setLocalState(null) ein stilles No-Op (y-protocols prüft state !== null),
+    // die Presence käme nach dem Tab-Wechsel nie wieder zurück.
+    const applyPresence = () => {
+      if (document.visibilityState === 'hidden') {
+        p.awareness.setLocalState(null);
+      } else {
+        p.awareness.setLocalState({
+          user: { name: user.name, color: user.color, avatar: user.avatar },
+        });
+      }
+    };
+    applyPresence(); // deckt auch den nie fokussierten Hintergrund-Tab ab (startet hidden)
+
     // Die Awareness kannte die anderen laengst — nur sah man sie nie. Hier
     // werden sie in den Praesenz-Speicher geschrieben, den die Kopfzeile liest.
     const pushPeers = () => {
@@ -1132,21 +1155,20 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
     };
     p.awareness.on('change', pushPeers);
     pushPeers();
-    providerRef.current = p;
-    return p;
+
+    document.addEventListener('visibilitychange', applyPresence);
+    setProvider(p);
+    return () => {
+      document.removeEventListener('visibilitychange', applyPresence);
+      clearPeers(page.id);
+      setReady(false); // der nächste Provider (StrictMode) gated selbst neu
+      p.destroy();
+    };
+    // page.id ist über die Lebensdauer konstant (key={currentId} remountet)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page.id]);
 
-  const seedRef = useRef<unknown[] | null>(null);
-
-  useEffect(() => {
-    return () => {
-      clearPeers(page.id);
-      provider.destroy();
-    };
-  }, [provider]);
-
-  if (!ready) return <div className="editor-loading" />;
+  if (!provider || !ready) return <div className="editor-loading" />;
   return (
     <BlockContent
       provider={provider}
