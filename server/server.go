@@ -170,6 +170,10 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("GET /api/audit", s.auth(s.handleAudit))
 	m.HandleFunc("GET /api/workspaces", s.auth(s.handleListWorkspaces))
 	m.HandleFunc("POST /api/workspaces", s.auth(s.handleCreateWorkspace))
+	// Nativer 1:1-Transfer (vor den {id}-Routen registriert, damit "import"
+	// nicht als Workspace-ID geparst wird).
+	m.HandleFunc("POST /api/workspaces/import", s.auth(s.handleImportWorkspace))
+	m.HandleFunc("GET /api/workspaces/{id}/export", s.auth(s.handleExportWorkspace))
 	m.HandleFunc("PATCH /api/workspaces/{id}", s.auth(s.handleUpdateWorkspace))
 	m.HandleFunc("DELETE /api/workspaces/{id}", s.auth(s.handleDeleteWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/members", s.auth(s.handleListMembers))

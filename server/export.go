@@ -437,6 +437,22 @@ func (s *Server) handleExportPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 	userID := requestUser(r).ID
 	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(userID))
+	// ?workspace= grenzt auf EINEN Workspace ein — "Workspace exportieren"
+	// im Menü soll nicht still die ganze Instanz mitnehmen.
+	if only := r.URL.Query().Get("workspace"); only != "" {
+		found := false
+		for _, v := range ws {
+			if v == only {
+				found = true
+				break
+			}
+		}
+		if !found {
+			httpError(w, 404, "workspace not found")
+			return
+		}
+		ws = []string{only}
+	}
 	if len(ws) == 0 {
 		httpError(w, 400, "no workspace")
 		return

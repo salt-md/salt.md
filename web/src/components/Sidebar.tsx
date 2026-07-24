@@ -10,7 +10,7 @@ import IconPicker from './IconPicker';
 import { PageIcon } from '../pageIcon';
 import AgentConnectModal from './AgentConnect';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Network, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star } from 'lucide-react';
+import { Sun, Moon, Search, Network, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -694,6 +694,29 @@ export default function Sidebar({
     }
   };
 
+  const wsImportRef = useRef<HTMLInputElement | null>(null);
+  const importWorkspace = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // gleiche Datei erneut wählbar
+    if (!file) return;
+    toast('Workspace wird importiert…');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/workspaces/import', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(err?.error || `Import fehlgeschlagen (HTTP ${res.status})`);
+      }
+      const out = (await res.json()) as { workspaceId: string; name: string; pages: number };
+      toast(`„${out.name}" importiert — ${out.pages} Seiten`);
+      onWorkspacesChanged();
+      onSwitchWorkspace(out.workspaceId);
+    } catch (err) {
+      toast((err as Error).message || 'Import fehlgeschlagen');
+    }
+  };
+
   return (
     <aside className={'sidebar' + (open ? ' open' : '')}>
       <div className="sidebar-header">
@@ -735,9 +758,29 @@ export default function Sidebar({
                   <Users size={15} /> Mitglieder
                 </button>
               )}
-              <button className="menu-item" onClick={() => { setWsMenuOpen(false); api.download('/api/export'); }}>
-                <Download size={15} /> Workspace exportieren
-              </button>
+              {currentWs && (
+                <button
+                  className="menu-item"
+                  title="Natives Archiv: Seiten, Datenbanken, Dateien & Tags — 1:1 in einer anderen Instanz importierbar"
+                  onClick={() => { setWsMenuOpen(false); api.download(`/api/workspaces/${currentWs}/export`); }}
+                >
+                  <Download size={15} /> Workspace exportieren
+                </button>
+              )}
+              {currentWs && (
+                <button
+                  className="menu-item"
+                  title="Nur die Inhalte dieses Workspace als Markdown-Dateien"
+                  onClick={() => { setWsMenuOpen(false); api.download(`/api/export?workspace=${currentWs}`); }}
+                >
+                  <FileText size={15} /> Als Markdown exportieren
+                </button>
+              )}
+              {canCreateWorkspace && (
+                <button className="menu-item" onClick={() => { setWsMenuOpen(false); wsImportRef.current?.click(); }}>
+                  <Upload size={15} /> Workspace importieren…
+                </button>
+              )}
               {canCreateWorkspace && (
                 <button className="menu-item" onClick={newWorkspace}>
                   <Plus size={15} /> Neuer Workspace
@@ -753,6 +796,13 @@ export default function Sidebar({
               )}
             </div>
           )}
+          <input
+            ref={wsImportRef}
+            type="file"
+            accept=".zip"
+            style={{ display: 'none' }}
+            onChange={(e) => void importWorkspace(e)}
+          />
         </div>
         <div className="sidebar-header-actions">
           <button className="icon-btn" title="Index — alle Seiten & Links" onClick={onOpenIndex}>
