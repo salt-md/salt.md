@@ -1,8 +1,8 @@
 services:
   salt:
     build: .
-    # Or use a prebuilt image instead of build:
-    # image: ghcr.io/you/salt:latest
+    # Or use the prebuilt image instead of build:
+    # image: ghcr.io/salt-md/salt.md:latest
     ports:
       - "8420:8420"
     volumes:
