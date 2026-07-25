@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
+import type { FontPref } from '../App';
 import type { ApiToken, AuditEntry, User, Workspace } from '../types';
 import Portal from './Portal';
 import { confirm, promptText } from '../dialog';
 import { toast } from '../toast';
 import { useExclusiveModal } from '../modal';
 import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSettings';
-import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2 } from 'lucide-react';
+import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type } from 'lucide-react';
 
 export function Avatar({ user, size = 22 }: { user: User; size?: number }) {
   // Mit hochgeladenem Bild zeigt der Kreis das Bild, sonst Initiale auf der
@@ -217,10 +218,12 @@ interface Props {
   onOpenAgents?: () => void;
   // Bear-style notes mode (middle notes column). Off = classic tree layout.
   notesMode?: boolean;
+  fontPref?: FontPref;
+  onSetFont?: (f: FontPref) => void;
   onToggleNotesMode?: () => void;
 }
 
-export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, notesMode, onToggleNotesMode }: Props) {
+export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, notesMode, onToggleNotesMode, fontPref = 'brand', onSetFont }: Props) {
   const [open, setOpen] = useState(false);
   const [modal, setModal] = useState<'users' | 'tokens' | 'activity' | 'twofa' | 'settings' | 'calendar' | 'profile' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -267,6 +270,19 @@ export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, 
             <button onClick={onToggleNotesMode} title="Notizliste als Mittelspalte (Bear-Stil)">
               <Columns2 size={16} /> Notizen-Modus
               <span className={'mode-dot' + (notesMode ? ' on' : '')} aria-hidden />
+            </button>
+          )}
+          {/* Die Schriften liegen im Programm selbst und sind seit W107 die
+              Voreinstellung. Der Schalter bleibt: wer die Systemschrift
+              gewohnt ist, kommt mit einem Klick zurueck, und die Wahl gilt
+              nur fuer das eigene Konto. */}
+          {onSetFont && (
+            <button
+              onClick={() => onSetFont(fontPref === 'brand' ? 'system' : 'brand')}
+              title="Inter für Text, JetBrains Mono für Code und Beschriftungen — die Schriften der Website"
+            >
+              <Type size={16} /> Salt-Schriften
+              <span className={'mode-dot' + (fontPref === 'brand' ? ' on' : '')} aria-hidden />
             </button>
           )}
           {user.isAdmin && (
@@ -687,6 +703,7 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                               <button
                                 key={r.v}
                                 className={'ws-role-btn' + (role === r.v ? ' active' : '')}
+                    data-role={r.v}
                                 disabled={!mayEdit}
                                 title={
                                   mayEdit
@@ -792,6 +809,7 @@ function InvitePanel({
                     type="button"
                     key={r.v}
                     className={'ws-role-btn' + (role === r.v ? ' active' : '')}
+                                data-role={r.v}
                     onClick={() => setRoles((m) => ({ ...m, [ws.id]: r.v }))}
                   >
                     {r.label}

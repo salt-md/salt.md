@@ -19,6 +19,10 @@ import { toast } from './toast';
 import Logo from './Logo';
 import ThemeSwitch, { type ThemePref } from './ThemeSwitch';
 
+/** Schriftwahl: 'system' laesst alles wie bisher, 'brand' schaltet die
+ *  mitgelieferten Inter- und JetBrains-Mono-Schriften ein. */
+export type FontPref = 'system' | 'brand';
+
 // Feedback aus dem Mail-OAuth-Consent-Redirect (/?mailOauth=ok|<fehler>).
 const mailOauthMsg = (() => {
   const qs = new URLSearchParams(window.location.search);
@@ -165,10 +169,26 @@ export default function App() {
 
   const theme: Theme = themePref === 'auto' ? (systemDark ? 'dark' : 'light') : themePref;
 
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('salt-theme', themePref);
   }, [theme, themePref]);
+
+  // Schriftart: dieselbe Mechanik wie das Design — die Wahl liegt lokal, das
+  // Ergebnis als Attribut an <html>, damit CSS allein entscheidet. Aus, bis
+  // jemand sie einschaltet: die mitgelieferten Schriftdateien laedt der
+  // Browser erst, wenn sie tatsaechlich verwendet werden.
+  // Voreinstellung 'brand'. Wer ausdruecklich 'system' gewaehlt hat, behaelt
+  // es — nur das Fehlen des Schluessels bedeutet "noch nicht entschieden" und
+  // faellt damit auf die mitgelieferten Schriften.
+  const [fontPref, setFontPref] = useState<FontPref>(() =>
+    localStorage.getItem('salt-font') === 'system' ? 'system' : 'brand',
+  );
+  useEffect(() => {
+    document.documentElement.dataset.font = fontPref;
+    localStorage.setItem('salt-font', fontPref);
+  }, [fontPref]);
 
   const loadFavorites = useCallback(async () => {
     try {
@@ -772,6 +792,8 @@ export default function App() {
         onSelectTag={setNotesTag}
         notesModeSetting={notesMode}
         onToggleNotesMode={toggleNotesMode}
+        fontPref={fontPref}
+        onSetFont={setFontPref}
       />
       {notesActive && (
         <NotesList

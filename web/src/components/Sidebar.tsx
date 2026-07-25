@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
+import type { FontPref } from '../App';
 import type { PageMeta, User, Workspace } from '../types';
 import UserMenu from './UserMenu';
 import WorkspaceMembers from './WorkspaceMembers';
@@ -55,6 +56,9 @@ interface Props {
   // Raw user setting (independent of viewport) + toggle, shown in the UserMenu.
   notesModeSetting?: boolean;
   onToggleNotesMode?: () => void;
+  // Schriftwahl: liegt beim Menschen, nicht bei der Instanz.
+  fontPref?: FontPref;
+  onSetFont?: (f: FontPref) => void;
   // Desktop collapse state: when collapsed, the sidebar appears as a hover
   // overlay and the collapse button flips into a "pin open" button — so users
   // can re-pin right from the overlay instead of hunting the hamburger behind it.
@@ -411,6 +415,8 @@ export default function Sidebar({
   onSelectTag,
   notesModeSetting = false,
   onToggleNotesMode,
+  fontPref = 'brand',
+  onSetFont,
   collapsed = false,
   onExpand,
 }: Props) {
@@ -1050,6 +1056,8 @@ export default function Sidebar({
             onOpenAgents={() => setAgentOpen(true)}
             notesMode={notesModeSetting}
             onToggleNotesMode={onToggleNotesMode}
+            fontPref={fontPref}
+            onSetFont={onSetFont}
           />
           <ThemeSwitch value={themePref} onChange={onSetTheme} />
         </div>

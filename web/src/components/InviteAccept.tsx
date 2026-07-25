@@ -76,7 +76,7 @@ export default function InviteAccept({
   if (invalid) {
     return (
       <div className="login-wrap">
-        <div className="login-card">
+        <div className="login-card ring">
           <div className="login-logo"><Logo size={56} /></div>
           <h1>Einladung ungültig</h1>
           <p>Dieser Einladungslink ist ungültig oder abgelaufen.</p>
@@ -92,7 +92,7 @@ export default function InviteAccept({
       !!info?.email && info.email.toLowerCase() !== currentUser.email.toLowerCase();
     return (
       <div className="login-wrap">
-        <div className="login-card">
+        <div className="login-card ring">
           <div className="login-logo"><Logo size={56} /></div>
           <h1>Workspace beitreten</h1>
           <p>
@@ -129,7 +129,7 @@ export default function InviteAccept({
 
   return (
     <div className="login-wrap">
-      <form className="login-card" onSubmit={submit}>
+      <form className="login-card ring" onSubmit={submit}>
         <div className="login-logo"><Logo size={56} /></div>
         <h1>Beitreten</h1>
         <p>

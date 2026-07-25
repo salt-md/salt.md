@@ -28,8 +28,21 @@ export interface DragState {
 
 const START_THRESHOLD = 5; // px, bevor aus einem Klick ein Ziehen wird
 
+// Auf dem Finger gilt etwas anderes. Fuenf Pixel sind beim Scrollen sofort
+// ueberschritten — die Karte blieb am Finger haengen, statt dass das Board
+// scrollte. Deshalb: erst halten, dann ziehen. Wer vorher wischt, scrollt.
+const TOUCH_HOLD_MS = 320;
+// Wieviel Wackeln waehrend des Haltens noch als "Halten" durchgeht. Darueber
+// war es eine Wischbewegung, und der Zug wird gar nicht erst scharf gestellt.
+const TOUCH_HOLD_SLOP = 10;
+
 export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
   const [drag, setDrag] = useState<DragState | null>(null);
+  // Welche Karte nach dem Halten "scharf" ist, aber noch nicht bewegt wurde.
+  // Auf dem iPhone gibt es kein navigator.vibrate — ohne ein sichtbares
+  // Signal passiert nach dem Halten bis zur ersten Bewegung gar nichts, und
+  // niemand weiss, ob die Karte jetzt am Finger haengt.
+  const [armedRow, setArmedRow] = useState<string | null>(null);
 
   // Lebende Daten fuer die Fenster-Listener, damit die nicht bei jedem
   // Positions-Update neu gebunden werden muessen.
@@ -44,6 +57,11 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
     startY: number;
     started: boolean;
     over: string | null;
+    touch: boolean;
+    // armed: beim Finger erst nach TOUCH_HOLD_MS true. Vorher gehoert jede
+    // Bewegung dem Scrollen.
+    armed: boolean;
+    holdTimer: number | null;
   } | null>(null);
   // Ob gerade wirklich gezogen wurde — unterscheidet Klick (navigieren) von
   // Ziehen (verschieben). Als Ref, weil der pointerup-Handler es sofort braucht.
@@ -61,8 +79,19 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
     const onPointerMove = (e: PointerEvent) => {
       const l = live.current;
       if (!l) return;
+      const moved = Math.hypot(e.clientX - l.startX, e.clientY - l.startY);
       if (!l.started) {
-        if (Math.hypot(e.clientX - l.startX, e.clientY - l.startY) < START_THRESHOLD) return;
+        if (l.touch && !l.armed) {
+          // Noch im Haltefenster: wer wischt, will scrollen. Den Zug ganz
+          // aufgeben, sonst schnappt die Karte spaeter mitten im Scrollen zu.
+          if (moved > TOUCH_HOLD_SLOP) {
+            if (l.holdTimer) clearTimeout(l.holdTimer);
+            live.current = null;
+            setArmedRow(null);
+          }
+          return;
+        }
+        if (moved < START_THRESHOLD) return;
         l.started = true;
         draggedRef.current = true;
       }
@@ -93,8 +122,10 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
 
     const onPointerUp = () => {
       const l = live.current;
+      if (l?.holdTimer) clearTimeout(l.holdTimer);
       live.current = null;
       setDrag(null);
+      setArmedRow(null);
       if (l && l.started && l.over && l.over !== l.fromCol) {
         onMove(l.rowId, l.over);
       }
@@ -102,11 +133,23 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
       // Klick-Handler der Karte die Navigation unterdruecken kann.
     };
 
+    // Sobald wirklich gezogen wird, darf die Seite nicht mitscrollen. Ueber
+    // `touch-action` geht das nicht: der Wert wird beim Beginn der Geste
+    // ausgewertet, spaeteres Aendern wirkt auf die laufende Geste nicht mehr.
+    // Also der harte Weg — passive: false, damit preventDefault erlaubt ist.
+    const onTouchMove = (e: TouchEvent) => {
+      if (live.current?.started) e.preventDefault();
+    };
+
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('touchmove', onTouchMove);
     };
   }, [onMove]);
 
@@ -118,6 +161,7 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
       if ((e.target as Element).closest?.('.card-move, .card-prop-edit, a, button')) return;
       const card = (e.currentTarget as HTMLElement).getBoundingClientRect();
       draggedRef.current = false;
+      const touch = e.pointerType === 'touch' || e.pointerType === 'pen';
       live.current = {
         rowId,
         fromCol,
@@ -129,7 +173,19 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
         startY: e.clientY,
         started: false,
         over: fromCol,
+        touch,
+        armed: !touch, // Maus: sofort scharf. Finger: erst nach dem Halten.
+        holdTimer: null,
       };
+      if (touch) {
+        const l = live.current;
+        l.holdTimer = window.setTimeout(() => {
+          if (live.current !== l) return;
+          l.armed = true;
+          setArmedRow(l.rowId);
+          navigator.vibrate?.(12);
+        }, TOUCH_HOLD_MS);
+      }
     },
     [],
   );
@@ -143,5 +199,5 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
     return false;
   }, []);
 
-  return { drag, startDrag, consumeClick };
+  return { drag, armedRow, startDrag, consumeClick };
 }

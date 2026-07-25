@@ -1062,7 +1062,7 @@ function BoardView({
   // (multiselect grouping) opens only the tapped copy's menu.
   const [moveMenu, setMoveMenu] = useState<string | null>(null);
   // Zeiger-basiertes Ziehen statt des ruckeligen nativen Drags (siehe boardDrag).
-  const { drag, startDrag, consumeClick } = useBoardDrag((rowId, toCol) =>
+  const { drag, armedRow, startDrag, consumeClick } = useBoardDrag((rowId, toCol) =>
     onDrop(rowId, groupBy, toCol),
   );
   useEffect(() => {
@@ -1128,7 +1128,11 @@ function BoardView({
             {rowsFor(col.id).map((r) => (
               <div
                 key={r.id}
-                className={'board-card' + (drag?.rowId === r.id && drag.fromCol === col.id ? ' is-dragging' : '')}
+                className={
+                  'board-card' +
+                  (drag?.rowId === r.id && drag.fromCol === col.id ? ' is-dragging' : '') +
+                  (armedRow === r.id ? ' is-armed' : '')
+                }
                 onPointerDown={(e) => startDrag(e, r.id, col.id, r.title || 'Untitled')}
                 onClick={() => {
                   // Nach einem Ziehen NICHT oeffnen — sonst springt jede

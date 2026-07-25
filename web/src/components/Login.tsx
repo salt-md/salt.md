@@ -64,9 +64,13 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
 
   return (
     <div className="login-wrap">
-      <form className="login-card" onSubmit={submit}>
+      <form className="login-card ring" onSubmit={submit}>
         <div className="login-logo"><Logo size={56} /></div>
-        <h1>{instanceName || 'Salt.md'}</h1>
+        {/* Ohne eigenen Instanznamen steht hier die Marke — klein, Mono, eng
+            gestellt, wie auf der Website und im Banner. Traegt die Instanz
+            einen eigenen Namen, ist das die Marke der Firma und bleibt, wie
+            sie geschrieben wurde. */}
+        <h1 className={instanceName ? undefined : 'wordmark'}>{instanceName || 'salt.md'}</h1>
         <p>{mode === 'signup' ? 'Konto erstellen.' : 'Melde dich in deinem Workspace an.'}</p>
         {mode === 'signup' && (
           <input

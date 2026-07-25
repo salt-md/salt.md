@@ -3611,11 +3611,15 @@ button {
     z-index: 200;
     transform: translateX(-100%);
     transition: transform 0.22s ease;
-    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
   }
 
+  /* Der Schatten NUR im geoeffneten Zustand. Die geschlossene Schublade steht
+     mit ihrer rechten Kante exakt auf x=0 — ein Schatten mit 24px Weichzeichnung
+     ragte damit als grauer Streifen ins Bild, obwohl die Schublade selbst
+     unsichtbar ist. Genau der Fleck, den man links oben sah. */
   .sidebar.open {
     transform: translateX(0);
+    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
   }
 
   /* iOS Safari auto-zooms into any focused control whose font-size is < 16px.
@@ -3676,6 +3680,18 @@ button {
        Columns/+New stay reachable on narrow screens without wrapping. */
     flex-wrap: nowrap;
     overflow-x: auto;
+    /* overflow-y AUSDRUECKLICH auf hidden. Steht nur overflow-x, macht der
+       Browser aus dem `visible` der anderen Achse automatisch `auto` — die
+       Leiste wurde damit selbst vertikal scrollbar, und die Reiter fuhren in
+       einem 16px hohen Fenster hoch und runter, ohne je ganz sichtbar zu
+       sein. */
+    overflow-y: hidden;
+    /* flex: none, weil dieselbe Zeile noch einen zweiten Schaden anrichtete:
+       ein Flex-Element darf unter seine Inhaltsgroesse schrumpfen, sobald
+       sein Overflow nicht mehr `visible` ist (die automatische Mindestgroesse
+       faellt dann auf 0). Die Leiste sackte dadurch von 43px auf 17px
+       zusammen. Sie ist eine Leiste, kein Inhalt — sie schrumpft nicht. */
+    flex: none;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
   }
@@ -4184,7 +4200,6 @@ button {
     z-index: 210;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
-    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
   }
   .app.sidebar-collapsed .sidebar-hotzone {
     display: block;
@@ -4201,10 +4216,14 @@ button {
      the pointer is still over the sidebar, and without the lock :hover would
      re-reveal instantly, making the click feel like it did nothing. It clears
      once the pointer actually moves away. */
+  /* Schatten nur, wenn die Leiste tatsaechlich hereingefahren ist — dieselbe
+     Falle wie beim mobilen Schubfach: eingeklappt steht ihre rechte Kante auf
+     x=0, und die 24px Weichzeichnung lagen als grauer Streifen im Bild. */
   .app.sidebar-collapsed:not(.hover-lock) .sidebar-hotzone:hover ~ .sidebar,
   .app.sidebar-collapsed:not(.hover-lock) .sidebar:hover,
   .app.sidebar-collapsed:not(.hover-lock) .sidebar:focus-within {
     transform: translateX(0);
+    box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
   }
   .app.sidebar-collapsed .topbar-menu,
   .app.sidebar-collapsed .empty-menu-btn {
@@ -4663,17 +4682,9 @@ button {
 
 /* ---- Login: DAS eine Rainbow-Element (Haarlinie) + ruhige Karte ---- */
 
-.login-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 26px;
-  right: 26px;
-  height: 2.5px;
-  border-radius: 0 0 3px 3px;
-  background: var(--rainbow-linear);
-  opacity: 0.75;
-}
+/* Die frühere starre 2,5px-Linie am oberen Rand ist dem laufenden Ring
+   gewichen (siehe .ring am Dateiende) — dieselbe Farbe, aber sie umschließt
+   die Karte, statt oben aufzuliegen. */
 
 .login-card {
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
@@ -6747,4 +6758,259 @@ a,
 
 .bg-row-main strong {
   overflow-wrap: anywhere;
+}
+
+/* ============================================================================
+   Der laufende Rand (W107)
+
+   Uebernommen aus dem Design-System der Website — und zwar die Technik, nicht
+   nur das Aussehen. Zwei Dinge daran sind nicht offensichtlich:
+
+   1. Der Verlauf ist NICHT das ganze Spektrum ueber den ganzen Rahmen. Er
+      traegt alle Farben in einem kurzen Bogen; der Rest der Umdrehung ist die
+      normale Haarlinie. Ein Rahmen, der alle sechs Toene gleichzeitig zeigt,
+      bleibt stehende Deko, egal wie schnell er dreht: das Auge hat nichts zum
+      Verfolgen. Ein heller Bogen auf ruhiger Kante hat Kopf und Schweif — das
+      liest sich als lebendig.
+
+      Wichtig dabei: der ruhige Teil ist `var(--border)`, NICHT `transparent`.
+      Mit durchsichtig faellt der Rahmen dort schlicht weg, und die Karte sieht
+      an drei Seiten angeschnitten aus. Die Haarlinie IST der Rahmen, der Bogen
+      ist das Licht, das darueber laeuft.
+
+   2. Der Winkel muss DORT stehen, wo er verwendet wird. Mein erster Versuch
+      legte den Verlauf als `--rainbow-conic` auf :root und benutzte ihn in
+      `.dialog`. Das drehte sich nie, und der Grund ist eine Feinheit der
+      Kaskade: ein `var()` INNERHALB eines Custom Property wird schon dort
+      aufgeloest, wo dieses Property deklariert ist. `--ring-angle` stand damit
+      als 0deg fest in `--rainbow-conic`, bevor irgendeine Animation lief —
+      vererbt wurde ein eingefrorener Wert. Deshalb steht der conic-gradient
+      jetzt ausgeschrieben in jeder Regel.
+
+   Bedeutung, damit die Bewegung nicht Dekoration bleibt:
+
+       dreht sich   hier passiert gerade etwas, oder es wird etwas von dir
+                    verlangt (Anmeldung, Dialog)
+
+   Und nur dort. Eingabefelder haben es zwischenzeitlich mitgemacht; das war
+   ein zweites wanderndes Licht innerhalb des ersten und zog den Blick genau
+   dorthin, wo man gerade tippt.
+
+   Zur Bauform: die Website haengt ein maskiertes Pseudoelement ausserhalb der
+   Box (mask-composite). Hier geht das an Dialogen nicht — `.dialog` hat
+   `overflow-y: auto` und wuerde ein Kind bei `inset: -1px` abschneiden.
+   Stattdessen wird der Verlauf direkt in die Randflaeche gemalt: Fuellung bis
+   zur padding-box, Verlauf bis zur border-box. Kein Kind, nichts zu
+   beschneiden, Radius stimmt von selbst.
+   ========================================================================== */
+
+/* Ohne Registrierung als <angle> springt der Wert von 0 auf 360, statt zu
+   drehen: eine nicht typisierte Custom Property ist fuer den Browser ein
+   Zeichenketten-Token und damit nicht interpolierbar. */
+@property --ring-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes ring-rotate {
+  to {
+    --ring-angle: 360deg;
+  }
+}
+
+/* Der Schein unter dem Rand. Auf Weiss wirkt derselbe Wert wie auf Schwarz
+   schmutzig statt beleuchtet — im Hellen zurueckgenommen. */
+:root {
+  --ring-bloom: 0.1;
+}
+
+[data-theme='dark'] {
+  --ring-bloom: 0.22;
+}
+
+/* Anmeldekarte und Dialoge tragen den laufenden Bogen. Ein Dialog ist modal —
+   er IST der Bildschirm, solange er offen steht, und faellt damit unter die
+   Regel "ein farbiges Element pro Bildschirm". */
+.ring,
+.dialog,
+.confirm-dialog {
+  border: 1.5px solid transparent;
+  background:
+    linear-gradient(var(--card), var(--card)) padding-box,
+    conic-gradient(
+        from var(--ring-angle),
+        var(--border) 0deg,
+        #9333ea 14deg,
+        #3b82f6 30deg,
+        #22c55e 46deg,
+        #ffd12d 62deg,
+        #ff8a2d 76deg,
+        #ff2d60 90deg,
+        var(--border) 112deg,
+        var(--border) 360deg
+      )
+      border-box;
+  box-shadow:
+    var(--shadow),
+    0 0 24px -8px rgba(255, 45, 96, var(--ring-bloom)),
+    0 0 28px -8px rgba(59, 130, 246, var(--ring-bloom));
+  animation: ring-rotate 9s linear infinite;
+}
+
+/* Schneller beim Hover — aber NICHT ueber animation-duration. Der Fortschritt
+   einer Animation ist verstrichene Zeit geteilt durch Dauer; die Dauer mitten
+   im Lauf zu aendern rechnet den Winkel neu, und das Licht springt sichtbar
+   zurueck. Das Tempo wird deshalb in ring.ts ueber updatePlaybackRate
+   hochgezogen, das die aktuelle Zeit festhaelt. */
+
+/* Stapeln sich zwei Dialoge — eine Rueckfrage ueber der Nutzerverwaltung —,
+   traegt nur der obere den Bogen. Zwei laufende Lichter nebeneinander sind
+   genau das, was die Regel "ein farbiges Element pro Bildschirm" verhindern
+   soll: das Auge weiss nicht mehr, welches gerade etwas will. */
+body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  animation: none;
+}
+
+/* Das fokussierte Feld bleibt, wie es war.
+   ---------------------------------------------------------------------------
+   Es hatte zwischenzeitlich denselben laufenden Bogen wie die Karte, in einer
+   eigenen Tonlage je Feldart. Technisch sauber, in der Benutzung aber zu viel:
+   die Karte leuchtet bereits, und ein zweites wanderndes Licht direkt darin
+   zieht den Blick genau dorthin, wo man gerade tippt. Die Regel "ein farbiges
+   Element pro Bildschirm" gilt auch fuer die eigenen guten Ideen. */
+
+/* ---- Rang ----------------------------------------------------------------
+   Die Rollen-Schalter tragen ihre Stufe als Farbe: je mehr jemand darf, desto
+   weiter wandert der Ton ins Warme. Das ist keine Deko — in einer Reihe aus
+   vier gleich aussehenden Schaltern ist die ausgewaehlte Stufe sonst nur an
+   der Fuellung zu erkennen, und welche Stufe WEITER GEHT als eine andere,
+   sieht man gar nicht. */
+.ws-role-btn[data-role='viewer'].active {
+  color: #2563eb;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #3b82f6 45%, transparent);
+}
+
+.ws-role-btn[data-role='member'].active {
+  color: #15803d;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #22c55e 45%, transparent);
+}
+
+.ws-role-btn[data-role='admin'].active {
+  color: #b45309;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ff8a2d 50%, transparent);
+}
+
+[data-theme='dark'] .ws-role-btn[data-role='viewer'].active {
+  color: #7cb0ff;
+}
+
+[data-theme='dark'] .ws-role-btn[data-role='member'].active {
+  color: #5fd68b;
+}
+
+[data-theme='dark'] .ws-role-btn[data-role='admin'].active {
+  color: #ffb066;
+}
+
+/* Bewegungsempfindlichkeit: der Rand bleibt, er dreht sich nur nicht mehr.
+   Ihn ganz zu entfernen waere ein anderer Bildschirm — das ist nicht gemeint,
+   wenn jemand weniger Bewegung einstellt. */
+@media (prefers-reduced-motion: reduce) {
+  .ring,
+  .ring:hover,
+  .dialog,
+  .confirm-dialog {
+    animation: none;
+  }
+}
+
+/* ---- Schriftwahl (W107) ---------------------------------------------------
+   Aus, bis jemand sie einschaltet. Die Dateien liegen im Programm (siehe
+   main.tsx) — der Browser laedt sie erst, wenn eine Regel sie verlangt.
+
+   Wichtig zu wissen, warum der Schalter zuerst "nichts" tat: BlockNote bringt
+   sein eigenes Inter mit (`@blocknote/core/fonts/inter.css`), und der
+   Standard-Stack der App beginnt seit jeher mit 'Inter'. Der Fliesstext WAR
+   also schon Inter — nur die variable Fassung fehlte. Sichtbar wird die
+   Umstellung durch das Zweite, was die Website ausmacht: Mono fuer alles, was
+   Beschriftung ist. Hierarchie kommt dort aus Laufweite und Schriftart, nicht
+   aus Schriftgroesse. */
+
+[data-font='brand'] body,
+[data-font='brand'] input,
+[data-font='brand'] textarea,
+[data-font='brand'] select {
+  font-family: 'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+[data-font='brand'] code,
+[data-font='brand'] pre,
+[data-font='brand'] .code,
+[data-font='brand'] .mono {
+  font-family: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', SFMono-Regular,
+    Menlo, Consolas, monospace;
+}
+
+/* Beschriftungen und Schaltflaechen in Mono — der Griff, an dem man die
+   Website erkennt. Bei kleinen Graden traegt die Laufweite die Lesbarkeit,
+   nicht die Groesse.
+
+   Ausdruecklich NICHT dabei: `.dialog-hint`. Das sind ganze Saetze, und ein
+   Satz in Monospace liest sich muehsamer als derselbe Satz in einer
+   Proportionalschrift — Mono gehoert an Etiketten, nicht an Fliesstext. */
+[data-font='brand'] .btn,
+[data-font='brand'] .btn-sm,
+[data-font='brand'] .users-section-title,
+[data-font='brand'] .token-scope,
+[data-font='brand'] .badge,
+[data-font='brand'] .bg-when,
+[data-font='brand'] .profile-label,
+[data-font='brand'] .sidebar-section-title,
+[data-font='brand'] .tree-section-label,
+[data-font='brand'] .prop-name,
+[data-font='brand'] .kbd {
+  font-family: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo,
+    monospace;
+  letter-spacing: 0.02em;
+}
+
+[data-font='brand'] .users-section-title,
+[data-font='brand'] .token-scope,
+[data-font='brand'] .badge,
+[data-font='brand'] .sidebar-section-title,
+[data-font='brand'] .tree-section-label {
+  letter-spacing: 0.07em;
+}
+
+/* ---- Die Wortmarke --------------------------------------------------------
+   Klein geschrieben, Mono, eng gestellt — dieselbe Marke wie auf der Website
+   und im Banner der Repo. Sie haengt NICHT am Schriftschalter: eine Marke ist
+   keine Geschmacksfrage, und die Mono-Schrift liegt ohnehin im Programm.
+
+   Nur, wenn die Instanz keinen eigenen Namen traegt: hat eine Firma ihren
+   Namen eingetragen, ist das ihre Marke und nicht meine — die bleibt, wie sie
+   geschrieben wurde. */
+.login-card h1.wordmark {
+  font-family: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', SFMono-Regular,
+    Menlo, Consolas, monospace;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-transform: lowercase;
+}
+
+/* Karte nach dem Halten, bevor sie bewegt wird (W108).
+   Auf dem iPhone gibt es kein navigator.vibrate — ohne dieses Anheben bliebe
+   der Moment, in dem die Karte am Finger haengt, unsichtbar, und das Ziehen
+   faenge fuer den Menschen unangekuendigt an. */
+.board-card.is-armed {
+  transform: scale(1.03);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
+  transition:
+    transform 0.12s ease-out,
+    box-shadow 0.12s ease-out;
 }

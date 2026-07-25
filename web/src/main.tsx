@@ -2,9 +2,19 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
+// Schriften liegen im Binary, nicht bei einem CDN: eine selbstgehostete
+// Instanz soll ohne Netzzugang nach draussen vollstaendig aussehen, und ein
+// Abruf bei Google verraet jede Seitenansicht an einen Dritten. Der Browser
+// laedt eine Schriftdatei erst, wenn sie tatsaechlich verwendet wird — die
+// Einbindung kostet also nichts, solange niemand sie eingeschaltet hat.
+import '@fontsource-variable/inter';
+import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
 import App from './App';
+import { installRingHover } from './ring';
 import ErrorBoundary from './components/ErrorBoundary';
+
+installRingHover();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
