@@ -4,6 +4,7 @@ import Portal from './Portal';
 import { confirm } from '../dialog';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
+import { t } from '../i18n';
 
 type Role = 'admin' | 'member' | 'viewer';
 interface Member {
@@ -13,11 +14,12 @@ interface Member {
   role: Role;
 }
 
-const ROLE_LABEL: Record<Role, string> = {
-  admin: 'Admin',
-  member: 'Mitglied (Bearbeiten)',
-  viewer: 'Betrachter (Nur lesen)',
-};
+const roleLabel = (r: Role): string =>
+  ({
+    admin: t('Admin'),
+    member: t('Member (can edit)'),
+    viewer: t('Viewer (read only)'),
+  })[r];
 
 export default function WorkspaceMembers({
   workspaceId,
@@ -52,10 +54,10 @@ export default function WorkspaceMembers({
       setInviteLink(r.link);
       setEmail('');
       void navigator.clipboard?.writeText(r.link);
-      toast(r.emailed ? 'Einladung per E-Mail versendet' : 'Einladungslink kopiert');
+      toast(r.emailed ? t('Invitation sent by email') : t('Invitation link copied'));
       load();
     } catch (err) {
-      toast((err as Error).message || 'Einladung fehlgeschlagen');
+      toast((err as Error).message || t('Invitation failed'));
     }
   };
 
@@ -64,13 +66,19 @@ export default function WorkspaceMembers({
       await api.updateMember(workspaceId, m.userId, role);
       load();
     } catch (err) {
-      toast((err as Error).message || 'Rolle konnte nicht geändert werden');
+      toast((err as Error).message || t('Could not change the role'));
     }
   };
 
   const remove = async (m: Member, confirmPrivate = false) => {
     const self = m.userId === myUserId;
-    if (!confirmPrivate && !(await confirm(self ? 'Workspace verlassen?' : `${m.name} entfernen?`, { danger: true }))) return;
+    if (
+      !confirmPrivate &&
+      !(await confirm(self ? t('Leave this workspace?') : t('Remove {name}?', { name: m.name }), {
+        danger: true,
+      }))
+    )
+      return;
     try {
       await api.removeMember(workspaceId, m.userId, confirmPrivate);
       if (self) {
@@ -80,13 +88,19 @@ export default function WorkspaceMembers({
         load();
       }
     } catch (err) {
-      const msg = (err as Error).message || 'Mitglied konnte nicht entfernt werden';
-      // 409 heißt: hier liegen private Seiten, die zurückbleiben und danach nur
-      // noch für die Admins des Workspace sichtbar sind. Am STATUS erkannt, nicht
-      // am Meldungstext — der ändert sich mit jeder Umformulierung, und dann wäre
-      // das Entfernen über die Oberfläche gar nicht mehr möglich.
+      const msg = (err as Error).message || t('Could not remove the member');
+      // 409 means: private pages are stored here, they will stay behind, and
+      // afterwards only the workspace admins can see them. Detected by STATUS,
+      // not by message text — that changes with every rewording, and removal
+      // through the interface would silently stop working.
       if (!confirmPrivate && (err as ApiError).status === 409) {
-        if (await confirm(`${msg}\n\nTrotzdem ${self ? 'verlassen' : 'entfernen'}?`, { danger: true, confirmText: self ? 'Verlassen' : 'Entfernen' })) {
+        const question = self ? t('Leave anyway?') : t('Remove anyway?');
+        if (
+          await confirm(`${msg}\n\n${question}`, {
+            danger: true,
+            confirmText: self ? t('Leave') : t('Remove'),
+          })
+        ) {
           await remove(m, true);
         }
         return;
@@ -98,13 +112,13 @@ export default function WorkspaceMembers({
   return (
     <Portal>
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="dialog" role="dialog" aria-modal="true" aria-label="Workspace-Mitglieder">
-        <h2>Workspace-Mitglieder</h2>
+      <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Workspace members')}>
+        <h2>{t('Workspace members')}</h2>
         <div className="user-list">
           {members.map((m) => (
             <div key={m.userId} className="user-row">
               <span className="user-row-name">
-                {m.name} {m.userId === myUserId && <span className="prop-empty">(du)</span>}
+                {m.name} {m.userId === myUserId && <span className="prop-empty">{t('(you)')}</span>}
               </span>
               <span className="user-row-email">{m.email}</span>
               {isAdmin && m.userId !== myUserId ? (
@@ -113,17 +127,17 @@ export default function WorkspaceMembers({
                   value={m.role}
                   onChange={(e) => void changeRole(m, e.target.value as Role)}
                 >
-                  <option value="admin">Admin</option>
-                  <option value="member">Mitglied</option>
-                  <option value="viewer">Betrachter</option>
+                  <option value="admin">{t('Admin')}</option>
+                  <option value="member">{t('Member')}</option>
+                  <option value="viewer">{t('Viewer')}</option>
                 </select>
               ) : (
-                <span className="token-scope write">{ROLE_LABEL[m.role]}</span>
+                <span className="token-scope write">{roleLabel(m.role)}</span>
               )}
               {(isAdmin || m.userId === myUserId) && (
                 <button
                   className="icon-btn danger"
-                  title={m.userId === myUserId ? 'Verlassen' : 'Entfernen'}
+                  title={m.userId === myUserId ? t('Leave') : t('Remove')}
                   onClick={() => void remove(m)}
                 >
                   ✕
@@ -131,32 +145,32 @@ export default function WorkspaceMembers({
               )}
             </div>
           ))}
-          {members.length === 0 && <div className="dialog-hint">Noch keine Mitglieder.</div>}
+          {members.length === 0 && <div className="dialog-hint">{t('No members yet.')}</div>}
         </div>
         {isAdmin && (
           <>
             <form className="user-add" onSubmit={invite}>
               <input
                 value={email}
-                placeholder="E-Mail einladen (leer = nur Link)"
+                placeholder={t('Invite by email (blank = link only)')}
                 onChange={(e) => setEmail(e.target.value)}
               />
               <select className="prop-select" value={newRole} onChange={(e) => setNewRole(e.target.value as Role)}>
-                <option value="member">Mitglied</option>
-                <option value="viewer">Betrachter</option>
-                <option value="admin">Admin</option>
+                <option value="member">{t('Member')}</option>
+                <option value="viewer">{t('Viewer')}</option>
+                <option value="admin">{t('Admin')}</option>
               </select>
-              <button className="btn primary" type="submit">Einladen</button>
+              <button className="btn primary" type="submit">{t('Invite')}</button>
             </form>
             {inviteLink && (
               <div className="invite-link">
-                <span className="dialog-hint">Einladungslink (14 Tage gültig, kopiert):</span>
+                <span className="dialog-hint">{t('Invitation link (valid 14 days, copied):')}</span>
                 <input className="prop-input" readOnly value={inviteLink} onFocus={(e) => e.currentTarget.select()} />
               </div>
             )}
           </>
         )}
-        <button className="btn dialog-close" onClick={onClose}>Schließen</button>
+        <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
       </div>
     </div>
     </Portal>

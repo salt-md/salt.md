@@ -12,10 +12,27 @@ import '@fontsource-variable/jetbrains-mono';
 import './styles.css';
 import App from './App';
 import { installRingHover } from './ring';
-import { initLocale } from './i18n';
+import { initLocale, useLocale } from './i18n';
 import ErrorBoundary from './components/ErrorBoundary';
 
 installRingHover();
+
+/** Remount the whole tree when the language changes.
+ *
+ *  The alternative is a useLocale() call in every component that translates
+ *  anything — roughly forty of them, each one a chance to forget, and forgetting
+ *  shows up as a pane that stays in the old language until you click something.
+ *  Changing language is a once-in-a-blue-moon action, so paying for it with a
+ *  remount is the right trade: one subscription instead of forty, and no way to
+ *  get it wrong. */
+function Root() {
+  const locale = useLocale();
+  return (
+    <ErrorBoundary key={locale}>
+      <App />
+    </ErrorBoundary>
+  );
+}
 
 // Load the language before the first paint. Rendering first and translating
 // afterwards would show every non-English user a flash of English on every
@@ -28,9 +45,7 @@ installRingHover();
 initLocale().finally(() => {
   ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
-      <ErrorBoundary>
-        <App />
-      </ErrorBoundary>
+      <Root />
     </React.StrictMode>,
   );
 });

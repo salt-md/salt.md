@@ -169,6 +169,20 @@ for (const name of readdirSync(localeDir).filter((f) => f.endsWith('.json'))) {
   report.push({ name, have: keys.length, orphans, missing: missing.length });
 }
 
+// `--missing de` prints the source strings that locale has no entry for, as a
+// JSON object ready to be filled in or handed to a translator. This is the
+// seed of the translation tool: a language is a file, and this is how the file
+// gets its list of what to say.
+const missingFor = process.argv.indexOf('--missing');
+if (missingFor > 0) {
+  const loc = process.argv[missingFor + 1];
+  const path = join(localeDir, `${loc}.json`);
+  const cat = JSON.parse(readFileSync(path, 'utf8'));
+  const todo = [...used].filter((k) => !(k in cat)).sort();
+  console.log(JSON.stringify(Object.fromEntries(todo.map((k) => [k, ''])), null, 2));
+  process.exit(0);
+}
+
 // ---- output ----
 
 console.log('  Formatting confined to format.ts');

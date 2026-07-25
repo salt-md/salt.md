@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { t } from '../i18n';
 
 interface Props {
   children: ReactNode;
@@ -26,15 +27,15 @@ export default class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="error-boundary" role="alert">
         <div className="error-boundary-card">
-          <h1>Etwas ist schiefgelaufen</h1>
-          <p>Die Ansicht ist auf einen Fehler gestoßen. Deine Daten sind sicher gespeichert.</p>
+          <h1>{t('Something went wrong')}</h1>
+          <p>{t('This view hit an error. Your data is safely stored.')}</p>
           <pre className="error-boundary-detail">{this.state.error.message}</pre>
           <div className="error-boundary-actions">
             <button className="btn primary" onClick={() => window.location.reload()}>
-              Neu laden
+              {t('Reload')}
             </button>
             <button className="btn" onClick={() => this.setState({ error: null })}>
-              Nochmal versuchen
+              {t('Try again')}
             </button>
           </div>
         </div>

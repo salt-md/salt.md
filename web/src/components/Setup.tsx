@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api';
 import type { User } from '../types';
 import Logo from '../Logo';
+import { t } from '../i18n';
 
 export default function Setup({ onSuccess }: { onSuccess: (user: User) => void }) {
   const [name, setName] = useState('');
@@ -27,29 +28,29 @@ export default function Setup({ onSuccess }: { onSuccess: (user: User) => void }
     <div className="login-wrap">
       <form className="login-card" onSubmit={submit}>
         <div className="login-logo">🍃</div>
-        <h1><Logo size={30} className="inline-logo" /> Welcome to Salt.md</h1>
-        <p>Create the first (admin) account for this workspace.</p>
+        <h1><Logo size={30} className="inline-logo" /> {t('Welcome to Salt.md')}</h1>
+        <p>{t('Create the first (admin) account for this workspace.')}</p>
         <input
           autoFocus
           value={name}
-          placeholder="Your name"
+          placeholder={t('Your name')}
           onChange={(e) => setName(e.target.value)}
         />
         <input
           type="email"
           value={email}
-          placeholder="Email"
+          placeholder={t('Email')}
           onChange={(e) => setEmail(e.target.value)}
         />
         <input
           type="password"
           value={password}
-          placeholder="Password (min. 8 characters)"
+          placeholder={t('Password (min. 8 characters)')}
           onChange={(e) => setPassword(e.target.value)}
         />
         {error && <div className="login-error">{error}</div>}
         <button className="btn primary" type="submit" disabled={busy}>
-          Create workspace
+          {t('Create workspace')}
         </button>
       </form>
     </div>

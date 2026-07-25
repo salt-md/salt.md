@@ -1,19 +1,13 @@
 import { Sun, Moon, Monitor } from 'lucide-react';
+import { t } from './i18n';
 
-// „Hell / Automatisch / Dunkel" als Dreier-Wahl statt eines Umschalters.
+// Light / Automatic / Dark as a three-way choice rather than a toggle.
 //
-// Der frühere Knopf kannte nur zwei Zustände: Beim ersten Start wurde die
-// Systemeinstellung übernommen und sofort festgeschrieben — wer danach sein
-// System umstellte, blieb auf dem alten Design sitzen und hatte keine
-// Möglichkeit mehr, „richte dich nach dem System" zurückzubekommen. Genau das
-// ist die dritte Option.
+// The old button knew only two states: on first run it copied the system
+// setting and froze it, so anyone who later changed their system was stuck on
+// the old theme with no way to ask for "follow the system" again. That is what
+// the third option is for.
 export type ThemePref = 'light' | 'dark' | 'auto';
-
-const OPTIONS: { value: ThemePref; icon: typeof Sun; label: string }[] = [
-  { value: 'light', icon: Sun, label: 'Hell' },
-  { value: 'auto', icon: Monitor, label: 'Automatisch — folgt dem System' },
-  { value: 'dark', icon: Moon, label: 'Dunkel' },
-];
 
 export default function ThemeSwitch({
   value,
@@ -24,8 +18,15 @@ export default function ThemeSwitch({
   onChange: (v: ThemePref) => void;
   size?: number;
 }) {
+  // Built inside the render, not as a module constant: a constant would call
+  // t() once at import time and keep the first language forever.
+  const OPTIONS: { value: ThemePref; icon: typeof Sun; label: string }[] = [
+    { value: 'light', icon: Sun, label: t('Light') },
+    { value: 'auto', icon: Monitor, label: t('Automatic — follows the system') },
+    { value: 'dark', icon: Moon, label: t('Dark') },
+  ];
   return (
-    <div className="theme-switch" role="radiogroup" aria-label="Design">
+    <div className="theme-switch" role="radiogroup" aria-label={t('Appearance')}>
       {OPTIONS.map(({ value: v, icon: Icon, label }) => (
         <button
           key={v}

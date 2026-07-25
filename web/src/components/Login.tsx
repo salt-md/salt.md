@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api';
 import type { User } from '../types';
 import Logo from '../Logo';
+import { t } from '../i18n';
 
 export default function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -26,7 +27,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
         setOauth({ google: p.oauthGoogle, microsoft: p.oauthMicrosoft });
       })
       .catch(() => {});
-    // Fehlermeldung aus einem abgebrochenen OAuth-Redirect anzeigen.
+    // Surface an error handed back by an aborted OAuth redirect.
     const qs = new URLSearchParams(window.location.search);
     const oe = qs.get('oauthError');
     if (oe) {
@@ -49,14 +50,14 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
       const user = await api.login(email, password, needCode ? code : undefined);
       onSuccess(user);
     } catch (err) {
-      // Am Grund aus der Antwort, nicht am Meldungstext: der Server schickt
-      // `code`, die Meldung selbst darf sich jederzeit ändern oder übersetzt
-      // werden. Vorher hing das Einblenden des 2FA-Feldes an einem wörtlichen
-      // Vergleich mit "2fa required" — eine Umformulierung hätte jedes Konto
-      // mit Zwei-Faktor-Anmeldung ausgesperrt.
+      // Branch on the reason in the response, not on the message text: the
+      // server sends `code`, and the message may be reworded or translated at
+      // any time. This used to compare against the literal string "2fa
+      // required" — a rewrite would have locked out every account with
+      // two-factor sign-in.
       const e = err as ApiError;
       if (e.code === '2fa_required') setNeedCode(true);
-      setError(e.message || 'Server nicht erreichbar');
+      setError(e.message || t('Cannot reach the server'));
     } finally {
       setBusy(false);
     }
@@ -66,17 +67,17 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
     <div className="login-wrap">
       <form className="login-card ring" onSubmit={submit}>
         <div className="login-logo"><Logo size={56} /></div>
-        {/* Ohne eigenen Instanznamen steht hier die Marke — klein, Mono, eng
-            gestellt, wie auf der Website und im Banner. Traegt die Instanz
-            einen eigenen Namen, ist das die Marke der Firma und bleibt, wie
-            sie geschrieben wurde. */}
+        {/* With no instance name of its own this is the wordmark — small, mono,
+            tightly tracked, as on the website and in the banner. When the
+            instance carries its own name that is the company's mark, and it
+            stays exactly as they wrote it. */}
         <h1 className={instanceName ? undefined : 'wordmark'}>{instanceName || 'salt.md'}</h1>
-        <p>{mode === 'signup' ? 'Konto erstellen.' : 'Melde dich in deinem Workspace an.'}</p>
+        <p>{mode === 'signup' ? t('Create an account.') : t('Sign in to your workspace.')}</p>
         {mode === 'signup' && (
           <input
             autoFocus
             value={name}
-            placeholder="Name"
+            placeholder={t('Name')}
             onChange={(e) => {
               setName(e.target.value);
               setError(null);
@@ -87,7 +88,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
           type="email"
           autoFocus={mode === 'login'}
           value={email}
-          placeholder="Email"
+          placeholder={t('Email')}
           onChange={(e) => {
             setEmail(e.target.value);
             setError(null);
@@ -96,7 +97,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
         <input
           type="password"
           value={password}
-          placeholder={mode === 'signup' ? 'Passwort (min. 8 Zeichen)' : 'Passwort'}
+          placeholder={mode === 'signup' ? t('Password (min. 8 characters)') : t('Password')}
           onChange={(e) => {
             setPassword(e.target.value);
             setError(null);
@@ -107,7 +108,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
             inputMode="numeric"
             autoFocus
             value={code}
-            placeholder="2FA-Code (6-stellig)"
+            placeholder={t('2FA code (6 digits)')}
             onChange={(e) => {
               setCode(e.target.value);
               setError(null);
@@ -116,11 +117,11 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
         )}
         {error && <div className="login-error">{error}</div>}
         <button className="btn primary" type="submit" disabled={busy}>
-          {mode === 'signup' ? 'Konto erstellen' : 'Anmelden'}
+          {mode === 'signup' ? t('Create account') : t('Sign in')}
         </button>
         {(oauth.google || oauth.microsoft) && (
           <>
-            <div className="login-divider"><span>oder</span></div>
+            <div className="login-divider"><span>{t('or')}</span></div>
             {oauth.google && (
               <a className="btn oauth-btn" href="/api/oauth/google/start">
                 <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
@@ -129,7 +130,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
                   <path fill="#FBBC05" d="M5.27 14.27a7.2 7.2 0 0 1 0-4.54v-3.1H1.29a12 12 0 0 0 0 10.74l3.98-3.1z" />
                   <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.42-3.42A11.97 11.97 0 0 0 12 0 12 12 0 0 0 1.29 6.63l3.98 3.1C6.22 6.88 8.87 4.77 12 4.77z" />
                 </svg>
-                Mit Google anmelden
+                {t('Sign in with Google')}
               </a>
             )}
             {oauth.microsoft && (
@@ -140,7 +141,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
                   <rect x="1" y="12" width="10" height="10" fill="#05A6F0" />
                   <rect x="12" y="12" width="10" height="10" fill="#FFBA08" />
                 </svg>
-                Mit Microsoft anmelden
+                {t('Sign in with Microsoft')}
               </a>
             )}
           </>
@@ -155,9 +156,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
               setNeedCode(false);
             }}
           >
-            {mode === 'login'
-              ? 'Neu hier? Konto erstellen'
-              : 'Zurück zum Login'}
+            {mode === 'login' ? t('New here? Create an account') : t('Back to sign in')}
           </button>
         )}
       </form>

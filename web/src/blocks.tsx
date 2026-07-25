@@ -4,6 +4,7 @@ import { Table2 } from 'lucide-react';
 import { useBlockCtx } from './blockContext';
 import { PageIcon } from './pageIcon';
 import CollectionView from './components/CollectionView';
+import { t } from './i18n';
 
 // Custom Salt.md block types (Welle 17): callout, table of contents, bookmark.
 // Multi-column comes from @blocknote/xl-multi-column and is wired in pageLink.tsx.
@@ -49,7 +50,7 @@ export const calloutSpec = createReactBlockSpec(
             type="button"
             className="bn-callout-emoji"
             contentEditable={false}
-            title="Symbol wechseln"
+            title={t('Change symbol')}
             onClick={cycle}
           >
             {emoji}
@@ -84,7 +85,7 @@ function collectHeadings(blocks: unknown[], out: TocEntry[]) {
         .map((c) => c.text ?? '')
         .join('')
         .trim();
-      out.push({ id: b.id, level: b.props?.level ?? 1, text: text || 'Untitled' });
+      out.push({ id: b.id, level: b.props?.level ?? 1, text: text || t('Untitled') });
     }
     if (b?.children?.length) collectHeadings(b.children, out);
   }
@@ -114,8 +115,8 @@ export const tocSpec = createReactBlockSpec(
       }, [editor]);
       return (
         <div className="bn-toc" contentEditable={false}>
-          <div className="bn-toc-title">Inhalt</div>
-          {entries.length === 0 && <div className="bn-toc-empty">Keine Überschriften.</div>}
+          <div className="bn-toc-title">{t('Contents')}</div>
+          {entries.length === 0 && <div className="bn-toc-empty">{t('No headings.')}</div>}
           {entries.map((e) => (
             <button
               key={e.id}
@@ -182,7 +183,7 @@ export const bookmarkSpec = createReactBlockSpec(
           <div className="bn-bookmark-input" contentEditable={false}>
             <input
               className="prop-input"
-              placeholder="Link einfügen (https://…) und Enter drücken"
+              placeholder={t('Paste a link (https://…) and press Enter')}
               value={draft}
               autoFocus
               onChange={(e) => setDraft(e.target.value)}
@@ -238,20 +239,19 @@ export const bookmarkSpec = createReactBlockSpec(
   },
 );
 
-// ---- Eingebettete Datenbank ----
+// ---- Embedded database ----
 //
-// Notions Modell: eine Datenbank ist kein Seitentyp, sondern ein BLOCK. Sie
-// kann als eigene Seite stehen ODER mitten in einem Dokument liegen, mit Text
-// darüber und darunter. Dieser Block ist die zweite Variante.
+// Notion's model: a database is not a page type but a BLOCK. It can stand as
+// its own page OR sit inside a document with text above and below it. This
+// block is the second form.
 //
-// Gespeichert wird nur die Id der Datenbank — die Datenbank selbst bleibt EIN
-// Objekt an EINEM Ort. Der Block ist eine Ansicht darauf, keine Kopie. Damit
-// kann dieselbe Datenbank in mehreren Dokumenten auftauchen, und eine Änderung
-// ist überall sofort sichtbar.
+// Only the database's id is stored — the database itself stays ONE object in
+// ONE place. The block is a view onto it, not a copy, so the same database can
+// appear in several documents and an edit shows up everywhere at once.
 //
-// Der Grund für diesen Block: bisher musste man ein Einleitungsdokument UND
-// eine Datenbank getrennt anlegen, weil eine Datenbankseite keinen Textkörper
-// haben kann. Jetzt gehört beides in ein Dokument.
+// The reason this block exists: until now you had to create an introductory
+// document AND a database separately, because a database page cannot have a
+// body of text. Now both live in one document.
 
 export const databaseSpec = createReactBlockSpec(
   {
@@ -276,14 +276,14 @@ export const databaseSpec = createReactBlockSpec(
           <div className="bn-db-picker" contentEditable={false}>
             <input
               className="prop-input"
-              placeholder="Datenbank suchen…"
+              placeholder={t('Search databases…')}
               value={q}
               autoFocus
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.stopPropagation()}
             />
             <div className="bn-db-picker-list">
-              {dbs.length === 0 && <div className="bn-db-picker-empty">Keine Datenbank gefunden</div>}
+              {dbs.length === 0 && <div className="bn-db-picker-empty">{t('No database found')}</div>}
               {dbs.slice(0, 8).map((d) => (
                 <button
                   key={d.id}
@@ -291,7 +291,7 @@ export const databaseSpec = createReactBlockSpec(
                   onClick={() => editor.updateBlock(block, { props: { collectionId: d.id } } as never)}
                 >
                   <PageIcon icon={d.icon} size={15} fallback={<Table2 size={15} />} />{' '}
-                  {d.title || 'Untitled'}
+                  {d.title || t('Untitled')}
                 </button>
               ))}
             </div>
@@ -301,19 +301,19 @@ export const databaseSpec = createReactBlockSpec(
 
       const db = pagesById.get(collectionId);
       if (!db) {
-        // Gelöscht, oder in einem Workspace, den dieser Leser nicht sehen darf.
-        // Kein Absturz, sondern ein ehrlicher Hinweis.
+        // Deleted, or in a workspace this reader is not allowed to see. Not a
+        // crash — an honest note.
         return (
           <div className="bn-db-missing" contentEditable={false}>
-            Diese Datenbank ist nicht (mehr) verfügbar.
+            {t('This database is no longer available.')}
           </div>
         );
       }
       return (
         <div className="bn-db-embed" contentEditable={false}>
           <button className="bn-db-title" type="button" onClick={() => onNavigate(collectionId)}>
-            <PageIcon icon={db.icon} size={16} fallback={<Table2 size={16} />} /> {db.title || 'Untitled'}
-            <span className="bn-db-open">Als Seite öffnen ↗</span>
+            <PageIcon icon={db.icon} size={16} fallback={<Table2 size={16} />} /> {db.title || t('Untitled')}
+            <span className="bn-db-open">{t('Open as page ↗')}</span>
           </button>
           <CollectionView
             collectionId={collectionId}

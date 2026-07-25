@@ -4,6 +4,7 @@ import type { SearchResult } from '../types';
 import Portal from './Portal';
 import { PageIcon } from '../pageIcon';
 import { useExclusiveModal } from '../modal';
+import { t } from '../i18n';
 
 function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -70,7 +71,7 @@ export default function SearchModal({ recent, onClose, onNavigate }: Props) {
         <input
           ref={inputRef}
           className="search-input"
-          placeholder="Search all pages…"
+          placeholder={t('Search all pages…')}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -84,7 +85,7 @@ export default function SearchModal({ recent, onClose, onNavigate }: Props) {
             >
               <span className="result-icon"><PageIcon icon={r.icon} size={16} fallback="📄" /></span>
               <span className="result-body">
-                <span className="result-title">{r.title || 'Untitled'}</span>
+                <span className="result-title">{r.title || t('Untitled')}</span>
                 {r.snippet && (
                   <span
                     className="result-snippet"
@@ -95,16 +96,16 @@ export default function SearchModal({ recent, onClose, onNavigate }: Props) {
             </button>
           ))}
           {q.trim() !== '' && results.length === 0 && (
-            <div className="search-empty">No results</div>
+            <div className="search-empty">{t('No results')}</div>
           )}
           {q.trim() === '' && (recent?.length ?? 0) > 0 && (
             <>
-              <div className="search-section-label">Zuletzt geöffnet</div>
+              <div className="search-section-label">{t('Recently opened')}</div>
               {recent!.map((r) => (
                 <button key={r.id} className="search-result" onClick={() => onNavigate(r.id)}>
                   <span className="result-icon"><PageIcon icon={r.icon} size={16} fallback="📄" /></span>
                   <span className="result-body">
-                    <span className="result-title">{r.title || 'Untitled'}</span>
+                    <span className="result-title">{r.title || t('Untitled')}</span>
                   </span>
                 </button>
               ))}

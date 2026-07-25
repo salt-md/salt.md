@@ -2,6 +2,7 @@ import type { PropDef, PropOption } from '../types';
 import PropertyValue from './PropertyValue';
 import { tagColorClass } from '../tags';
 import { PageIcon } from '../pageIcon';
+import { t } from '../i18n';
 
 interface Row {
   id: string;
@@ -11,10 +12,10 @@ interface Row {
   tags?: string[];
 }
 
-// Eine Listen-Ansicht ist bewusst KEINE schmale Tabelle: kein Spaltenraster,
-// keine Kopfzeile, kein horizontales Scrollen. Der Titel führt, die Eigen-
-// schaften stehen dezent dahinter. Das ist die ruhige Ansicht für Notizen —
-// wer Werte vergleichen oder in Spalten lesen will, nimmt die Tabelle.
+// A list view is deliberately NOT a narrow table: no column grid, no header
+// row, no horizontal scrolling. The title leads and the properties trail
+// quietly behind it. This is the calm view for notes — anyone who wants to
+// compare values or read down a column takes the table instead.
 export default function ListView({
   rows,
   schema,
@@ -35,8 +36,8 @@ export default function ListView({
   if (rows.length === 0) {
     return <div className="db-empty">{emptyLabel}</div>;
   }
-  // Eine Liste lebt von Ruhe: nur die ersten Eigenschaften begleiten den Titel,
-  // sonst wird die Zeile doch wieder zur Tabelle.
+  // A list lives on restraint: only the first few properties accompany the
+  // title, or the row turns back into a table.
   const inline = schema.slice(0, 3);
 
   return (
@@ -46,7 +47,7 @@ export default function ListView({
           <span className="list-row-icon">
             <PageIcon icon={r.icon} size={17} fallback="📄" />
           </span>
-          <span className="list-row-title">{r.title || 'Untitled'}</span>
+          <span className="list-row-title">{r.title || t('Untitled')}</span>
           {r.tags && r.tags.length > 0 && (
             <span className="list-row-tags">
               {r.tags.map((t) => (
@@ -57,8 +58,8 @@ export default function ListView({
             </span>
           )}
           {inline.length > 0 && (
-            // Die Zellen bleiben bearbeitbar (Select-Popover wie überall) — der
-            // Klick darf deshalb nicht bis zur Zeile durchschlagen.
+            // The cells stay editable (same select popover as everywhere else),
+            // so the click must not fall through to the row.
             <span className="list-row-props" onClick={(e) => e.stopPropagation()}>
               {inline.map((p) => (
                 <PropertyValue

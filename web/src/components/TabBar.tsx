@@ -1,6 +1,7 @@
 import { FileText, Table2, X } from 'lucide-react';
 import { PageIcon } from '../pageIcon';
 import type { PageMeta } from '../types';
+import { t } from '../i18n';
 
 // Obsidian-style document tabs (Welle 26). One chip per open page; the active
 // one is highlighted. Middle-click closes, matching browser tabs.
@@ -22,7 +23,7 @@ export default function TabBar({
     <div className="tab-bar" role="tablist">
       {tabs.map((id) => {
         const p = pagesById.get(id);
-        const title = p?.title || 'Untitled';
+        const title = p?.title || t('Untitled');
         return (
           <div
             key={id}
@@ -44,7 +45,7 @@ export default function TabBar({
             <span className="tab-title">{title}</span>
             <button
               className="tab-close"
-              aria-label={`Tab „${title}" schließen`}
+              aria-label={t('Close tab {title}', { title })}
               onClick={(e) => {
                 e.stopPropagation();
                 onClose(id);

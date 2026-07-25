@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Portal from './components/Portal';
+import { t } from './i18n';
 
 // In-app confirm / prompt dialogs (replacing native window.confirm/prompt,
 // which look out of place and can't be styled). Promise-based: call
@@ -102,9 +103,9 @@ export function DialogHost() {
             />
           )}
           <div className="dialog-buttons">
-            <button className="btn" onClick={cancel}>Abbrechen</button>
+            <button className="btn" onClick={cancel}>{t('Cancel')}</button>
             <button className={'btn ' + (req.kind === 'confirm' && req.danger ? 'danger' : 'primary')} onClick={ok}>
-              {req.confirmText ?? (req.kind === 'prompt' ? 'OK' : 'Bestätigen')}
+              {req.confirmText ?? (req.kind === 'prompt' ? t('OK') : t('Confirm'))}
             </button>
           </div>
         </div>
