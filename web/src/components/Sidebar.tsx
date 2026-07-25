@@ -696,6 +696,25 @@ export default function Sidebar({
   };
 
   const [bgLogOpen, setBgLogOpen] = useState(false);
+  // "Für alle öffnen": neue Konten treten diesem Workspace automatisch bei.
+  // Ersetzt die alte stille Regel, nach der jeder Neuzugang im ältesten
+  // Workspace landete.
+  const toggleAutoJoin = async () => {
+    if (!activeWs) return;
+    const next = !activeWs.autoJoin;
+    try {
+      await api.updateWorkspace(activeWs.id, { autoJoin: next });
+      onWorkspacesChanged();
+      toast(
+        next
+          ? `„${activeWs.name}" steht ab jetzt jedem neuen Konto offen.`
+          : `„${activeWs.name}" wird neuen Konten nicht mehr zugewiesen.`,
+      );
+    } catch (e) {
+      toast((e as Error).message || 'Konnte nicht geändert werden');
+    }
+  };
+
   const wsImportRef = useRef<HTMLInputElement | null>(null);
   const importWorkspace = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -741,6 +760,8 @@ export default function Sidebar({
                 >
                   <WorkspaceAvatar ws={w} />
                   <span className="ws-menu-name">{w.name}</span>
+                  {w.personal && <span className="ws-tag">eigener Bereich</span>}
+                  {w.autoJoin && !w.personal && <span className="ws-tag">für alle</span>}
                   {w.id === currentWs && <Check size={14} />}
                 </button>
               ))}
@@ -758,6 +779,16 @@ export default function Sidebar({
               {currentWs && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); setMembersOpen(true); }}>
                   <Users size={15} /> Mitglieder
+                </button>
+              )}
+              {user.orgRole === 'owner' && activeWs && !activeWs.personal && (
+                <button
+                  className="menu-item"
+                  title="Jedes neu angelegte Konto wird automatisch Mitglied dieses Workspace"
+                  onClick={() => { setWsMenuOpen(false); void toggleAutoJoin(); }}
+                >
+                  <Users size={15} />
+                  {activeWs.autoJoin ? 'Nicht mehr für alle öffnen' : 'Für alle neuen Nutzer öffnen'}
                 </button>
               )}
               {activeWs?.role === 'admin' && (

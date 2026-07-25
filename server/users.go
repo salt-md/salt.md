@@ -335,7 +335,10 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	var wsID string
 	if s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&wsID) != nil || wsID == "" {
 		wsID = newID()
-		s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id) VALUES (?, 'Workspace', ?, ?)`, wsID, now(), id)
+		// auto_join: der Bereich, den die Instanz teilt. Damit verhaelt sich der
+		// Einstieg wie bisher — nur ist es jetzt eine sichtbare Entscheidung, die
+		// der Owner im Workspace-Menue auch wieder abschalten kann.
+		s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id, auto_join) VALUES (?, 'Workspace', ?, ?, 1)`, wsID, now(), id)
 	} else {
 		s.db.Exec(`UPDATE workspaces SET owner_id = ? WHERE id = ? AND owner_id = ''`, id, wsID)
 	}
@@ -517,29 +520,14 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
 				ws.ID, id, normalizeRole(ws.Role))
 		}
-	} else {
-		// Ohne Angabe wie bisher: der Neue tritt allen Workspaces des anlegenden
-		// Admins bei (als Mitglied), damit der geteilte Workspace geteilt bleibt.
-		//
-		// ECHTE Mitgliedschaften, nicht visibleWorkspaces: dort zaehlt seit W101
-		// auch ein laufender Notfallzugriff mit. Sonst wuerde ein waehrend der
-		// Einsicht angelegtes Konto zum DAUERHAFTEN Mitglied des fremden
-		// Workspace — aus befristetem Lesen wuerde bleibender Schreibzugriff.
-		rows, err := s.db.Query(`SELECT workspace_id FROM workspace_members WHERE user_id = ?`, me.ID)
-		if err == nil {
-			var wsIDs []string
-			for rows.Next() {
-				var ws string
-				if rows.Scan(&ws) == nil {
-					wsIDs = append(wsIDs, ws)
-				}
-			}
-			rows.Close()
-			for _, ws := range wsIDs {
-				s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, ws, id, "member")
-			}
-		}
 	}
+	// Der eigene Bereich plus die fuer alle geoeffneten Workspaces — unabhaengig
+	// davon, ob oben etwas ausgewaehlt wurde.
+	//
+	// Frueher erbte ein Konto OHNE Auswahl saemtliche Workspaces des anlegenden
+	// Admins. Da ein Admin meist ueberall Mitglied ist, sah jeder Neuzugang
+	// sofort alles — genau die Beobachtung, mit der diese Welle anfing.
+	s.onboardUser(id, body.Name)
 	writeJSON(w, s.userByID(id))
 }
 

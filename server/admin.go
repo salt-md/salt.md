@@ -511,9 +511,13 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 			httpError(w, 500, err.Error())
 			return
 		}
+		s.addOrgMember(uid, false)
+		// Auch wer eingeladen wurde, bekommt seinen eigenen Bereich — sonst haengt
+		// sein Konto ganz am Wohlwollen des einladenden Teams. Nur bei einem NEUEN
+		// Konto: wer schon da ist, hat seinen Bereich laengst.
+		s.onboardUser(uid, body.Name)
 	}
 
-	s.addOrgMember(uid, false)
 	s.joinWorkspace(ws, uid, role)
 	s.db.Exec(`DELETE FROM invites WHERE token_hash = ?`, tokenHash(token))
 
@@ -536,30 +540,28 @@ func (s *Server) joinWorkspace(ws, uid, role string) {
 }
 
 // domainAllowsSelfSignup reports whether an email may self-register given the
-// current signup policy, returning the workspace to join.
-func (s *Server) domainAllowsSelfSignup(email string) (string, bool) {
+// current signup policy.
+//
+// Wohin das neue Konto kommt, entscheidet diese Funktion nicht mehr: früher
+// lieferte sie den ÄLTESTEN Workspace der Instanz, wer sich also selbst
+// registrierte, saß sofort im Hauptbereich samt allen Inhalten. Seit W102
+// bekommt jedes Konto seinen eigenen Bereich, und geteilte Workspaces nur, wenn
+// der Owner sie ausdrücklich für alle geöffnet hat (siehe onboardUser).
+func (s *Server) domainAllowsSelfSignup(email string) bool {
 	if s.setting("signup_mode", "invite") != "domain" {
-		return "", false
+		return false
 	}
 	at := strings.LastIndexByte(email, '@')
 	if at < 0 {
-		return "", false
+		return false
 	}
 	domain := strings.ToLower(email[at+1:])
-	allowed := false
 	for _, d := range strings.Split(s.setting("allowed_domains", ""), ",") {
 		if strings.ToLower(strings.TrimSpace(d)) == domain && domain != "" {
-			allowed = true
-			break
+			return true
 		}
 	}
-	if !allowed {
-		return "", false
-	}
-	// New self-signups land in the oldest workspace (the instance's main one).
-	var ws string
-	s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&ws)
-	return ws, ws != ""
+	return false
 }
 
 // handleSelfSignup registers a user when the instance is open or their email
@@ -573,23 +575,16 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.ToLower(strings.TrimSpace(body.Email))
-	mode := s.setting("signup_mode", "invite")
-	var ws string
-	switch mode {
+	switch s.setting("signup_mode", "invite") {
 	case "open":
-		s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&ws)
+		// erlaubt
 	case "domain":
-		var ok bool
-		if ws, ok = s.domainAllowsSelfSignup(email); !ok {
+		if !s.domainAllowsSelfSignup(email) {
 			httpError(w, 403, "self-registration is not allowed for this email")
 			return
 		}
 	default:
 		httpError(w, 403, "self-registration is disabled — ask an admin for an invite")
-		return
-	}
-	if ws == "" {
-		httpError(w, 400, "no workspace to join")
 		return
 	}
 	if msg := validateAccount(body.Name, email, body.Password); msg != "" {
@@ -608,7 +603,7 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.addOrgMember(uid, false)
-	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, uid)
+	s.onboardUser(uid, body.Name)
 	sessTok, err := s.createSession(uid)
 	if err != nil {
 		httpError(w, 500, err.Error())

@@ -323,21 +323,15 @@ func (s *Server) fetchUserinfo(uiURL, accessToken, fallbackName string) (email, 
 // oauthCreateUser applies the instance signup policy and provisions the
 // account with an unusable random password (login happens via OAuth).
 func (s *Server) oauthCreateUser(email, name string) (string, error) {
-	mode := s.setting("signup_mode", "invite")
-	var ws string
-	switch mode {
+	switch s.setting("signup_mode", "invite") {
 	case "open":
-		s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&ws)
+		// erlaubt
 	case "domain":
-		var ok bool
-		if ws, ok = s.domainAllowsSelfSignup(email); !ok {
+		if !s.domainAllowsSelfSignup(email) {
 			return "", fmt.Errorf("Für diese E-Mail ist keine Registrierung erlaubt — bitte einen Admin um eine Einladung.")
 		}
 	default:
 		return "", fmt.Errorf("Kein Konto für %s — die Registrierung ist einladungsbasiert.", email)
-	}
-	if ws == "" {
-		return "", fmt.Errorf("Kein Workspace zum Beitreten vorhanden.")
 	}
 	if name = strings.TrimSpace(name); name == "" {
 		name = strings.SplitN(email, "@", 2)[0]
@@ -353,6 +347,6 @@ func (s *Server) oauthCreateUser(email, name string) (string, error) {
 		return "", fmt.Errorf("Konto konnte nicht erstellt werden.")
 	}
 	s.addOrgMember(uid, false)
-	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, uid)
+	s.onboardUser(uid, name)
 	return uid, nil
 }

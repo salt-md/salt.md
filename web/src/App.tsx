@@ -13,7 +13,7 @@ import InviteAccept from './components/InviteAccept';
 import PublicForm from './components/PublicForm';
 import { UploadBar, ImageLightbox } from './components/Overlays';
 import Toaster from './components/Toaster';
-import { DialogHost, confirm } from './dialog';
+import { DialogHost, confirm, promptText } from './dialog';
 import { announceModal } from './modal';
 import { toast } from './toast';
 import Logo from './Logo';
@@ -36,7 +36,7 @@ if (mailOauthMsg) {
 
 // Kept in sync with server.Version. A stale open tab after a deploy sees a
 // different server version (via /api/me and the SSE hello) and is told to reload.
-const BUILD_VERSION = '1.1.1';
+const BUILD_VERSION = '1.2.0';
 
 function pageIdFromLocation(): string | null {
   const m = window.location.pathname.match(/^\/p\/([0-9a-f]+)$/);
@@ -823,6 +823,45 @@ export default function App() {
               onPagesChanged={loadPages}
             />
           </>
+        ) : workspaces.length === 0 ? (
+          // Ohne jeden Workspace gab es bisher nur eine leere Fläche: die App
+          // zeigte "keine Seiten" und jeder Knopf lief ins Leere, weil Seiten
+          // einen Workspace brauchen. Seit W102 bekommt jedes Konto einen
+          // eigenen Bereich — bleibt trotzdem einer übrig (Zuweisung entzogen,
+          // Anlegen fehlgeschlagen), sagen wir wenigstens, was los ist.
+          <div className="empty-state">
+            <button className="menu-btn empty-menu-btn" onClick={openSidebar}>
+              ☰
+            </button>
+            <div className="empty-emoji"><Logo size={52} /></div>
+            <h2>Kein Workspace</h2>
+            <p>
+              Dein Konto gehört derzeit zu keinem Workspace. Bitte einen Admin um Zugang — oder
+              leg dir einen eigenen an, falls die Instanz das erlaubt.
+            </p>
+            {me?.allowUserWorkspaces && (
+              <div className="empty-actions">
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    void (async () => {
+                      const name = await promptText('Name des neuen Workspace?', { placeholder: 'z.B. Persönlich' });
+                      if (!name?.trim()) return;
+                      try {
+                        const ws = await api.createWorkspace(name.trim());
+                        await loadWorkspaces();
+                        setCurrentWs(ws.id);
+                      } catch (e) {
+                        toast((e as Error).message || 'Konnte nicht angelegt werden');
+                      }
+                    })();
+                  }}
+                >
+                  Workspace anlegen
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="empty-state">
             <button className="menu-btn empty-menu-btn" onClick={openSidebar}>

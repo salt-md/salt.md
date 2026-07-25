@@ -25,6 +25,10 @@ export interface Workspace {
   role: 'admin' | 'member' | 'viewer';
   icon: string;
   image: string;
+  /** Der eigene Bereich dieses Kontos — gehört ihm, nicht der Instanz. */
+  personal?: boolean;
+  /** Jedes neu angelegte Konto wird automatisch Mitglied (nur Owner setzt das). */
+  autoJoin?: boolean;
 }
 
 export interface AuditEntry {

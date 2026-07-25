@@ -6703,3 +6703,18 @@ a,
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ---- W102: Kennzeichnung im Workspace-Umschalter ------------------------
+   "eigener Bereich" / "für alle" — leise, aber sichtbar: welcher Workspace
+   mir gehört und welcher jedem neuen Konto offensteht. */
+
+.ws-tag {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--hover);
+  white-space: nowrap;
+  flex: none;
+}

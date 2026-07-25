@@ -318,6 +318,18 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "workspaces", "owner_id", `owner_id TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.owner_id: %w", err)
 	}
+	// W102: Der persönliche Workspace eines Kontos — der Ort, an dem jemand
+	// arbeiten kann, ohne dass ihm jemand etwas freigeben muss. Getrennt von
+	// owner_id, weil auch ein geteilter Workspace einen Eigentümer hat.
+	if err := ensureColumn(db, "workspaces", "is_personal", `is_personal INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.is_personal: %w", err)
+	}
+	// W102: "bekommt jeder neue Nutzer". Bisher landete jeder Neuzugang still im
+	// ÄLTESTEN Workspace — eine Annahme, keine Entscheidung. Jetzt entscheidet
+	// der Owner, welche Workspaces (keiner, einer, mehrere) allen offenstehen.
+	if err := ensureColumn(db, "workspaces", "auto_join", `auto_join INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.auto_join: %w", err)
+	}
 	// Record the schema/app version so an operator (and future migrations) can
 	// see what a data dir was last written by. Additive, idempotent.
 	db.Exec(`INSERT INTO schema_meta (key, value) VALUES ('version', ?)

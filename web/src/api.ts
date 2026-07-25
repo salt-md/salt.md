@@ -313,7 +313,7 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ confirm }),
     }),
-  updateWorkspace: (id: string, patch: Partial<{ name: string; icon: string; image: string }>) =>
+  updateWorkspace: (id: string, patch: Partial<{ name: string; icon: string; image: string; autoJoin: boolean }>) =>
     req<{ ok: boolean }>(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   addWorkspaceMember: (workspaceId: string, email: string, role: 'admin' | 'member' | 'viewer') =>
     req<{ ok: boolean }>(`/api/workspaces/${workspaceId}/members`, {

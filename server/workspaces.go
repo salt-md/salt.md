@@ -306,13 +306,17 @@ type workspaceJSON struct {
 	Role  string `json:"role"`
 	Icon  string `json:"icon"`
 	Image string `json:"image"`
+	// Personal: der eigene Bereich dieses Kontos. AutoJoin: steht allen neuen
+	// Konten offen — beides steuert, was die Oberflaeche anbietet.
+	Personal bool `json:"personal"`
+	AutoJoin bool `json:"autoJoin"`
 }
 
 func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`
-		SELECT w.id, w.name, m.role, w.icon, w.image FROM workspace_members m
+		SELECT w.id, w.name, m.role, w.icon, w.image, w.is_personal, w.auto_join FROM workspace_members m
 		JOIN workspaces w ON w.id = m.workspace_id
-		WHERE m.user_id = ? ORDER BY w.created_at`, requestUser(r).ID)
+		WHERE m.user_id = ? ORDER BY w.is_personal DESC, w.created_at`, requestUser(r).ID)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -321,7 +325,9 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	list := []workspaceJSON{}
 	for rows.Next() {
 		var x workspaceJSON
-		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image)
+		var personal, autoJoin int
+		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin)
+		x.Personal, x.AutoJoin = personal != 0, autoJoin != 0
 		list = append(list, x)
 	}
 	writeJSON(w, list)
@@ -340,9 +346,10 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name  *string `json:"name"`
-		Icon  *string `json:"icon"`
-		Image *string `json:"image"`
+		Name     *string `json:"name"`
+		Icon     *string `json:"icon"`
+		Image    *string `json:"image"`
+		AutoJoin *bool   `json:"autoJoin"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		httpError(w, 400, "invalid JSON")
@@ -377,6 +384,28 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		sets = append(sets, "image = ?")
 		args = append(args, img)
+	}
+	if body.AutoJoin != nil {
+		// "Steht allen offen": jedes neu angelegte Konto wird Mitglied. Das ist
+		// eine Entscheidung über die ganze Instanz, nicht über einen einzelnen
+		// Workspace — deshalb Owner statt Workspace-Admin. Ein persönlicher
+		// Bereich kann es nie sein, er gehört einem Menschen.
+		if !s.isOwner(requestUser(r).ID) {
+			httpError(w, 403, "Nur der Owner kann einen Workspace für alle öffnen.")
+			return
+		}
+		var personal int
+		s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
+		if personal != 0 {
+			httpError(w, 400, "Ein persönlicher Bereich kann nicht für alle geöffnet werden.")
+			return
+		}
+		v := 0
+		if *body.AutoJoin {
+			v = 1
+		}
+		sets = append(sets, "auto_join = ?")
+		args = append(args, v)
 	}
 	if len(sets) == 0 {
 		httpError(w, 400, "nothing to update")

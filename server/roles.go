@@ -137,6 +137,21 @@ func (s *Server) migrateOrg() error {
 	if existingOwner == "" && ownerID != "" {
 		s.db.Exec(`UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ?`, roleOwner, orgID, ownerID)
 	}
+	// Bestandsinstanzen: bisher landete jeder Neuzugang im ältesten Workspace.
+	// Damit sich der Einstieg nach dem Update nicht STILL ändert, wird genau der
+	// als "für alle" markiert — sichtbar im Workspace-Menü und abschaltbar. Nur
+	// wenn noch gar keiner markiert ist, sonst würde eine bewusste Entscheidung
+	// des Owners bei jedem Neustart überschrieben.
+	var marked int
+	s.db.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE auto_join = 1`).Scan(&marked)
+	if marked == 0 {
+		var oldest string
+		s.db.QueryRow(`SELECT id FROM workspaces WHERE is_personal = 0 ORDER BY created_at LIMIT 1`).Scan(&oldest)
+		if oldest != "" {
+			s.db.Exec(`UPDATE workspaces SET auto_join = 1 WHERE id = ?`, oldest)
+		}
+	}
+
 	// Workspaces ohne Eigentümer: der dienstälteste Workspace-Admin übernimmt,
 	// ersatzweise der Instanz-Owner. Ein Workspace ohne Eigentümer wäre genau
 	// der herrenlose Zustand, den W101 abschafft.
@@ -166,6 +181,70 @@ func (s *Server) migrateOrg() error {
 		}
 	}
 	return nil
+}
+
+// ---- Wo ein neues Konto landet (W102) ------------------------------------
+//
+// Zwei Wege, und nur diese: ein Workspace, der ihm gehört, und die, die der
+// Owner ausdrücklich für alle geöffnet hat. Vorher erbte ein neu angelegtes
+// Konto sämtliche Workspaces des anlegenden Admins, und wer sich selbst
+// registrierte, landete im ältesten Workspace der Instanz — beides Annahmen,
+// die so nie jemand getroffen hatte.
+
+// personalWorkspaceName: der Bereich trägt den Namen des Menschen.
+func personalWorkspaceName(userName string) string {
+	userName = strings.TrimSpace(userName)
+	if userName == "" {
+		return "Persönlich"
+	}
+	if len([]rune(userName)) > 60 {
+		userName = string([]rune(userName)[:60])
+	}
+	return userName
+}
+
+// createPersonalWorkspace legt den eigenen Bereich eines Kontos an: Eigentümer
+// und Admin ist der Mensch selbst. Liefert "" wenn es nicht klappt — dann steht
+// das Konto ohne eigenen Bereich da, was die Oberfläche abfängt.
+func (s *Server) createPersonalWorkspace(userID, userName string) string {
+	id := newID()
+	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id, is_personal) VALUES (?, ?, ?, ?, 1)`,
+		id, personalWorkspaceName(userName), now(), userID); err != nil {
+		log.Printf("personal workspace for %s: %v", userID, err)
+		return ""
+	}
+	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')`, id, userID); err != nil {
+		log.Printf("personal workspace membership for %s: %v", userID, err)
+	}
+	return id
+}
+
+// joinAutoWorkspaces trägt ein Konto in alle Workspaces ein, die für alle
+// geöffnet sind. Rolle: Mitglied — wer mehr braucht, bekommt es vergeben.
+func (s *Server) joinAutoWorkspaces(userID string) int {
+	rows, err := s.db.Query(`SELECT id FROM workspaces WHERE auto_join = 1`)
+	if err != nil {
+		return 0
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			ids = append(ids, id)
+		}
+	}
+	rows.Close()
+	for _, id := range ids {
+		s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member') ON CONFLICT DO NOTHING`, id, userID)
+	}
+	return len(ids)
+}
+
+// onboardUser gibt einem frisch angelegten Konto seinen Platz: den eigenen
+// Bereich plus die für alle geöffneten Workspaces.
+func (s *Server) onboardUser(userID, userName string) {
+	s.createPersonalWorkspace(userID, userName)
+	s.joinAutoWorkspaces(userID)
 }
 
 // orgRole liefert die Instanzrolle: owner | admin | member (leer = unbekannt).
