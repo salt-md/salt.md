@@ -3,6 +3,7 @@ import { api } from '../api';
 import type { PropDef, PropOption } from '../types';
 import Portal from './Portal';
 import { OPTION_PALETTE, optionSlug } from '../selectOptions';
+import { daysUntil, formatDay, formatNumber } from '../format';
 import { Check, Link2 as LinkIcon, Plus, Trash2 } from 'lucide-react';
 
 interface Props {
@@ -240,21 +241,14 @@ function SelectCell({
 // Format an ISO date (YYYY-MM-DD) as a localized dd.mm.yyyy — parsed from the
 // string parts (no Date() so there's no timezone shift), shown everywhere a date
 // is read instead of the raw ISO.
-function fmtDate(v: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
-  return m ? `${m[3]}.${m[2]}.${m[1]}` : v;
-}
+const fmtDate = (v: string) => formatDay(v, 'date') || v;
 
-// Faelligkeiten sagen erst dann etwas, wenn man Dringlichkeit sieht, ohne zu
-// rechnen — das ist der Grund, warum ein Trello-Board auf einen Blick lesbar
-// ist. Ueberfaellig rot, heute/morgen gelb, alles andere unauffaellig.
+// A due date only says something once you can see urgency without doing the
+// arithmetic — that is why a Trello board reads at a glance. Overdue red,
+// today and tomorrow amber, everything else quiet.
 function dateUrgency(v: string): '' | ' is-overdue' | ' is-soon' {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v);
-  if (!m) return '';
-  const due = new Date(+m[1], +m[2] - 1, +m[3]);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+  const days = daysUntil(v);
+  if (days === null) return '';
   if (days < 0) return ' is-overdue';
   if (days <= 1) return ' is-soon';
   return '';
@@ -267,7 +261,7 @@ function formatComputed(value: unknown): { text: string; error: boolean } {
   if (typeof value === 'number') {
     // Trim floating-point noise (13.000000001) without forcing decimals on ints.
     const rounded = Math.round(value * 1e6) / 1e6;
-    return { text: String(rounded), error: false };
+    return { text: formatNumber(rounded), error: false };
   }
   return { text: value != null ? String(value) : '', error: false };
 }

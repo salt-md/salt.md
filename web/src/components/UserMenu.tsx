@@ -6,6 +6,7 @@ import Portal from './Portal';
 import { confirm, promptText } from '../dialog';
 import { toast } from '../toast';
 import { useExclusiveModal } from '../modal';
+import { formatMoment } from '../format';
 import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSettings';
 import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type } from 'lucide-react';
 
@@ -453,7 +454,7 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
     if (!reason?.trim()) return;
     try {
       const res = await api.breakGlass(wsId, reason.trim());
-      const until = new Date(res.expiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      const until = formatMoment(res.expiresAt, 'time');
       toast(`Lesezugriff auf „${wsName}" bis ${until} — die Verantwortlichen wurden informiert.`);
       load();
     } catch (err) {

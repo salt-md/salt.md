@@ -1,0 +1,197 @@
+// Guards the two rules that keep Salt.md translatable, and reports how far the
+// text conversion has got.
+//
+//   node scripts/check-i18n.mjs
+//
+// The point of this file is that neither rule survives on good intentions. The
+// other German-first project this codebase learned from rotted exactly here:
+// every new feature added German strings, nothing noticed, and translating
+// became an endless chase after other people's commits. A check that fails the
+// build is the only version of "we'll remember" that works.
+//
+// Section 1 is enforced. Section 2 is advisory until the strings are converted,
+// and then becomes enforced too — at which point rot is mechanically
+// impossible rather than merely discouraged.
+
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, relative, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const src = join(here, '../src');
+
+// format.ts is the one place allowed to touch Intl and build Dates from
+// strings; i18n.ts drives it. Everything else asks them.
+const FORMAT_OWNERS = new Set(['format.ts', 'i18n.ts']);
+
+// Generated icon tables — data, not interface.
+const SKIP = new Set(['mdiSet.ts', 'lucideSet.ts', 'emojiData.ts']);
+
+function walk(dir) {
+  const out = [];
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) out.push(...walk(p));
+    else if (/\.tsx?$/.test(p) && !SKIP.has(name)) out.push(p);
+  }
+  return out;
+}
+
+const files = walk(src);
+const errors = [];
+const warnings = [];
+
+/** Text between the parentheses starting at `open`, respecting nesting. Null
+ *  when the call runs past the end of the line. */
+function balancedArg(code, open) {
+  let depth = 0;
+  for (let i = open; i < code.length; i++) {
+    if (code[i] === '(') depth++;
+    else if (code[i] === ')' && --depth === 0) return code.slice(open + 1, i);
+  }
+  return null;
+}
+
+/** Commas that separate arguments, ignoring those inside nested calls. */
+function topLevelCommas(arg) {
+  let depth = 0;
+  let n = 0;
+  for (const c of arg) {
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (c === ',' && depth === 0) n++;
+  }
+  return n;
+}
+
+// ---- Section 1: formatting stays in one place (enforced) ----
+
+for (const file of files) {
+  const name = file.split('/').pop();
+  if (FORMAT_OWNERS.has(name)) continue;
+  const rel = relative(join(here, '..'), file);
+  const lines = readFileSync(file, 'utf8').split('\n');
+
+  lines.forEach((line, i) => {
+    const at = `${rel}:${i + 1}`;
+    // A line may opt out with `// i18n-ok: why` — for the handful of places
+    // that compare IDs or timestamps rather than anything a human reads. The
+    // reason is mandatory so the exemption has to be argued for, not just
+    // taken.
+    if (/\/\/\s*i18n-ok:\s*\S/.test(line)) return;
+    const code = line.replace(/\/\/.*$/, '');
+    if (/\.toLocale(String|DateString|TimeString)\s*\(/.test(code)) {
+      errors.push(`${at}  toLocale* outside format.ts — use formatMoment/formatDay`);
+    }
+    if (/\bIntl\.\w+/.test(code)) {
+      errors.push(`${at}  Intl.* outside format.ts — add a helper there instead`);
+    }
+    if (/['"][a-z]{2}-[A-Z]{2}['"]/.test(code) && !/lang=|locale/i.test(code)) {
+      errors.push(`${at}  hardcoded locale tag — formatting follows the user's language`);
+    }
+    if (/\.localeCompare\s*\(/.test(code)) {
+      errors.push(`${at}  localeCompare — use compare() so sorting follows the language`);
+    }
+    // `new Date(x)` with a single non-numeric argument parses a string, and
+    // `new Date('2026-07-18')` lands on UTC midnight — the off-by-one-day bug
+    // this whole module exists to prevent. Multi-argument and empty forms are
+    // local by construction and fine.
+    const at2 = code.indexOf('new Date(');
+    if (at2 >= 0) {
+      const arg = balancedArg(code, at2 + 'new Date'.length);
+      if (arg !== null && arg.trim() !== '' && topLevelCommas(arg) === 0) {
+        const a = arg.trim();
+        const numeric = /^[\d.\s+*/-]+$/.test(a) || /Date\.now\(\)|getTime\(\)|\* ?864/.test(a);
+        if (!numeric) {
+          warnings.push(`${at}  new Date(${a.slice(0, 40)}) parses a string — formatDay() if it is a calendar date`);
+        }
+      }
+    }
+  });
+}
+
+// ---- Section 2: strings are wrapped, catalogs are current (advisory) ----
+
+const CALL = /\bt\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g;
+const PLURAL = /\bplural\(\s*[^,]+,\s*(['"`])(?:\\.|(?!\1)[^\\])*\1\s*,\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g;
+
+const used = new Set();
+let unwrapped = 0;
+const unwrappedSample = [];
+
+for (const file of files) {
+  const rel = relative(join(here, '..'), file);
+  const text = readFileSync(file, 'utf8');
+  // Strip comments before collecting keys: i18n.ts documents t() with an
+  // example, and an example is not a string the app ships.
+  if (!FORMAT_OWNERS.has(file.split('/').pop())) {
+    const bare = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    for (const m of bare.matchAll(CALL)) used.add(m[2]);
+    for (const m of bare.matchAll(PLURAL)) used.add(m[3]);
+  }
+
+  if (!file.endsWith('.tsx')) continue;
+  text.split('\n').forEach((line, i) => {
+    const code = line.replace(/\/\/.*$/, '').replace(/\{\/\*.*?\*\/\}/g, '');
+    // Declarations, not markup — `Map<string, PageMeta>` is not a label.
+    if (/^\s*(import|export type|interface|type |const \w+ = \{|\*)/.test(code)) return;
+    // Text sitting directly between JSX tags. The leading character must not
+    // be part of `=>` or a comparison, or every arrow function returning a
+    // generic reads as a label.
+    for (const m of code.matchAll(/(^|[^=!<>-])>\s*([^<>{}\n]*[A-Za-z][^<>{}\n]*?)\s*</g)) {
+      const s = m[2].trim();
+      if (s.length < 3) continue;
+      if (/^[\d\s.,:;|/·—–-]+$/.test(s)) continue;
+      // Operators and generic parameters both look like "text between angle
+      // brackets" to a regex. They are not.
+      if (/=>|&&|\|\||\?\?|===|!==|[[\]();:]/.test(s)) continue;
+      if (/\b(Map|Set|Array|Promise|Record|Partial|Awaited|React|useState|useRef|useMemo)\s*$/.test(code.slice(0, m.index + 1))) continue;
+      unwrapped++;
+      if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${i + 1}  ${s.slice(0, 52)}`);
+    }
+    // Attributes a human reads.
+    for (const m of code.matchAll(/\b(placeholder|title|aria-label|alt)=(["'])([^"']{2,})\2/g)) {
+      unwrapped++;
+      if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${i + 1}  ${m[1]}="${m[3].slice(0, 40)}"`);
+    }
+  });
+}
+
+// Catalogs: an entry nobody asks for any more is an orphan (usually the source
+// text was edited); a source string with no entry is simply untranslated.
+const localeDir = join(src, 'locales');
+const report = [];
+for (const name of readdirSync(localeDir).filter((f) => f.endsWith('.json'))) {
+  const cat = JSON.parse(readFileSync(join(localeDir, name), 'utf8'));
+  const keys = Object.keys(cat);
+  const orphans = keys.filter((k) => !used.has(k));
+  const missing = [...used].filter((k) => !(k in cat));
+  report.push({ name, have: keys.length, orphans, missing: missing.length });
+}
+
+// ---- output ----
+
+console.log('  Formatting confined to format.ts');
+if (errors.length === 0) console.log('    ok   no stray Intl, toLocale, locale tag or localeCompare');
+for (const e of errors) console.log(`    FAIL ${e}`);
+for (const w of warnings) console.log(`    warn ${w}`);
+
+console.log();
+console.log('  String conversion');
+console.log(`    ${used.size} wrapped in t()/plural(), ~${unwrapped} still bare`);
+for (const s of unwrappedSample) console.log(`      ${s}`);
+if (unwrapped > unwrappedSample.length) console.log(`      … and ${unwrapped - unwrappedSample.length} more`);
+
+console.log();
+console.log('  Catalogs');
+for (const r of report) {
+  console.log(`    ${r.name}: ${r.have} entries, ${r.missing} untranslated, ${r.orphans.length} orphaned`);
+  for (const o of r.orphans.slice(0, 5)) console.log(`      orphan: ${o.slice(0, 60)}`);
+}
+
+console.log();
+if (errors.length) {
+  console.log(`  FAILED — ${errors.length} formatting violation(s)`);
+  process.exit(1);
+}
+console.log('  ok — formatting rules hold');

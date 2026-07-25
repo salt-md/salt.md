@@ -3,6 +3,7 @@ import { api } from '../api';
 import { toast } from '../toast';
 import type { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
+import { compare } from '../format';
 
 type SortKey = 'title' | 'in' | 'out' | 'updated';
 type Mode = 'liste' | 'baum';
@@ -54,13 +55,18 @@ export default function IndexView({
     list.sort((a, b) => {
       switch (sort) {
         case 'in':
-          return b.in - a.in || a.page.title.localeCompare(b.page.title);
+          return b.in - a.in || compare(a.page.title, b.page.title);
         case 'out':
-          return b.out - a.out || a.page.title.localeCompare(b.page.title);
-        case 'updated':
-          return (b.page.updatedAt || '').localeCompare(a.page.updatedAt || '');
+          return b.out - a.out || compare(a.page.title, b.page.title);
+        case 'updated': {
+          // ISO timestamps sort correctly as plain strings. Locale collation
+          // would be slower and, with numeric ordering on, actively wrong.
+          const av = a.page.updatedAt || '';
+          const bv = b.page.updatedAt || '';
+          return bv < av ? -1 : bv > av ? 1 : 0;
+        }
         default:
-          return (a.page.title || 'Untitled').localeCompare(b.page.title || 'Untitled');
+          return compare(a.page.title || 'Untitled', b.page.title || 'Untitled');
       }
     });
     return list;
@@ -77,7 +83,7 @@ export default function IndexView({
       m.set(key, [...(m.get(key) ?? []), p]);
     }
     for (const list of m.values()) {
-      list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || (a.title || '').localeCompare(b.title || ''));
+      list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || compare(a.title || '', b.title || ''));
     }
     return m;
   }, [live]);

@@ -7,8 +7,9 @@ frontend:
 
 backend:
 	go mod tidy
-	# -trimpath: sonst landen die absoluten Pfade des Bauenden (inkl. Benutzername)
-	# in der Binary — unnötig preisgegeben und verhindert reproduzierbare Builds.
+	# -trimpath: without it the builder's absolute paths (including their
+	# username) end up inside the binary — needlessly disclosed, and it breaks
+	# reproducible builds.
 	CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o salt .
 
 build: frontend backend

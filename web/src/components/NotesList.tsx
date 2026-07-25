@@ -3,26 +3,13 @@ import { SquarePen } from 'lucide-react';
 import { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
 import { tagColorClass } from '../tags';
+import { formatRelative } from '../format';
 
 // Bear-style middle column: a flat, recency-sorted list of note cards with
 // snippet + thumbnail previews. Documents only — databases and their rows keep
 // living in the sidebar tree; this pane is the "simple notes app" surface.
 
-function relTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return '';
-  const diff = Date.now() - t;
-  const min = Math.floor(diff / 60000);
-  if (min < 1) return 'gerade eben';
-  if (min < 60) return `vor ${min} Min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `vor ${h} Std`;
-  const d = new Date(t);
-  const today = new Date();
-  const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-  if (d >= yesterday) return 'Gestern';
-  return d.toLocaleDateString('de-DE', { day: 'numeric', month: 'short' });
-}
+const relTime = (iso: string) => formatRelative(iso);
 
 interface Props {
   pages: Map<string, PageMeta>;

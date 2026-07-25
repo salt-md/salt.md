@@ -3,6 +3,7 @@ import { api } from '../api';
 import { toast } from '../toast';
 import type { Comment } from '../types';
 import { Check, Trash2 } from 'lucide-react';
+import { formatRelative } from '../format';
 
 // Kommentare als Abschnitt am Ende des Dokuments — so wie Notion es macht.
 //
@@ -14,15 +15,7 @@ import { Check, Trash2 } from 'lucide-react';
 // unter dem Inhalt. Genau dort gehören sie hin — immer sichtbar, ohne Schalter,
 // und sie nehmen nur so viel Platz, wie sie brauchen.
 
-function when(iso: string): string {
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return '';
-  const mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1) return 'gerade eben';
-  if (mins < 60) return `vor ${mins} Min.`;
-  if (mins < 60 * 24) return `vor ${Math.round(mins / 60)} Std.`;
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
-}
+const when = (iso: string) => formatRelative(iso);
 
 // Farbe aus dem Namen ableiten, damit dieselbe Person immer dieselbe bekommt.
 export function nameColor(name: string): string {

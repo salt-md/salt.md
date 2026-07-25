@@ -3,6 +3,7 @@ import { api } from '../api';
 import Portal from './Portal';
 import { useBoardDrag } from '../boardDrag';
 import { tagColorClass } from '../tags';
+import { compare, firstWeekday, formatMonth, toDayString, weekdayNames } from '../format';
 import type {
   CollectionConfig,
   Filter,
@@ -125,8 +126,7 @@ function matchesFilter(row: Row, f: Filter): boolean {
     case 'lt': {
       const nv = Number(v);
       const nf = Number(f.value);
-      const cmp =
-        !Number.isNaN(nv) && !Number.isNaN(nf) ? nv - nf : String(v ?? '').localeCompare(f.value);
+      const cmp = !Number.isNaN(nv) && !Number.isNaN(nf) ? nv - nf : compare(String(v ?? ''), f.value);
       return op === 'gt' ? cmp > 0 : cmp < 0;
     }
     case 'is_not':
@@ -157,8 +157,7 @@ function applyView(rows: Row[], view: ViewDef): Row[] {
       const bv = b.props[sort.property];
       const as = Array.isArray(av) ? av.join(',') : String(av ?? '');
       const bs = Array.isArray(bv) ? bv.join(',') : String(bv ?? '');
-      const cmp =
-        typeof av === 'number' && typeof bv === 'number' ? av - bv : as.localeCompare(bs);
+      const cmp = typeof av === 'number' && typeof bv === 'number' ? av - bv : compare(as, bs);
       return sort.dir === 'desc' ? -cmp : cmp;
     });
   }
@@ -1509,9 +1508,7 @@ function ColumnsControl({
 
 // ---- Calendar view ----
 
-function ymd(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
+const ymd = toDayString;
 
 // ---- Timeline / Gantt view ----
 // Rows are positioned on a horizontal day-grid by a start date property, and
@@ -1584,7 +1581,7 @@ function TimelineView({
     const nextMonthDay = Math.floor(Date.UTC(y, mo + 1, 1) / 86400000);
     const segEnd = Math.min(nextMonthDay - 1, max);
     months.push({
-      label: new Date(Date.UTC(y, mo, 1)).toLocaleDateString(undefined, { month: 'short', year: '2-digit' }),
+      label: formatMonth(y, mo, 'short'),
       left: (cursor - min) * DAY,
       width: (segEnd - cursor + 1) * DAY,
     });
@@ -1683,7 +1680,10 @@ function CalendarView({
   }
 
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
-  const startWeekday = (first.getDay() + 6) % 7; // Monday-first
+  // Where the week starts is a property of the language, not of the code:
+  // Monday across most of Europe, Sunday in the US and Japan, Saturday in much
+  // of the Arab world. This used to be hardcoded to Monday.
+  const startWeekday = (first.getDay() - firstWeekday() + 7) % 7;
   const daysInMonth = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
   const cells: (Date | null)[] = [];
   for (let i = 0; i < startWeekday; i++) cells.push(null);
@@ -1691,7 +1691,7 @@ function CalendarView({
   while (cells.length % 7 !== 0) cells.push(null);
 
   const today = ymd(new Date());
-  const monthLabel = month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const monthLabel = formatMonth(month.getFullYear(), month.getMonth(), 'long');
   const step = (delta: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + delta, 1));
 
   return (
@@ -1703,7 +1703,7 @@ function CalendarView({
         <button className="btn-sm" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Today</button>
       </div>
       <div className="calendar-grid">
-        {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((d) => (
+        {weekdayNames().map((d) => (
           <div key={d} className="calendar-dow">{d}</div>
         ))}
         {cells.map((d, i) => {

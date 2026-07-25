@@ -5,14 +5,9 @@ import Portal from './Portal';
 import { confirm } from '../dialog';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
+import { formatMoment } from '../format';
 
-function when(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString();
-  } catch {
-    return iso;
-  }
-}
+const when = (iso: string) => formatMoment(iso, 'full');
 
 export function HistoryModal({
   pageId,

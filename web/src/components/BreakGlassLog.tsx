@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import Portal from './Portal';
 import { toast } from '../toast';
+import { formatMoment } from '../format';
 
 // Notfallzugriffe auf einen Workspace — für dessen Verantwortliche.
 //
@@ -19,8 +20,7 @@ interface Grant {
   active: boolean;
 }
 
-const when = (iso: string) =>
-  new Date(iso).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const when = (iso: string) => formatMoment(iso, 'datetime');
 
 export default function BreakGlassLog({
   workspaceId,

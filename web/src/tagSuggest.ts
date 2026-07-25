@@ -1,4 +1,5 @@
 import type { PageMeta } from './types';
+import { compare } from './format';
 
 // Tag-Vorschläge. Ohne sie tippt man denselben Tag zum zehnten Mal leicht
 // anders und der Workspace zerfasert in „projekt", „Projekte", „projekt-a".
@@ -34,7 +35,7 @@ export function collectTags(pages: Iterable<PageMeta>): { tag: string; count: nu
     }
     out.push({ tag: best, count: total });
   }
-  return out.sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  return out.sort((a, b) => b.count - a.count || compare(a.tag, b.tag));
 }
 
 /** Levenshtein-Distanz, abgebrochen sobald sie `max` übersteigt. */

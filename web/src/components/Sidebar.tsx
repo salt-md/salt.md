@@ -9,6 +9,7 @@ import { toast } from '../toast';
 import Portal from './Portal';
 import IconPicker from './IconPicker';
 import { PageIcon } from '../pageIcon';
+import { compare } from '../format';
 import AgentConnectModal from './AgentConnect';
 import BreakGlassLog from './BreakGlassLog';
 import StrandedWorkspaces from './StrandedWorkspaces';
@@ -463,7 +464,9 @@ export default function Sidebar({
     }
     return [...count.entries()]
       .map(([k, n]) => [label.get(k) as string, n] as [string, number])
-      .sort((a, b) => b[1] - a[1] || a[0].toLowerCase().localeCompare(b[0].toLowerCase()));
+      // compare() already folds case, so the toLowerCase() this replaced was
+      // doing the job twice — and doing the accented half of it wrong.
+      .sort((a, b) => b[1] - a[1] || compare(a[0], b[0]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages, currentWs]);
   const taggedPages = useMemo(
@@ -506,7 +509,7 @@ export default function Sidebar({
       childrenMap.set(key, [...(childrenMap.get(key) ?? []), p]);
     }
     for (const list of childrenMap.values()) {
-      list.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id));
+      list.sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)); // i18n-ok: opaque IDs, only a stable tiebreaker
     }
     const trashedIds = new Set(pages.filter((p) => p.trashed).map((p) => p.id));
     const trashRoots = pages.filter(

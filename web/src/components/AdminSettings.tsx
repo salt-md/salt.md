@@ -3,14 +3,11 @@ import { api } from '../api';
 import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
+import { formatBytes } from '../format';
 
 type Info = Awaited<ReturnType<typeof api.adminInfo>>;
 
-const fmtBytes = (n: number) => {
-  if (n >= 1 << 30) return (n / (1 << 30)).toFixed(2) + ' GB';
-  if (n >= 1 << 20) return (n / (1 << 20)).toFixed(1) + ' MB';
-  return Math.max(1, Math.round(n / 1024)) + ' KB';
-};
+const fmtBytes = (n: number) => formatBytes(n);
 
 const fmtUptime = (sec: number) => {
   const d = Math.floor(sec / 86400);
