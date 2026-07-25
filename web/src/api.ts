@@ -11,6 +11,16 @@ import type {
   Workspace,
 } from './types';
 
+/** Fehler mit HTTP-Status, damit Aufrufer auf den Status prüfen können statt
+ *  auf den Meldungstext — der ändert sich mit jeder Umformulierung. */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     ...init,
@@ -29,9 +39,9 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
     // screen. Swallowing the body here once locked users out of 2FA accounts.
     if (res.status === 401 && !/^\/api\/(login|signup|setup)\b/.test(url)) {
       window.dispatchEvent(new Event('salt:unauthorized'));
-      throw new Error('unauthorized');
+      throw new ApiError('unauthorized', 401);
     }
-    throw new Error(msg);
+    throw new ApiError(msg, res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -153,6 +163,46 @@ export const api = {
   updateUser: (id: string, patch: Partial<{ name: string; email: string; color: string; avatar: string; password: string; currentPassword: string; isAdmin: boolean }>) =>
     req<User>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteUser: (id: string) => req<{ ok: boolean }>(`/api/users/${id}`, { method: 'DELETE' }),
+  // Lebenszyklus (W105): Folgen vor dem Löschen, Stilllegen als Normalfall,
+  // und die Aufräum-Ansicht für Workspaces ohne Verantwortlichen.
+  deletionImpact: (id: string) =>
+    req<{
+      userName: string;
+      personal: { id: string; name: string; pages: number; members: number }[];
+      orphaned: { id: string; name: string; pages: number; members: number; heir?: string }[];
+      shared: { id: string; name: string; pages: number; members: number; heir?: string }[];
+      pages: number;
+    }>(`/api/users/${id}/deletion-impact`),
+  // Die Instanz an ein anderes Konto übergeben. Der einzige Weg, die
+  // Owner-Rolle weiterzureichen — vorher war sie eine Einbahnstraße.
+  transferOwner: (userId: string) =>
+    req<{ ok: boolean; owner: string }>('/api/admin/transfer-owner', {
+      method: 'POST',
+      body: JSON.stringify({ userId }),
+    }),
+  setUserDisabled: (id: string, disabled: boolean) =>
+    req<User>(`/api/users/${id}/disabled`, { method: 'PUT', body: JSON.stringify({ disabled }) }),
+  strandedWorkspaces: () =>
+    req<
+      {
+        id: string;
+        name: string;
+        owner: string;
+        members: number;
+        admins: number;
+        pages: number;
+        adoptable: boolean;
+        deletable: boolean;
+        personal: boolean;
+      }[]
+    >('/api/admin/stranded-workspaces'),
+  adoptWorkspace: (id: string) =>
+    req<{ ok: boolean; name: string }>(`/api/admin/stranded-workspaces/${id}/adopt`, { method: 'POST' }),
+  deleteStrandedWorkspace: (id: string, confirm: string) =>
+    req<{ ok: boolean }>(`/api/admin/stranded-workspaces/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirm }),
+    }),
 
   listTokens: () => req<ApiToken[]>('/api/tokens'),
   createToken: (name: string, scope: 'read' | 'write' = 'write', workspaces: string[] = []) =>
@@ -329,8 +379,11 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify({ role }),
     }),
-  removeMember: (workspaceId: string, userId: string) =>
-    req<{ ok: boolean }>(`/api/workspaces/${workspaceId}/members/${userId}`, { method: 'DELETE' }),
+  removeMember: (workspaceId: string, userId: string, confirmPrivate = false) =>
+    req<{ ok: boolean }>(
+      `/api/workspaces/${workspaceId}/members/${userId}${confirmPrivate ? '?confirmPrivate=1' : ''}`,
+      { method: 'DELETE' },
+    ),
   sharePage: (id: string, expiresInDays = 0, password = '') =>
     req<{ token: string; url: string }>(`/api/pages/${id}/share`, {
       method: 'POST',

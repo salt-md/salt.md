@@ -3030,6 +3030,10 @@ button {
   font-size: 15px;
   line-height: 1.5;
   margin-bottom: 14px;
+  /* pre-line: die Folgen-Vorschau vor dem Loeschen und die Rueckfrage wegen
+     privater Seiten setzen ihre Punkte mit \n untereinander. Ohne das fielen
+     sie in 380 px Breite zu einem einzigen Fliesstext-Klumpen zusammen. */
+  white-space: pre-line;
 }
 
 .confirm-input {
@@ -6717,4 +6721,20 @@ a,
   background: var(--hover);
   white-space: nowrap;
   flex: none;
+}
+
+/* ---- W105: Aufräum-Ansicht ---------------------------------------------
+   Der Hinweis "hat noch Mitglieder" ist ein Nebensatz, kein Hauptdarsteller:
+   ohne Begrenzung drängte er den Workspace-Namen in eine schmale Spalte. */
+
+.bg-row .dialog-hint {
+  max-width: 46%;
+  text-align: right;
+  flex: none;
+  margin: 0;
+  align-self: center;
+}
+
+.bg-row-main strong {
+  overflow-wrap: anywhere;
 }

@@ -36,6 +36,13 @@ over the built-in Model Context Protocol.
 - **Workspaces, roles &amp; sharing** — multi-user workspaces (admin / member /
   viewer), private pages, read-only public links, an activity log that
   distinguishes humans from agents, 2FA, argon2id passwords.
+- **Running the instance ≠ reading it** — one *owner* holds the instance;
+  everyday admins manage accounts and workspaces without gaining access to
+  anyone's content. Each account gets a private space nobody else can be added
+  to, and the owner can only reach a workspace through time-boxed, written,
+  audited emergency access its admins are told about. Offboarding disables an
+  account by default; deleting one shows what hangs off it first and hands
+  shared workspaces to a named successor.
 - **Everything portable** — Markdown import/export (single page or the whole
   workspace as a ZIP), PDF full-text search, instant `Ctrl/Cmd + K` search
   (SQLite FTS5), cover images, emoji icons, dark mode, trash &amp; restore.

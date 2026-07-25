@@ -321,20 +321,32 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
     setEntries((prev) => [...prev, ...more]);
     if (more.length < 50) setDone(true);
   };
+  // Die Vorgänge rund um Konten und Workspaces sind der Grund, warum es dieses
+  // Protokoll gibt — ohne Übersetzung standen sie als rohes „disable_user"
+  // zwischen den Seitenänderungen.
   const label: Record<string, string> = {
-    create_page: 'created',
-    update_page: 'updated',
-    append_markdown: 'appended to',
-    trash_page: 'trashed',
-    delete_page: 'deleted',
-    upload_file: 'uploaded to',
+    create_page: 'hat erstellt',
+    update_page: 'hat geändert',
+    append_markdown: 'hat ergänzt',
+    trash_page: 'hat in den Papierkorb gelegt',
+    delete_page: 'hat endgültig gelöscht',
+    upload_file: 'hat eine Datei hochgeladen zu',
+    disable_user: 'hat das Konto stillgelegt:',
+    enable_user: 'hat das Konto wieder aktiviert:',
+    delete_user: 'hat das Konto gelöscht:',
+    delete_workspace: 'hat den Workspace gelöscht:',
+    workspace_handover: 'hat den Workspace übernommen:',
+    workspace_adopted: 'hat den herrenlosen Workspace übernommen:',
+    transfer_owner: 'hat die Instanz übergeben an:',
+    break_glass: 'hat Notfallzugriff genommen:',
+    break_glass_revoked: 'hat den Notfallzugriff beendet:',
   };
   return (
     <Portal>
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dialog">
-        <h2>Activity log</h2>
-        <p className="dialog-hint">Recent changes, showing whether a person or an AI agent made them.</p>
+        <h2>Protokoll</h2>
+        <p className="dialog-hint">Die letzten Änderungen — mit dem Hinweis, ob ein Mensch oder ein Agent sie gemacht hat.</p>
         <div className="user-list">
           {entries.map((e) => (
             <div key={e.id} className="user-row">
@@ -343,19 +355,19 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
               </span>
               <span className="user-row-name">
                 {e.actorName} {label[e.action] ?? e.action}
-                {e.detail ? ` "${e.detail.slice(0, 40)}"` : ''}
+                {e.detail ? ` „${e.detail.slice(0, 60)}"` : ''}
               </span>
               <span className="user-row-email">{e.createdAt.slice(0, 16).replace('T', ' ')}</span>
             </div>
           ))}
-          {entries.length === 0 && <div className="dialog-hint">No activity yet.</div>}
+          {entries.length === 0 && <div className="dialog-hint">Noch nichts passiert.</div>}
           {!done && entries.length > 0 && (
             <button className="btn-sm" onClick={() => void loadMore()}>
               Mehr laden…
             </button>
           )}
         </div>
-        <button className="btn dialog-close" onClick={onClose}>Close</button>
+        <button className="btn dialog-close" onClick={onClose}>Schließen</button>
       </div>
     </div>
     </Portal>
@@ -443,8 +455,85 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
     }
   };
 
+  // Stilllegen ist der Normalfall beim Offboarding: Anmeldung zu, Sitzungen
+  // beendet — aber alles bleibt zurechenbar und nichts verwaist.
+  const toggleDisabled = async (u: User) => {
+    setError(null);
+    try {
+      await api.setUserDisabled(u.id, !u.disabled);
+      toast(u.disabled ? `${u.name} ist wieder aktiv.` : `${u.name} wurde stillgelegt.`);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  // Die Instanz weiterreichen. Danach ist der bisherige Owner ein gewöhnlicher
+  // Admin — deshalb die ausführliche Rückfrage, die Folge ist nicht umkehrbar
+  // (nur der neue Owner könnte sie zurückgeben).
+  const handOver = async (u: User) => {
+    setError(null);
+    const ok = await confirm(
+      `Die Instanz an ${u.name} übergeben?\n\n` +
+        `${u.name} wird Owner: Notfallzugriff, Instanz-Sicherung, Konten löschen.\n` +
+        'Du bist danach gewöhnlicher Admin und kannst das nicht selbst rückgängig machen.',
+      { danger: true, confirmText: 'Übergeben' },
+    );
+    if (!ok) return;
+    try {
+      const r = await api.transferOwner(u.id);
+      toast(`${r.owner} ist jetzt Owner dieser Instanz.`);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  // Löschen zeigt vorher, was daran hängt — und bietet den Export an, solange
+  // es die Inhalte noch gibt. Vorher verschwand der persönliche Bereich
+  // wortlos mit dem Konto.
   const remove = async (u: User) => {
-    if (!(await confirm(`${u.name} entfernen? Seiten bleiben im Workspace.`, { danger: true }))) return;
+    setError(null);
+    let impact: Awaited<ReturnType<typeof api.deletionImpact>> | null = null;
+    try {
+      impact = await api.deletionImpact(u.id);
+    } catch {
+      /* Vorschau nicht verfügbar — unten wird das ausdrücklich gesagt */
+    }
+    const lines: string[] = [];
+    // Ohne Vorschau darf der Dialog NICHT so aussehen, als wäre alles harmlos:
+    // sonst bliebe von der Warnung genau der beruhigende Satz übrig, während
+    // der persönliche Bereich trotzdem unwiederbringlich mitgelöscht wird.
+    if (!impact) {
+      lines.push(
+        'Die Folgen konnten nicht geladen werden. Falls diese Person einen persönlichen Bereich hat, wird er mit allen Seiten unwiederbringlich mit gelöscht.',
+      );
+    }
+    // ALLE persönlichen Bereiche, nicht nur der erste — gelöscht wird die ganze
+    // Liste. Und die Mitgliederzahl gehört dazu: sie sagt, ob dort nur eigene
+    // Notizen liegen.
+    for (const p of impact?.personal ?? []) {
+      lines.push(`Der persönliche Bereich „${p.name}" wird mit gelöscht (${p.pages} Seiten).`);
+    }
+    if (impact?.shared.length) {
+      lines.push(
+        `Bleibt erhalten, weil andere darin arbeiten: ${impact.shared
+          .map((sw) => `„${sw.name}" (${sw.members} Mitglieder)`)
+          .join(', ')} — die privaten Seiten dieser Person darin werden gelöscht.`,
+      );
+    }
+    if (impact?.orphaned.length) {
+      lines.push(
+        `Ohne weiteren Verantwortlichen: ${impact.orphaned
+          .map((o) => `„${o.name}" (${o.pages} Seiten)`)
+          .join(', ')} — übernimmt der Owner.`,
+      );
+    }
+    if (impact?.pages) {
+      lines.push(`${impact.pages} Seiten in geteilten Workspaces bleiben bestehen.`);
+    }
+    lines.push('Stilllegen genügt meistens — dabei geht nichts verloren.');
+    if (!(await confirm(`${u.name} endgültig löschen?\n\n${lines.join('\n')}`, { danger: true, confirmText: 'Löschen' }))) return;
     try {
       await api.deleteUser(u.id);
       setSelId(null);
@@ -490,6 +579,7 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                     <span className="users-li-text">
                       <span className="users-li-name">
                         {u.name}
+                        {u.disabled && <span className="badge">stillgelegt</span>}
                         {u.orgRole === 'owner'
                           ? <span className="badge">owner</span>
                           : u.isAdmin && <span className="badge">admin</span>}
@@ -534,8 +624,30 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                       </button>
                     )}
                     {sel.id !== me.id && sel.orgRole !== 'owner' && (
+                      <button className="btn-sm" onClick={() => void toggleDisabled(sel)}>
+                        {sel.disabled ? 'Wieder aktivieren' : 'Konto stilllegen'}
+                      </button>
+                    )}
+                    {/* Löschen vernichtet den persönlichen Bereich des Kontos.
+                        Das ist Datenkontrolle und liegt beim Owner — ein Admin
+                        legt still, dabei geht nichts verloren. */}
+                    {sel.id !== me.id && sel.orgRole !== 'owner' && me.orgRole === 'owner' && (
                       <button className="btn-sm danger" onClick={() => void remove(sel)}>
                         Nutzer löschen
+                      </button>
+                    )}
+                    {sel.id !== me.id && sel.orgRole !== 'owner' && me.orgRole !== 'owner' && (
+                      <span className="dialog-hint">
+                        Endgültig löschen kann nur der Owner — mit dem Konto verschwände auch
+                        der persönliche Bereich dieser Person.
+                      </span>
+                    )}
+                    {/* Übergabe: nur der Owner, nur an ein aktives Admin-Konto.
+                        Ohne diesen Weg wäre die Rolle nicht weiterzureichen —
+                        und zwei Fehlermeldungen raten genau dazu. */}
+                    {me.orgRole === 'owner' && sel.id !== me.id && sel.isAdmin && !sel.disabled && (
+                      <button className="btn-sm" onClick={() => void handOver(sel)}>
+                        Instanz übergeben
                       </button>
                     )}
                     {sel.orgRole === 'owner' && (

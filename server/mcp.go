@@ -525,6 +525,13 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusUnauthorized, "missing or invalid API token")
 		return
 	}
+	// Dieser Einstieg haengt NICHT an s.auth, die Stilllegung muss hier also
+	// eigens geprueft werden. Sonst blieben einem stillgelegten Konto saemtliche
+	// MCP-Werkzeuge offen, waehrend REST es abweist.
+	if u.Disabled {
+		httpError(w, http.StatusForbidden, "this account has been deactivated")
+		return
+	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	raw, err := io.ReadAll(r.Body)

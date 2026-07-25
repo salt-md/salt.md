@@ -141,7 +141,21 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("PUT /api/admin/membership", s.adminOnly(s.handleAdminMembership))
 	m.HandleFunc("POST /api/users", s.adminOnly(s.handleCreateUser))
 	m.HandleFunc("PATCH /api/users/{id}", s.auth(s.handleUpdateUser))
-	m.HandleFunc("DELETE /api/users/{id}", s.adminOnly(s.handleDeleteUser))
+	// ownerOnly, nicht adminOnly: Löschen vernichtet den persönlichen Bereich des
+	// Kontos endgültig. Genau das ist die Datenkontrolle, die ein Admin laut
+	// Rechtemodell NICHT hat — er soll Konten verwalten, nicht fremde Inhalte
+	// wegwerfen können. Fürs Offboarding gibt es das Stilllegen, das jeder Admin
+	// darf und bei dem nichts verloren geht.
+	m.HandleFunc("DELETE /api/users/{id}", s.ownerOnly(s.handleDeleteUser))
+	// Lebenszyklus: Folgen zeigen, stilllegen, herrenlose Workspaces aufraeumen.
+	// ownerOnly: die Antwort nennt Id, Name und Seitenzahl der persönlichen
+	// Bereiche — Kenntnisse, die die Zugriffs-Übersicht bewusst ausblendet.
+	m.HandleFunc("GET /api/users/{id}/deletion-impact", s.ownerOnly(s.handleDeletionImpact))
+	m.HandleFunc("PUT /api/users/{id}/disabled", s.adminOnly(s.handleSetUserDisabled))
+	m.HandleFunc("POST /api/admin/transfer-owner", s.ownerOnly(s.handleTransferOwner))
+	m.HandleFunc("GET /api/admin/stranded-workspaces", s.ownerOnly(s.handleStrandedWorkspaces))
+	m.HandleFunc("POST /api/admin/stranded-workspaces/{id}/adopt", s.ownerOnly(s.handleAdoptWorkspace))
+	m.HandleFunc("DELETE /api/admin/stranded-workspaces/{id}", s.ownerOnly(s.handleDeleteStrandedWorkspace))
 
 	m.HandleFunc("GET /api/tokens", s.auth(s.handleListTokens))
 	m.HandleFunc("POST /api/tokens", s.auth(s.handleCreateToken))

@@ -454,6 +454,13 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 	// workspace — the session already proves identity, so no password is asked.
 	// A bound invite must still match the signed-in account's address.
 	if cur := s.currentUser(r); cur != nil {
+		// Auch hier: eine stillgelegte Sitzung tritt keinem Workspace mehr bei.
+		// Schwer erreichbar (Stilllegen löscht die Sitzungen), aber es ist die
+		// einzige mutierende currentUser-Stelle ohne diese Prüfung.
+		if cur.Disabled {
+			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
+			return
+		}
 		if email != "" && !strings.EqualFold(email, cur.Email) {
 			httpError(w, 403, "this invite is for a different account — sign out to accept it")
 			return
@@ -471,9 +478,9 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 
 	// Does an account already exist for this address?
 	var uid, hash, totpSecret string
-	var totpEnabled int
-	err := s.db.QueryRow(`SELECT id, password_hash, totp_secret, totp_enabled FROM users WHERE email = ?`,
-		useEmail).Scan(&uid, &hash, &totpSecret, &totpEnabled)
+	var totpEnabled, disabled int
+	err := s.db.QueryRow(`SELECT id, password_hash, totp_secret, totp_enabled, disabled FROM users WHERE email = ?`,
+		useEmail).Scan(&uid, &hash, &totpSecret, &totpEnabled, &disabled)
 	if err == nil {
 		// The account already exists. Joining it and minting a session for it is
 		// an AUTHENTICATION event — otherwise anyone with the (shareable, possibly
@@ -487,6 +494,14 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		defer func() { <-s.loginSem }()
 		if !verifyPassword(body.Password, hash) {
 			httpError(w, http.StatusUnauthorized, "wrong credentials")
+			return
+		}
+		// Wie bei handleLogin: erst nach der Passwortpruefung ablehnen, damit die
+		// Antwort nicht verraet, ob es die Adresse gibt. Ohne das koennte sich ein
+		// stillgelegtes Konto ueber einen offenen Einladungslink eine frische
+		// Sitzung besorgen.
+		if disabled != 0 {
+			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
 			return
 		}
 		if totpEnabled != 0 {

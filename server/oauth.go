@@ -240,7 +240,9 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	// gesetzte (unbestaetigte) Adresse darf keine OAuth-Identitaet begruenden —
 	// sonst koennte man die kuenftige SSO-Anmeldung eines Kollegen kapern.
 	var uid string
-	err = s.db.QueryRow(`SELECT id FROM users WHERE email = ? AND email_verified = 1`, email).Scan(&uid)
+	// disabled = 0: sonst besorgt sich ein stillgelegtes Konto ueber den
+	// SSO-Weg eine frische Sitzung, obwohl die alte beim Stilllegen endete.
+	err = s.db.QueryRow(`SELECT id FROM users WHERE email = ? AND email_verified = 1 AND disabled = 0`, email).Scan(&uid)
 	if err != nil {
 		// Haelt ein UNbestaetigtes Konto diese Adresse, ist das ein Squatter:
 		// nicht anlegen (E-Mail ist UNIQUE) und nicht stillschweigend anmelden.

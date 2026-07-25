@@ -46,13 +46,41 @@ type auditEntry struct {
 // (default 50, max 200) — so the whole history is reachable, not just the tail.
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
-	if len(ws) == 0 {
+	// Vorgänge, die die ganze Instanz betreffen (Konto stillgelegt, Workspace
+	// übergeben oder gelöscht), hängen an keinem oder an einem nicht mehr
+	// existierenden Workspace. Der Workspace-Filter ließ sie damit für JEDEN
+	// verschwinden — ausgerechnet die Vorgänge, wegen derer man ein Protokoll
+	// führt. Der Owner sieht sie; für alle anderen bleibt es beim Workspace.
+	// Auch der Instanz-Admin: er ist es, der Konten stilllegt und Zuordnungen
+	// ändert. Fand er seinen eigenen Vorgang nie wieder, war das Protokoll für
+	// ihn wertlos. Die NULL-Zeilen nennen nur Konto- und Workspace-Namen —
+	// beides verwaltet er ohnehin — und keine Seitentitel.
+	me := requestUser(r)
+	instanceScope := (s.isOwner(me.ID) || me.IsAdmin) && me.TokenWorkspaces == nil
+	if len(ws) == 0 && !instanceScope {
 		writeJSON(w, []auditEntry{})
 		return
 	}
-	args := make([]any, len(ws))
-	for i, v := range ws {
-		args[i] = v
+	args := make([]any, 0, len(ws))
+	for _, v := range ws {
+		args = append(args, v)
+	}
+	wsCond := "workspace_id IN (" + placeholders(len(ws)) + ")"
+	if len(ws) == 0 {
+		wsCond = "0"
+	}
+	if instanceScope {
+		// IS NULL, nicht = '': s.audit schreibt einen fehlenden Workspace als
+		// NULL (siehe nullIfEmpty), und NULL vergleicht sich mit nichts.
+		//
+		// NUR die NULL-Zeilen. Ein früherer Zusatz ließ auch Einträge zu
+		// Workspaces durch, die es nicht mehr gibt — gedacht als Weg, Vorgänge
+		// wie "Workspace gelöscht" sichtbar zu halten, tatsächlich aber die
+		// vollständige Titelliste jedes gelöschten Workspace: `detail` enthält
+		// bei create_page den Seitentitel, und die Rechteprüfung darunter greift
+		// nicht mehr, weil es die Seite nicht mehr gibt. Die Vorgänge selbst
+		// werden jetzt ohne Workspace-Bezug geschrieben und stehen damit hier.
+		wsCond = "(" + wsCond + " OR workspace_id IS NULL)"
 	}
 	limit := 50
 	if v, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && v > 0 && v <= 200 {
@@ -83,7 +111,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 			qArgs = append(qArgs, cursor)
 		}
 		rows, err := s.db.Query(`SELECT id, created_at, actor_type, actor_name, action, COALESCE(page_id,''), detail
-			FROM audit_log WHERE workspace_id IN (`+placeholders(len(ws))+`)`+beforeSQL+`
+			FROM audit_log WHERE `+wsCond+beforeSQL+`
 			ORDER BY id DESC LIMIT `+strconv.Itoa(limit), qArgs...)
 		if err != nil {
 			httpError(w, 500, err.Error())

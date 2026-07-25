@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import Portal from './Portal';
 import { confirm } from '../dialog';
 import { useExclusiveModal } from '../modal';
@@ -68,11 +68,11 @@ export default function WorkspaceMembers({
     }
   };
 
-  const remove = async (m: Member) => {
+  const remove = async (m: Member, confirmPrivate = false) => {
     const self = m.userId === myUserId;
-    if (!(await confirm(self ? 'Workspace verlassen?' : `${m.name} entfernen?`, { danger: true }))) return;
+    if (!confirmPrivate && !(await confirm(self ? 'Workspace verlassen?' : `${m.name} entfernen?`, { danger: true }))) return;
     try {
-      await api.removeMember(workspaceId, m.userId);
+      await api.removeMember(workspaceId, m.userId, confirmPrivate);
       if (self) {
         onChanged();
         onClose();
@@ -80,7 +80,18 @@ export default function WorkspaceMembers({
         load();
       }
     } catch (err) {
-      toast((err as Error).message || 'Mitglied konnte nicht entfernt werden');
+      const msg = (err as Error).message || 'Mitglied konnte nicht entfernt werden';
+      // 409 heißt: hier liegen private Seiten, die zurückbleiben und danach nur
+      // noch für die Admins des Workspace sichtbar sind. Am STATUS erkannt, nicht
+      // am Meldungstext — der ändert sich mit jeder Umformulierung, und dann wäre
+      // das Entfernen über die Oberfläche gar nicht mehr möglich.
+      if (!confirmPrivate && (err as ApiError).status === 409) {
+        if (await confirm(`${msg}\n\nTrotzdem ${self ? 'verlassen' : 'entfernen'}?`, { danger: true, confirmText: self ? 'Verlassen' : 'Entfernen' })) {
+          await remove(m, true);
+        }
+        return;
+      }
+      toast(msg);
     }
   };
 

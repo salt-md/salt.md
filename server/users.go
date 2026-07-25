@@ -32,6 +32,9 @@ type user struct {
 	Color   string `json:"color"`
 	Avatar  string `json:"avatar"`
 	IsAdmin bool   `json:"isAdmin"`
+	// Disabled: stillgelegt — kein Login, keine Sitzung, aber alles bleibt
+	// zurechenbar. Der Normalfall beim Offboarding (siehe lifecycle_account.go).
+	Disabled bool `json:"disabled"`
 	// OrgRole ist die Instanzrolle: owner | admin | member. Sie kommt aus
 	// org_members und wird mitgeladen, damit die Oberfläche Owner-Aktionen
 	// zeigen kann, ohne dafür eine zweite Abfrage zu brauchen.
@@ -124,14 +127,15 @@ func (s *Server) createSession(userID string) (string, error) {
 
 func (s *Server) userByID(id string) *user {
 	var u user
-	var isAdmin int
-	err := s.db.QueryRow(`SELECT u.id, u.email, u.name, u.color, u.avatar, u.is_admin, COALESCE(m.role, '')
+	var isAdmin, disabled int
+	err := s.db.QueryRow(`SELECT u.id, u.email, u.name, u.color, u.avatar, u.is_admin, u.disabled, COALESCE(m.role, '')
 		FROM users u LEFT JOIN org_members m ON m.user_id = u.id WHERE u.id = ?`, id).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin, &u.OrgRole)
+		Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin, &disabled, &u.OrgRole)
 	if err != nil {
 		return nil
 	}
 	u.IsAdmin = isAdmin != 0
+	u.Disabled = disabled != 0
 	if u.OrgRole == "" {
 		// Konto ohne Organisationszeile (Altbestand): die alte Spalte entscheidet.
 		u.OrgRole = roleMember
@@ -190,6 +194,12 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		u := s.currentUser(r)
 		if u == nil {
 			httpError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		// Stillgelegt heisst stillgelegt — auch wenn beim Abschalten eine Sitzung
+		// durchgerutscht ist oder eine ueber OAuth neu entstand.
+		if u.Disabled {
+			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt.")
 			return
 		}
 		// A read-only API token may not perform mutating HTTP methods. Cookie
@@ -401,14 +411,20 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	defer func() { <-s.loginSem }()
 
 	var id, hash, totpSecret string
-	var totpEnabled int
-	err := s.db.QueryRow(`SELECT id, password_hash, totp_secret, totp_enabled FROM users WHERE email = ?`,
-		strings.ToLower(strings.TrimSpace(body.Email))).Scan(&id, &hash, &totpSecret, &totpEnabled)
+	var totpEnabled, disabled int
+	err := s.db.QueryRow(`SELECT id, password_hash, totp_secret, totp_enabled, disabled FROM users WHERE email = ?`,
+		strings.ToLower(strings.TrimSpace(body.Email))).Scan(&id, &hash, &totpSecret, &totpEnabled, &disabled)
 	if err != nil {
 		hash = dummyHash // verify anyway so timing doesn't reveal account existence
 	}
 	if !verifyPassword(body.Password, hash) || err != nil {
 		httpError(w, http.StatusUnauthorized, "wrong credentials")
+		return
+	}
+	// Stillgelegtes Konto: erst NACH der Passwortprüfung ablehnen, sonst
+	// verriete die Antwort, dass es diese Adresse überhaupt gibt.
+	if disabled != 0 {
+		httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
 		return
 	}
 	// Second factor: password was correct, now require a valid TOTP code. The
@@ -442,7 +458,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(`SELECT u.id, u.email, u.name, u.color, u.avatar, u.is_admin, COALESCE(m.role, '')
+	rows, err := s.db.Query(`SELECT u.id, u.email, u.name, u.color, u.avatar, u.is_admin, u.disabled, COALESCE(m.role, '')
 		FROM users u LEFT JOIN org_members m ON m.user_id = u.id ORDER BY u.created_at`)
 	if err != nil {
 		httpError(w, 500, err.Error())
@@ -452,12 +468,13 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	users := []user{}
 	for rows.Next() {
 		var u user
-		var isAdmin int
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin, &u.OrgRole); err != nil {
+		var isAdmin, disabled int
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin, &disabled, &u.OrgRole); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}
 		u.IsAdmin = isAdmin != 0
+		u.Disabled = disabled != 0
 		if u.OrgRole == "" {
 			u.OrgRole = roleMember
 			if u.IsAdmin {
@@ -688,10 +705,35 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "Der Owner kann nicht gelöscht werden — übertrage die Owner-Rolle zuerst an ein anderes Konto.")
 		return
 	}
+	// Reihenfolge: erst AUFNEHMEN, was am Konto hängt (danach sind die
+	// Mitgliedschaften per CASCADE weg und niemand wüsste es mehr), dann das
+	// Konto löschen, dann ausführen. Andersherum — erst vernichten, dann
+	// löschen — endete ein fehlgeschlagenes DELETE im schlechtestmöglichen
+	// Zustand: Inhalte unwiederbringlich weg, Konto weiter anmeldefähig.
+	me := requestUser(r)
+	plan := s.deletionImpactOf(id)
+	if plan.Err != nil {
+		// Ein leerer Plan sähe aus wie "es hängt nichts dran" und ließe alle
+		// Workspaces dieses Kontos verwaisen. Lieber gar nicht löschen.
+		httpError(w, 500, "Die Folgen dieses Löschvorgangs ließen sich nicht ermitteln — bitte erneut versuchen.")
+		return
+	}
+	target := s.userByID(id)
 	if _, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}
+	// Der Kalender-Abo-Link liegt als app_settings-Zeile und hängt an keinem
+	// Fremdschlüssel — er überlebte das Konto sonst.
+	s.db.Exec(`DELETE FROM app_settings WHERE key = ?`, "ics_token_"+id)
+	s.applyDeletion(plan, id, me.ID, me.Name)
+	if target != nil {
+		s.audit("human", me.ID, me.Name, "delete_user", "", "", target.Name)
+	}
+	// Übergebene und gelöschte Workspaces ändern die Seitenleiste aller offenen
+	// Sitzungen — ohne das Signal zeigte der Owner den neuen Workspace erst nach
+	// einem Neuladen, und gelöschte Seiten blieben sichtbar anklickbar.
+	s.pagesChanged()
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

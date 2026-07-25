@@ -330,6 +330,12 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "workspaces", "auto_join", `auto_join INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.auto_join: %w", err)
 	}
+	// W105: Konto stilllegen statt löschen. Beim Offboarding ist das der
+	// Normalfall — Anmeldung zu, Sitzungen beendet, aber alles bleibt
+	// zurechenbar und nichts verwaist. Löschen bleibt der bewusste Sonderfall.
+	if err := ensureColumn(db, "users", "disabled", `disabled INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return nil, fmt.Errorf("migrate users.disabled: %w", err)
+	}
 	// Record the schema/app version so an operator (and future migrations) can
 	// see what a data dir was last written by. Additive, idempotent.
 	db.Exec(`INSERT INTO schema_meta (key, value) VALUES ('version', ?)

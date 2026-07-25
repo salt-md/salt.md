@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -461,34 +462,20 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tx, err := s.db.Begin()
-	if err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(`DELETE FROM pages_fts WHERE id IN (SELECT id FROM pages WHERE workspace_id = ?)`, wsID); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	if _, err := tx.Exec(`DELETE FROM pages WHERE workspace_id = ?`, wsID); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	// invites carry a workspace_id without a foreign key.
-	tx.Exec(`DELETE FROM invites WHERE workspace_id = ?`, wsID)
-	// workspace_members and tag_colors cascade from this one.
-	if _, err := tx.Exec(`DELETE FROM workspaces WHERE id = ?`, wsID); err != nil {
-		httpError(w, 500, err.Error())
-		return
-	}
-	if err := tx.Commit(); err != nil {
+	// Derselbe Weg wie beim Löschen eines Kontos (siehe purgeWorkspace). Hier
+	// stand vorher eine eigene, fast gleiche Transaktion — nur ohne das
+	// Aufräumen der Uploads und ohne die offenen Editoren zu trennen. Der
+	// häufigste Löschweg war damit ausgerechnet der unvollständigste: die
+	// hochgeladenen Dateien blieben unter ihrer /files/-Adresse abrufbar.
+	if err := s.purgeWorkspace(wsID); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}
 	// The audit entry deliberately outlives the workspace it describes.
-	s.audit("human", uid, requestUser(r).Name, "delete_workspace", "", wsID, name)
-	s.pagesChanged()
+	// Ohne Workspace-Bezug: den Workspace gibt es nicht mehr, und Eintraege zu
+	// verschwundenen Workspaces durchzulassen hiesse, ihre Seitentitel
+	// offenzulegen.
+	s.audit("human", uid, requestUser(r).Name, "delete_workspace", "", "", name)
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
@@ -593,10 +580,44 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 }
 
 // workspaceAdminCount counts admins so we never orphan a workspace.
+// workspaceAdminCount zaehlt nur AKTIVE Admins. Ein stillgelegtes Konto ist
+// kein Verantwortlicher — mitgezaehlt haette es den Workspace blockiert: die
+// Aufraeum-Ansicht meldete "ohne Verantwortlichen", waehrend das Entfernen oder
+// Degradieren desselben Kontos an "letzter Admin" scheiterte.
 func (s *Server) workspaceAdminCount(wsID string) int {
 	var n int
-	s.db.QueryRow(`SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ? AND role = 'admin'`, wsID).Scan(&n)
+	s.db.QueryRow(`SELECT COUNT(*) FROM workspace_members m JOIN users u ON u.id = m.user_id
+		WHERE m.workspace_id = ? AND m.role = 'admin' AND u.disabled = 0`, wsID).Scan(&n)
 	return n
+}
+
+// otherActiveAdmins zaehlt die aktiven Admins AUSSER dem Genannten.
+//
+// Die Frage vor jedem Entfernen und Degradieren lautet nicht "wie viele Admins
+// hat der Workspace", sondern "bleibt danach einer uebrig". Mit der blossen
+// Zahl kippte es an beiden Enden: ein stillgelegter Admin zaehlte frueher mit
+// und verdeckte, dass niemand mehr handlungsfaehig war — zaehlt er nicht mehr
+// mit, liess er sich bei genau einem verbliebenen aktiven Admin ploetzlich
+// nicht mehr entfernen, obwohl sein Weggang niemandem fehlt.
+func (s *Server) otherActiveAdmins(wsID, exceptUser string) int {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM workspace_members m JOIN users u ON u.id = m.user_id
+		WHERE m.workspace_id = ? AND m.role = 'admin' AND u.disabled = 0 AND m.user_id != ?`,
+		wsID, exceptUser).Scan(&n)
+	return n
+}
+
+// personalOwner nennt den Menschen, dem ein persoenlicher Bereich gehoert
+// (leer, wenn es kein persoenlicher Bereich ist).
+//
+// Sein Zugang zu diesem Bereich ist unantastbar: er laesst sich weder
+// degradieren noch entfernen. Ohne diese Sperre reichten zwei erlaubte
+// Aufrufe, um jemanden aus seinem EIGENEN Bereich auszusperren — er sah ihn
+// danach in keiner Liste mehr, und neu angelegt wird er nicht.
+func (s *Server) personalOwner(wsID string) string {
+	var owner string
+	s.db.QueryRow(`SELECT owner_id FROM workspaces WHERE id = ? AND is_personal = 1`, wsID).Scan(&owner)
+	return owner
 }
 
 // handleUpdateMember changes a member's role (workspace admin only). It refuses
@@ -620,7 +641,11 @@ func (s *Server) handleUpdateMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := normalizeRole(body.Role)
-	if role != "admin" && s.workspaceRole(target, wsID) == "admin" && s.workspaceAdminCount(wsID) <= 1 {
+	if role != "admin" && target == s.personalOwner(wsID) {
+		httpError(w, 403, "Das ist der persönliche Bereich dieser Person — ihre Rolle darin bleibt.")
+		return
+	}
+	if role != "admin" && s.workspaceRole(target, wsID) == "admin" && s.otherActiveAdmins(wsID, target) == 0 {
 		httpError(w, 400, "cannot demote the last admin")
 		return
 	}
@@ -656,9 +681,38 @@ func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 404, "member not found")
 		return
 	}
-	if s.workspaceRole(target, wsID) == "admin" && s.workspaceAdminCount(wsID) <= 1 {
-		httpError(w, 400, "cannot remove the last admin")
+	if target == s.personalOwner(wsID) {
+		httpError(w, 403, "Das ist der persönliche Bereich dieser Person — sie kann darin nicht entfernt werden.")
 		return
+	}
+	if s.workspaceRole(target, wsID) == "admin" && s.otherActiveAdmins(wsID, target) == 0 {
+		// Die alte Meldung sagte nur, dass es nicht geht — nicht, was zu tun ist.
+		// Beides sind gangbare Wege, und ohne den Hinweis sucht man danach.
+		if target == me {
+			httpError(w, 400, "Du bist der letzte Admin dieses Workspace. Mach zuerst jemand anderen zum Admin — oder lösch den Workspace, wenn er weg soll.")
+		} else {
+			httpError(w, 400, "Das ist der letzte Admin dieses Workspace. Mach zuerst jemand anderen zum Admin.")
+		}
+		return
+	}
+	// Wer geht, lässt seine PRIVATEN Seiten zurück: für alle außer den
+	// Workspace-Admins sind sie danach unsichtbar. Beim Verlassen des eigenen
+	// Kontos ist das eine Überraschung, die vermeidbar ist — der Server nennt
+	// die Zahl, die Oberfläche fragt damit nach.
+	if r.URL.Query().Get("confirmPrivate") != "1" {
+		var privatePages int
+		s.db.QueryRow(`SELECT COUNT(*) FROM pages WHERE workspace_id = ? AND owner_id = ? AND visibility = 'private' AND trashed_at IS NULL`,
+			wsID, target).Scan(&privatePages)
+		if privatePages > 0 {
+			if target == me {
+				httpError(w, 409, fmt.Sprintf("Du hast hier %d private Seite(n) liegen. Sie bleiben im Workspace und sind danach nur noch für dessen Admins sichtbar.", privatePages))
+			} else {
+				// Beim Entfernen eines ANDEREN trifft die Person die Entscheidung
+				// nicht selbst — umso mehr gehört der Hinweis vor den Klick.
+				httpError(w, 409, fmt.Sprintf("Diese Person hat hier %d private Seite(n) liegen. Sie bleiben im Workspace und sind danach nur noch für dessen Admins sichtbar.", privatePages))
+			}
+			return
+		}
 	}
 	s.db.Exec(`DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?`, wsID, target)
 	writeJSON(w, map[string]bool{"ok": true})
@@ -769,12 +823,16 @@ func (s *Server) handlePublicPage(w http.ResponseWriter, r *http.Request) {
 // anfangen darf, seit er dort keine Rollen mehr ändern kann.
 func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 	me := requestUser(r)
-	query := `SELECT id, name FROM workspaces ORDER BY name`
+	// Persoenliche Bereiche bleiben draussen — auch fuer den Owner. Sie gehoeren
+	// einem Menschen, nicht der Instanz; wer hier Rollen vergeben koennte, haette
+	// genau die Handhabe, die es nicht geben soll. Wer jemanden hineinlassen
+	// will, tut das selbst ueber die Mitgliederverwaltung seines Bereichs.
+	query := `SELECT id, name FROM workspaces WHERE is_personal = 0 ORDER BY name`
 	args := []any{}
 	if !s.isOwner(me.ID) {
 		query = `SELECT w.id, w.name FROM workspaces w
 			JOIN workspace_members m ON m.workspace_id = w.id
-			WHERE m.user_id = ? AND m.role = 'admin' ORDER BY w.name`
+			WHERE m.user_id = ? AND m.role = 'admin' AND w.is_personal = 0 ORDER BY w.name`
 		args = append(args, me.ID)
 	}
 	wsRows, err := s.db.Query(query, args...)
@@ -865,10 +923,21 @@ func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 403, "Nur der Owner oder ein Admin dieses Workspace kann seine Mitglieder ändern.")
 		return
 	}
+	// Ein persönlicher Bereich wird hier NIE vergeben — auch nicht vom Owner.
+	// Sonst wäre der Ausschluss aus der Zugriffs-Übersicht bloße Kosmetik: ein
+	// Strohmann-Konto in Bobs Bereich, angemeldet, fertig — dauerhaft, ohne
+	// Befristung und ohne dass Bob etwas davon sähe. Wer jemanden hineinlassen
+	// will, tut das selbst über die Mitgliederverwaltung seines Bereichs.
+	var personalWS int
+	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, body.WorkspaceID).Scan(&personalWS)
+	if personalWS != 0 && !s.isWorkspaceAdmin(me.ID, body.WorkspaceID) {
+		httpError(w, 403, "Ein persönlicher Bereich wird nicht von außen vergeben — nur sein Eigentümer lädt dort ein.")
+		return
+	}
 	// Den letzten Admin eines Workspace nie entfernen oder degradieren — sonst
 	// steht ein Workspace ohne Verantwortlichen da.
 	demoting := body.Role != "admin" && s.workspaceRole(body.UserID, body.WorkspaceID) == "admin"
-	if demoting && s.workspaceAdminCount(body.WorkspaceID) <= 1 {
+	if demoting && s.otherActiveAdmins(body.WorkspaceID, body.UserID) == 0 {
 		httpError(w, 400, "cannot remove the last admin of "+wsName)
 		return
 	}

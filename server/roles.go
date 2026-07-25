@@ -95,10 +95,13 @@ func (s *Server) migrateOrg() error {
 	// Der dienstälteste Admin wird Owner — er hat die Instanz aufgesetzt.
 	// Gibt es keinen Admin (sollte nicht vorkommen), fällt es auf den
 	// dienstältesten Nutzer zurück, damit die Instanz nie ownerlos ist.
+	// disabled = 0: ein stillgelegtes Konto zum Owner zu machen ist eine
+	// Sackgasse — es kann sich nicht anmelden, und Owner lassen sich nicht
+	// stilllegen, also auch nicht wieder aktivieren.
 	var ownerID string
-	s.db.QueryRow(`SELECT id FROM users WHERE is_admin = 1 ORDER BY created_at LIMIT 1`).Scan(&ownerID)
+	s.db.QueryRow(`SELECT id FROM users WHERE is_admin = 1 AND disabled = 0 ORDER BY created_at LIMIT 1`).Scan(&ownerID)
 	if ownerID == "" {
-		s.db.QueryRow(`SELECT id FROM users ORDER BY created_at LIMIT 1`).Scan(&ownerID)
+		s.db.QueryRow(`SELECT id FROM users WHERE disabled = 0 ORDER BY created_at LIMIT 1`).Scan(&ownerID)
 	}
 	rows, err := s.db.Query(`SELECT id, is_admin FROM users`)
 	if err != nil {
@@ -286,11 +289,79 @@ func (s *Server) addOrgMember(userID string, isAdmin bool) {
 func (s *Server) ownerOnly(next http.HandlerFunc) http.HandlerFunc {
 	return s.auth(func(w http.ResponseWriter, r *http.Request) {
 		if !s.isOwner(requestUser(r).ID) {
-			httpError(w, http.StatusForbidden, "owner only")
+			httpError(w, http.StatusForbidden, "Das kann nur der Owner dieser Instanz.")
 			return
 		}
 		next(w, r)
 	})
+}
+
+// handleTransferOwner übergibt die Instanz an ein anderes Konto.
+//
+// Ohne diesen Weg war die Owner-Rolle eine Einbahnstraße: sie ließ sich nicht
+// stilllegen, nicht löschen und nirgends neu vergeben. Verließ der Owner das
+// Unternehmen, blieb nur ein Eingriff von Hand in der Datenbank — während
+// gleich zwei Fehlermeldungen dem Admin rieten, "die Owner-Rolle zuerst zu
+// übertragen".
+//
+// Bedingungen bewusst eng: nur der Owner selbst, nur an ein aktives
+// Instanz-Admin-Konto, und die Übergabe ist vollständig — danach ist der alte
+// Owner ein gewöhnlicher Admin. Ein zweiter Owner darf nie entstehen, sonst
+// wäre "genau einer trägt die Verantwortung" nicht mehr wahr.
+func (s *Server) handleTransferOwner(w http.ResponseWriter, r *http.Request) {
+	me := requestUser(r)
+	var body struct {
+		UserID string `json:"userId"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	target := s.userByID(body.UserID)
+	if target == nil {
+		httpError(w, 404, "user not found")
+		return
+	}
+	if target.ID == me.ID {
+		httpError(w, 400, "Du bist bereits der Owner.")
+		return
+	}
+	if target.Disabled {
+		httpError(w, 400, "Ein stillgelegtes Konto kann die Instanz nicht übernehmen.")
+		return
+	}
+	if !target.IsAdmin {
+		httpError(w, 400, "Die Instanz übernimmt nur ein Konto, das schon Instanz-Admin ist — mach es zuerst dazu.")
+		return
+	}
+	orgID := s.defaultOrg()
+	tx, err := s.db.Begin()
+	if err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	defer tx.Rollback()
+	// Erst herunterstufen, dann befördern: andersherum gäbe es einen Moment mit
+	// zwei Owner-Zeilen.
+	if _, err := tx.Exec(`UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ?`, roleAdmin, orgID, me.ID); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if _, err := tx.Exec(`INSERT INTO org_members (org_id, user_id, role) VALUES (?, ?, ?)
+		ON CONFLICT(org_id, user_id) DO UPDATE SET role = excluded.role`, orgID, target.ID, roleOwner); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	if err := tx.Commit(); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	// Laufende Notfallzugriffe des alten Owners enden mit seiner Rolle — sonst
+	// behielte er nach der Übergabe noch bis zu zwei Stunden Lesezugriff auf
+	// fremde Workspaces.
+	s.db.Exec(`UPDATE break_glass SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, nowFixed(), me.ID)
+	s.audit("human", me.ID, me.Name, "transfer_owner", "", "", target.Name)
+	writeJSON(w, map[string]any{"ok": true, "owner": target.Name})
 }
 
 // ---- Notfallzugriff -------------------------------------------------------
@@ -339,6 +410,19 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.isMember(u.ID, wsID) {
 		httpError(w, 400, "Du bist bereits Mitglied dieses Workspace — ein Notfallzugriff ist nicht nötig.")
+		return
+	}
+	// Ein persönlicher Bereich ist auch für den Notfallzugriff tabu. Sonst wäre
+	// die ganze Zusage hohl: der Owner erfährt die Id ohnehin (Lösch-Folgen,
+	// Aufräum-Ansicht), und mit Notfallzugriff stünde ihm anschließend der
+	// vollständige Export offen — dauerhaft genug für zwei Stunden, mit einer
+	// selbst geschriebenen Begründung. Wer die Instanz betreibt, kommt im
+	// Ernstfall über die Datensicherung an alles; das ist der ehrliche Weg und
+	// er hinterlässt eine Spur, die nicht so aussieht, als sei sie erlaubt.
+	var personal int
+	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
+	if personal != 0 {
+		httpError(w, 403, "Ein persönlicher Bereich ist auch im Notfall nicht einsehbar — er gehört zu genau einem Konto.")
 		return
 	}
 	expires := time.Now().UTC().Add(breakGlassTTL).Format(tsFixed)

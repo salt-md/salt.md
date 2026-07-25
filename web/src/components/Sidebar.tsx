@@ -10,6 +10,7 @@ import IconPicker from './IconPicker';
 import { PageIcon } from '../pageIcon';
 import AgentConnectModal from './AgentConnect';
 import BreakGlassLog from './BreakGlassLog';
+import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
 import { Sun, Moon, Search, Network, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert } from 'lucide-react';
 import { tagColorClass } from '../tags';
@@ -696,6 +697,7 @@ export default function Sidebar({
   };
 
   const [bgLogOpen, setBgLogOpen] = useState(false);
+  const [strandedOpen, setStrandedOpen] = useState(false);
   // "Für alle öffnen": neue Konten treten diesem Workspace automatisch bei.
   // Ersetzt die alte stille Regel, nach der jeder Neuzugang im ältesten
   // Workspace landete.
@@ -826,6 +828,15 @@ export default function Sidebar({
               {canCreateWorkspace && (
                 <button className="menu-item" onClick={newWorkspace}>
                   <Plus size={15} /> Neuer Workspace
+                </button>
+              )}
+              {user.orgRole === 'owner' && (
+                <button
+                  className="menu-item"
+                  title="Workspaces, um die sich niemand mehr kümmern kann"
+                  onClick={() => { setWsMenuOpen(false); setStrandedOpen(true); }}
+                >
+                  <ShieldAlert size={15} /> Ohne Verantwortlichen…
                 </button>
               )}
               {activeWs?.role === 'admin' && workspaces.length > 1 && (
@@ -1050,6 +1061,9 @@ export default function Sidebar({
             onClose={() => setMembersOpen(false)}
             onChanged={onWorkspacesChanged}
           />
+        )}
+        {strandedOpen && (
+          <StrandedWorkspaces onClose={() => setStrandedOpen(false)} onChanged={onWorkspacesChanged} />
         )}
         {bgLogOpen && currentWs && (
           <BreakGlassLog

@@ -77,6 +77,12 @@ type collabConn struct {
 	done chan struct{}
 	once sync.Once
 
+	// userID: wer an dieser Verbindung haengt. Die Rechte werden beim Upgrade
+	// geprueft und danach pro Schreibrahmen — aber ein stillgelegtes Konto
+	// wuerde davon nichts merken: seine Sitzungen und Token sind geloescht,
+	// dieser Socket lief weiter. Mit der Id laesst er sich gezielt schliessen.
+	userID string
+
 	// Awareness bookkeeping, guarded by the room's mu. The server never
 	// interprets CRDT data, but presence must not depend on the client saying
 	// goodbye (a killed tab never does): we remember which awareness client
@@ -361,6 +367,35 @@ func (s *Server) resetYjsDoc(pageID string) {
 
 // reset closes a page's editors without touching the DB (used when the page
 // is trashed/deleted — the rows are removed by the caller's transaction).
+// dropUser schliesst alle offenen Verbindungen eines Kontos.
+//
+// Aufgerufen beim Stilllegen: "Sitzungen enden sofort" muss auch fuer einen
+// offenen Editor-Tab gelten, sonst liest und schreibt das Konto weiter, bis
+// jemand das Fenster schliesst.
+func (h *collabHub) dropUser(userID string) int {
+	if userID == "" {
+		return 0
+	}
+	h.mu.Lock()
+	var doomed []*collabConn
+	for _, room := range h.rooms {
+		room.mu.Lock()
+		for c := range room.conns {
+			if c.userID == userID {
+				doomed = append(doomed, c)
+			}
+		}
+		room.mu.Unlock()
+	}
+	h.mu.Unlock()
+	// Ausserhalb der Sperren: shutdown schliesst zwar asynchron, aber die
+	// Aufraeumarbeit laeuft ueber leave(), das hub.mu selbst nimmt.
+	for _, c := range doomed {
+		c.shutdown(websocket.StatusPolicyViolation, "account disabled")
+	}
+	return len(doomed)
+}
+
 func (h *collabHub) reset(pageID string) {
 	h.mu.Lock()
 	room := h.rooms[pageID]
@@ -407,7 +442,7 @@ func (s *Server) handleCollab(w http.ResponseWriter, r *http.Request) {
 	// above realistic doc sizes while still bounding a malicious client.
 	ws.SetReadLimit(wsReadLimit)
 	ctx := r.Context()
-	conn := &collabConn{ws: ws, out: make(chan outMsg, outBuffer), done: make(chan struct{}), aware: map[uint64]uint64{}}
+	conn := &collabConn{ws: ws, out: make(chan outMsg, outBuffer), done: make(chan struct{}), aware: map[uint64]uint64{}, userID: requestUser(r).ID}
 	go conn.writeLoop(ctx)
 	go conn.pingLoop(ctx)
 

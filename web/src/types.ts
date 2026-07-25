@@ -68,6 +68,8 @@ export interface User {
   isAdmin: boolean;
   /** Instanzrolle: owner betreibt die Instanz, admin verwaltet Menschen. */
   orgRole?: 'owner' | 'admin' | 'member';
+  /** Stillgelegt: keine Anmeldung, aber alles bleibt zurechenbar. */
+  disabled?: boolean;
 }
 
 export interface Me {
