@@ -92,12 +92,34 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 500, err.Error())
 		return
 	}
-	defer rows.Close()
-	edges := []map[string]string{}
+	type edge struct{ src, tgt string }
+	var scanned []edge
 	for rows.Next() {
-		var src, tgt string
-		if rows.Scan(&src, &tgt) == nil {
-			edges = append(edges, map[string]string{"source": src, "target": tgt})
+		var e edge
+		if rows.Scan(&e.src, &e.tgt) == nil {
+			scanned = append(scanned, e)
+		}
+	}
+	rows.Close() // erst leeren, dann per-Zeile prüfen (eine DB-Verbindung)
+
+	// Wie die Backlinks auch hier je Seite prüfen: der Workspace-Filter allein
+	// lieferte Kanten von und zu privaten Seiten anderer. Titel standen nicht
+	// darin, aber die Ids — und die waren der fehlende Baustein, um über
+	// Relationen oder parentId gezielt auf eine fremde Seite zu zeigen.
+	uid := requestUser(r).ID
+	readable := map[string]bool{}
+	canSee := func(id string) bool {
+		if v, ok := readable[id]; ok {
+			return v
+		}
+		v := s.canRead(uid, id)
+		readable[id] = v
+		return v
+	}
+	edges := []map[string]string{}
+	for _, e := range scanned {
+		if canSee(e.src) && canSee(e.tgt) {
+			edges = append(edges, map[string]string{"source": e.src, "target": e.tgt})
 		}
 	}
 	writeJSON(w, map[string]any{"edges": edges})

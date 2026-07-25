@@ -126,9 +126,23 @@ func isNumeric(s string) bool {
 // collectionRowsQuery filters, sorts and paginates a collection's rows in
 // SQLite and injects computed (rollup/formula/relation) values. Shared by the
 // REST handler and the MCP query_rows tool so both behave identically.
-func (s *Server) collectionRowsQuery(colID string, filters []rowFilter, sortParam string, limit, offset int) (list []map[string]any, total int, err error) {
+func (s *Server) collectionRowsQuery(u *user, colID string, filters []rowFilter, sortParam string, limit, offset int) (list []map[string]any, total int, err error) {
 	where := []string{"parent_id = ?", "trashed_at IS NULL"}
 	args := []any{colID}
+	// Private Zeilen anderer ausblenden. Der Sichtbarkeits-Schalter im
+	// Seitenkopf gilt auch für Datenbankzeilen, aber diese Abfrage hat ihn nie
+	// beachtet: jedes Workspace-Mitglied las über die Zeilenliste Titel und
+	// Eigenschaften ALLER Zeilen, auch der als privat markierten.
+	//
+	// Die Bedingung gehört ins SQL, nicht hinter das LIMIT: nachträgliches
+	// Filtern würde Seitenweise und Gesamtzahl verfälschen. Workspace-Admins
+	// sehen weiterhin alles — dieselbe Regel wie in forbiddenPrivateAncestor.
+	wsAdmin := 0
+	if s.isWorkspaceAdmin(u.ID, s.pageWorkspace(colID)) {
+		wsAdmin = 1
+	}
+	where = append(where, "(? = 1 OR visibility != 'private' OR owner_id = ?)")
+	args = append(args, wsAdmin, u.ID)
 	for _, f := range filters {
 		if !safePropID(f.Prop) {
 			continue
@@ -216,9 +230,16 @@ func (s *Server) collectionRowsQuery(colID string, filters []rowFilter, sortPara
 
 	// Compute rollups and formulas server-side (relations resolved against the
 	// target rows), so they're correct and consistent regardless of client.
+	//
+	// Ab hier wird wieder abgefragt (das Schema, und in computeDerived je
+	// Zielseite ein canRead), obwohl `defer rows.Close()` erst beim Verlassen
+	// greift. Das geht nur, weil die Schleife oben bis zum Ende durchläuft:
+	// database/sql schließt die Rows dann selbst und gibt die — einzige —
+	// Verbindung frei. Wer hier ein `break` einbaut, hält den Cursor offen und
+	// legt damit den ganzen Server still.
 	var schemaJSON string
 	if s.db.QueryRow(`SELECT schema FROM collections WHERE page_id = ?`, colID).Scan(&schemaJSON) == nil {
-		s.computeDerived(parseSchema(schemaJSON), list)
+		s.computeDerived(u, parseSchema(schemaJSON), list)
 	}
 	return list, total, nil
 }
@@ -253,7 +274,7 @@ func (s *Server) handleCollectionRows(w http.ResponseWriter, r *http.Request) {
 		}
 		filters = append(filters, rowFilter{Prop: propID, Op: op, Value: value})
 	}
-	list, total, err := s.collectionRowsQuery(colID, filters, q.Get("sort"), limit, offset)
+	list, total, err := s.collectionRowsQuery(requestUser(r), colID, filters, q.Get("sort"), limit, offset)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return

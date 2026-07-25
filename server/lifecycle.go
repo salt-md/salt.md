@@ -27,10 +27,35 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 	if len(ids) == 0 {
 		return "", sql.ErrNoRows
 	}
+	// Nur kopieren, was der Aufrufer auch sehen darf. subtreeIDs sammelt den
+	// ganzen Teilbaum ungefiltert, autorisiert war bisher nur die Wurzel — eine
+	// FREMDE private Unterseite wurde also mitkopiert. Und weil die Kopie
+	// owner_id auf den Kopierenden setzt, die Sichtbarkeit aber 'private'
+	// bleibt, gehörte sie danach ihm: aus "kein Zugriff" wurde durch
+	// Duplizieren "mein Eigentum". Ausgefilterte Zweige entfallen samt ihren
+	// Nachfahren; deren Eltern-Verweis zeigte sonst ins Leere.
+	readable := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if s.canRead(userID, id) {
+			readable = append(readable, id)
+		}
+	}
+	ids = readable
+	if len(ids) == 0 {
+		return "", sql.ErrNoRows
+	}
 	// Load every page in the subtree into memory (drain before further queries;
 	// single DB connection).
+	//
+	// Eingefügt wird später in der Reihenfolge von `ids` — und die kommt aus der
+	// rekursiven Abfrage, also Eltern vor Kindern. Die Reihenfolge DIESER
+	// Abfrage taugt dafür nicht: `WHERE id IN (…)` läuft über den Index und
+	// liefert nach Id sortiert. Ist die Id eines Kindes kleiner als die seines
+	// Elternteils, wurde es zuerst eingefügt und verwies auf einen Elternteil,
+	// den es noch nicht gab — die Kopie brach dann mit einem
+	// Fremdschlüsselfehler ab. Weil Ids zufällig sind, passierte das etwa jedes
+	// zweite Mal.
 	rowsByID := map[string]*dupRow{}
-	var order []string
 	q := `SELECT id, parent_id, title, icon, cover, content, type, props, visibility, position, workspace_id
 	      FROM pages WHERE id IN (` + placeholders(len(ids)) + `)`
 	args := make([]any, len(ids))
@@ -41,20 +66,34 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 	if err != nil {
 		return "", err
 	}
-	var workspaceID string
+	// Der Workspace der WURZEL zaehlt. Frueher gewann hier schlicht die zuletzt
+	// gescannte Zeile — bei einem ueber Workspace-Grenzen verbogenen Baum landete
+	// die ganze Kopie im falschen Workspace.
+	wsByID := map[string]string{}
 	for rows.Next() {
 		var d dupRow
 		var parent sql.NullString
-		if err := rows.Scan(&d.id, &parent, &d.title, &d.icon, &d.cover, &d.content, &d.typ, &d.props, &d.visibility, &d.position, &workspaceID); err != nil {
+		var rowWS string
+		if err := rows.Scan(&d.id, &parent, &d.title, &d.icon, &d.cover, &d.content, &d.typ, &d.props, &d.visibility, &d.position, &rowWS); err != nil {
 			rows.Close()
 			return "", err
 		}
 		d.parentID = parent.String
 		d.hasParent = parent.Valid
 		rowsByID[d.id] = &d
-		order = append(order, d.id)
+		wsByID[d.id] = rowWS
 	}
 	rows.Close()
+	workspaceID := wsByID[rootID]
+
+	// Eltern vor Kindern: die Reihenfolge aus subtreeIDs, beschränkt auf das,
+	// was wirklich geladen wurde.
+	order := make([]string, 0, len(rowsByID))
+	for _, id := range ids {
+		if _, ok := rowsByID[id]; ok {
+			order = append(order, id)
+		}
+	}
 
 	// Which of the copied pages are collections (to copy their schema/views).
 	collectionSchemas := map[string][2]string{}
@@ -99,7 +138,13 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 		} else if np, ok := newID2[d.parentID]; ok {
 			parent = np
 		} else if d.hasParent {
-			parent = d.parentID // shouldn't happen; keep original parent as fallback
+			// Der Elternteil wurde nicht mitkopiert — entweder weil er
+			// ausgefiltert wurde (unlesbar) oder weil der Baum über
+			// Workspace-Grenzen verbogen ist. Früher wurde die Kopie hier an den
+			// ORIGINAL-Elternteil gehängt: bei einem unlesbaren privaten
+			// Elternteil landete sie damit in einem fremden Teilbaum, mit dem
+			// Kopierenden als Eigentümer. Solche Zweige gehören übersprungen.
+			continue
 		}
 		if _, err := s.db.Exec(`INSERT INTO pages (id, parent_id, title, icon, cover, content, position, created_at, updated_at, type, props, workspace_id, owner_id, visibility)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,

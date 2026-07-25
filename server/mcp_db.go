@@ -28,7 +28,7 @@ func (s *Server) mcpGetSchema(pageID string) (string, error) {
 
 // mcpQueryRows filters/sorts/paginates a database's rows server-side and returns
 // compact JSON including computed rollup/formula values.
-func (s *Server) mcpQueryRows(pageID string, filters []rowFilter, sort string, limit, offset int) (string, error) {
+func (s *Server) mcpQueryRows(u *user, pageID string, filters []rowFilter, sort string, limit, offset int) (string, error) {
 	var isCollection int
 	if s.db.QueryRow(`SELECT COUNT(*) FROM collections WHERE page_id = ?`, pageID).Scan(&isCollection); isCollection == 0 {
 		return "", fmt.Errorf("page %q is not a database", pageID)
@@ -41,7 +41,7 @@ func (s *Server) mcpQueryRows(pageID string, filters []rowFilter, sort string, l
 	}
 	// Filterwerte dürfen ebenfalls als Options-Name kommen (siehe set_properties).
 	filters = s.resolveFilterValues(pageID, filters)
-	rows, total, err := s.collectionRowsQuery(pageID, filters, sort, limit, offset)
+	rows, total, err := s.collectionRowsQuery(u, pageID, filters, sort, limit, offset)
 	if err != nil {
 		return "", err
 	}
@@ -187,6 +187,14 @@ func (s *Server) mcpMovePage(userID, pageID, parentID string) (string, error) {
 		}
 		if !s.canWrite(userID, parentID) {
 			return "", fmt.Errorf("parent page %q not found", parentID)
+		}
+		// Dieselbe Regel wie im REST-Handler: nur innerhalb des eigenen
+		// Workspace umhängen. Fehlte sie hier, wäre die Grenze über einen
+		// Agenten umgehbar — und der entstehende Mischbaum (Seite in A unter
+		// einem Elternteil in B) hebelt Sichtbarkeitsprüfungen aus, die den
+		// Workspace der jeweiligen Seite heranziehen.
+		if s.pageWorkspace(parentID) != s.pageWorkspace(pageID) {
+			return "", fmt.Errorf("a page can only be re-parented within its own workspace")
 		}
 	}
 

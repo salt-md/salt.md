@@ -322,7 +322,8 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 	// Ein blosses UPDATE workspace_id würde Datenbankzeilen von ihrer Datenbank
 	// trennen.
 	if body.WorkspaceID != nil && *body.WorkspaceID != "" {
-		n, err := s.moveSubtreeToWorkspace(requestUser(r).ID, id, *body.WorkspaceID)
+		n, err := s.moveSubtreeToWorkspace(requestUser(r).ID, id, *body.WorkspaceID,
+			func(ws string) bool { return s.tokenReachesWorkspace(r, ws) })
 		if err != nil {
 			httpError(w, 400, err.Error())
 			return
@@ -423,6 +424,32 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 		sets = append(sets, "props = ?")
 		args = append(args, string(body.Props))
 		metaChanged = true
+	}
+
+	// Ein neuer Elternteil braucht Schreibrecht auf den Elternteil UND denselben
+	// Workspace. Geprüft wurde bisher nur, dass es ihn gibt — damit konnte man
+	// eine eigene Seite unter eine fremde hängen: im Zielworkspace tauchte sie
+	// in Datenbank-Ansichten, Markdown-Export und Kalender-Feed auf, denn die
+	// listen Kinder ohne eigene Rechteprüfung. Innerhalb eines Workspace war es
+	// der Weg, eine private Seite unter eine Collection zu hängen und so allen
+	// Mitgliedern zu zeigen.
+	//
+	// Vor tx.Begin(): die Verbindungsgrenze ist eins, eine Abfrage in einer
+	// offenen Transaktion würde sich selbst blockieren.
+	if len(body.ParentID) > 0 {
+		if t := bytes.TrimSpace(body.ParentID); string(t) != "null" {
+			var newParent string
+			if json.Unmarshal(t, &newParent) == nil && newParent != "" {
+				if !s.canWriteReq(r, newParent) {
+					httpError(w, 400, "parent page not found")
+					return
+				}
+				if s.pageWorkspace(newParent) != s.pageWorkspace(id) {
+					httpError(w, 400, "a page can only be re-parented within its own workspace")
+					return
+				}
+			}
+		}
 	}
 
 	// Cycle check and update must be atomic: with concurrent moves a

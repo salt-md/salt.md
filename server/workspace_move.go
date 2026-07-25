@@ -24,7 +24,10 @@ import (
 // Freigabelinks — die hängen alle an der Seiten-Id, und die ändert sich nicht.
 
 // moveSubtreeToWorkspace zieht pageID samt Unterbaum in den Zielworkspace.
-func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string) (int, error) {
+// tokenOK meldet, ob ein workspace-beschraenktes API-Token den Zielworkspace
+// erreichen darf. Der Aufrufer reicht die Pruefung herein, weil hier nur die
+// Nutzer-Id ankommt, die Einschraenkung aber am Token haengt.
+func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string, tokenOK func(string) bool) (int, error) {
 	var curWS string
 	var title string
 	if err := s.db.QueryRow(`SELECT workspace_id, title FROM pages WHERE id = ? AND trashed_at IS NULL`, pageID).Scan(&curWS, &title); err != nil {
@@ -34,6 +37,9 @@ func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string) (int, e
 		return 0, fmt.Errorf("page %q is already in that workspace", title)
 	}
 	if !s.isMember(userID, targetWS) {
+		return 0, fmt.Errorf("workspace %q not found", targetWS)
+	}
+	if !tokenOK(targetWS) {
 		return 0, fmt.Errorf("workspace %q not found", targetWS)
 	}
 	if role := s.workspaceRole(userID, targetWS); role == "viewer" {
@@ -46,6 +52,17 @@ func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string) (int, e
 	}
 	if len(ids) == 0 {
 		ids = []string{pageID}
+	}
+	// Nichts umziehen, was der Umziehende nicht sehen darf. Der Unterbaum kann
+	// FREMDE private Seiten enthalten; im Zielworkspace ist er womöglich Admin,
+	// und Workspace-Admins sehen private Seiten. Der Umzug wäre damit ein Weg,
+	// sich fremde Notizen lesbar zu machen. Zurücklassen geht auch nicht — die
+	// Seiten hingen dann an einem Elternteil in einem anderen Workspace. Also
+	// abbrechen und den Grund nennen.
+	for _, id := range ids {
+		if !s.canRead(userID, id) {
+			return 0, fmt.Errorf("this subtree contains private pages owned by someone else — they cannot be moved along")
+		}
 	}
 
 	tx, err := s.db.Begin()
@@ -109,8 +126,9 @@ func (s *Server) mcpCreateWorkspace(userID, name string) (string, error) {
 }
 
 // mcpMoveToWorkspace ist die MCP-Fassade des Umzugs.
-func (s *Server) mcpMoveToWorkspace(userID, pageID, targetWS string) (string, error) {
-	n, err := s.moveSubtreeToWorkspace(userID, pageID, targetWS)
+func (s *Server) mcpMoveToWorkspace(u *user, pageID, targetWS string) (string, error) {
+	userID := u.ID
+	n, err := s.moveSubtreeToWorkspace(userID, pageID, targetWS, u.tokenCanReach)
 	if err != nil {
 		return "", err
 	}

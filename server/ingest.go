@@ -52,6 +52,10 @@ type ingestJob struct {
 	Target   string   `json:"target"`
 	Started  string   `json:"started_at"`
 	Finished string   `json:"finished_at,omitempty"`
+	// OwnerID: die Registry ist prozessweit und die Auftraege enthalten
+	// Zielangaben und Zeilentitel. Ohne Eigentuemer konnte jeder mit einer
+	// Auftrags-Id den Stand eines fremden Imports lesen.
+	OwnerID string `json:"-"`
 }
 
 type ingestRegistry struct {
@@ -530,7 +534,9 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 	var parentID, workspaceID, target string
 	var nameToID map[string]string
 	if spec.DatabaseID != "" {
-		if !s.canWrite(u.ID, spec.DatabaseID) || u.TokenScope == "read" {
+		// tokenCanReach zusaetzlich: canWrite kennt die Workspace-Grenze eines
+		// eingeschraenkten Tokens nicht, sonst schriebe es ausserhalb seines Bereichs.
+		if !s.canWrite(u.ID, spec.DatabaseID) || u.TokenScope == "read" || !u.tokenCanReach(s.pageWorkspace(spec.DatabaseID)) {
 			return "", fmt.Errorf("database %q not found", spec.DatabaseID)
 		}
 		schema, _, err := s.loadCollection(spec.DatabaseID)
@@ -564,7 +570,7 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 		parentID = spec.DatabaseID
 		target = "database " + spec.DatabaseID
 	} else if spec.ParentID != "" {
-		if !s.canWrite(u.ID, spec.ParentID) || u.TokenScope == "read" {
+		if !s.canWrite(u.ID, spec.ParentID) || u.TokenScope == "read" || !u.tokenCanReach(s.pageWorkspace(spec.ParentID)) {
 			return "", fmt.Errorf("parent page %q not found", spec.ParentID)
 		}
 		if err := s.db.QueryRow(`SELECT workspace_id FROM pages WHERE id = ? AND trashed_at IS NULL`,
@@ -603,7 +609,7 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 
 	job := &ingestJob{
 		ID: newID(), Status: "running", Total: len(items),
-		Target: target, Started: now(), Note: note,
+		Target: target, Started: now(), Note: note, OwnerID: u.ID,
 	}
 	s.ingest.add(job)
 	go s.runIngest(job.ID, u.ID, parentID, workspaceID, items, nameToID)

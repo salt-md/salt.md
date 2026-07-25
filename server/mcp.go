@@ -912,6 +912,9 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			return string(b), nil
 		case "get_import_status":
 			j, ok := s.ingest.get(args.JobID)
+			if ok && j.OwnerID != "" && j.OwnerID != u.ID {
+				ok = false // fremder Auftrag: wie nicht vorhanden behandeln
+			}
 			if !ok {
 				return "", fmt.Errorf("import job %q not found — job status is kept in memory, so it is lost if the server restarts (pages already created are not)", args.JobID)
 			}
@@ -1020,7 +1023,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			for _, f := range args.Filter {
 				filters = append(filters, rowFilter{Prop: f.Property, Op: f.Op, Value: f.Value})
 			}
-			return s.mcpQueryRows(args.PageID, filters, args.Sort, args.Limit, args.Offset)
+			return s.mcpQueryRows(u, args.PageID, filters, args.Sort, args.Limit, args.Offset)
 		case "set_properties":
 			return s.mcpSetProperties(args.PageID, args.Properties)
 		case "create_database":
@@ -1039,7 +1042,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			// Ein Ziel-Workspace hat Vorrang: das ist ein Umzug des ganzen
 			// Unterbaums, kein Umhängen innerhalb desselben Workspace.
 			if args.WorkspaceID != "" {
-				return s.mcpMoveToWorkspace(userID, args.PageID, args.WorkspaceID)
+				return s.mcpMoveToWorkspace(u, args.PageID, args.WorkspaceID)
 			}
 			return s.mcpMovePage(userID, args.PageID, args.ParentID)
 		case "create_workspace":

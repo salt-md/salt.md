@@ -122,6 +122,15 @@ func (s *Server) forbiddenPrivateAncestor(userID, pageID, ws string) bool {
 	return n > 0
 }
 
+// pageExists meldet, ob die Seite (auch im Papierkorb) noch in der Datenbank
+// steht. canRead unterscheidet nicht zwischen "gibt es nicht" und "darfst du
+// nicht" — für das Protokoll ist der Unterschied aber wesentlich.
+func (s *Server) pageExists(pageID string) bool {
+	var n int
+	s.db.QueryRow(`SELECT COUNT(*) FROM pages WHERE id = ?`, pageID).Scan(&n)
+	return n > 0
+}
+
 // canRead reports whether userID may read pageID.
 func (s *Server) canRead(userID, pageID string) bool {
 	var ws string

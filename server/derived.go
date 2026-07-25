@@ -59,7 +59,7 @@ func toNumber(v any) (float64, bool) {
 // computeDerived injects rollup and formula values into each row's props map,
 // resolving relations against the target collection. Formulas support +-*/(),
 // numeric literals, and other-property references by id, with cycle detection.
-func (s *Server) computeDerived(schema []propDef, rows []map[string]any) {
+func (s *Server) computeDerived(u *user, schema []propDef, rows []map[string]any) {
 	// Index derived props.
 	var rollups, formulas, relations []propDef
 	for _, d := range schema {
@@ -78,7 +78,7 @@ func (s *Server) computeDerived(schema []propDef, rows []map[string]any) {
 
 	// Rollups: for each row, aggregate a target property over its related rows.
 	for _, ru := range rollups {
-		targetRows := s.relatedRowProps(ru.RollupRelation, ru.RollupTarget, rows)
+		targetRows := s.relatedRowProps(u, ru.RollupRelation, ru.RollupTarget, rows)
 		for i, row := range rows {
 			props, _ := row["props"].(map[string]any)
 			if props == nil {
@@ -111,7 +111,7 @@ func (s *Server) computeDerived(schema []propDef, rows []map[string]any) {
 
 // relatedRowProps returns, per input row, the list of target-property values of
 // the rows it relates to (via relationProp holding an array of target ids).
-func (s *Server) relatedRowProps(relationProp, targetProp string, rows []map[string]any) [][]any {
+func (s *Server) relatedRowProps(u *user, relationProp, targetProp string, rows []map[string]any) [][]any {
 	// Collect all referenced target ids.
 	idSet := map[string]bool{}
 	for _, row := range rows {
@@ -123,6 +123,21 @@ func (s *Server) relatedRowProps(relationProp, targetProp string, rows []map[str
 	// Fetch target props for referenced ids.
 	targetVal := map[string]any{}
 	for id := range idSet {
+		// Die Ziel-Ids stammen aus einer Zeile, die der Nutzer selbst befuellen
+		// kann — ungeprueft war das ein Leseprimitiv auf JEDE Seite der Instanz:
+		// eigene Datenbank anlegen, fremde Seiten-Id in die Relation schreiben,
+		// Rollup darauf, und der Wert stand in der eigenen Tabelle. Auch
+		// "count" verriet so, ob eine Id ueberhaupt existiert.
+		if !s.canRead(u.ID, id) {
+			continue
+		}
+		// Auch die Workspace-Grenze eines eingeschraenkten API-Tokens gilt:
+		// sonst laese ein auf Workspace A beschraenktes Token ueber eine
+		// Relation Werte aus Workspace B, in dem der Mensch zwar Mitglied ist,
+		// das Token aber nicht gelten soll.
+		if !u.tokenCanReach(s.pageWorkspace(id)) {
+			continue
+		}
 		var p string
 		if s.db.QueryRow(`SELECT props FROM pages WHERE id = ? AND trashed_at IS NULL`, id).Scan(&p) == nil {
 			var m map[string]any
