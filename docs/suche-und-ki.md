@@ -58,58 +58,106 @@ gelten weiter, wenn das Modell kommt.
 
 ---
 
-## 3. Stufenplan
+## 3. Was im Agent-Repo schon gelöst ist
+
+Im Nachbarprojekt (`~/Code/agent`, Node/TypeScript) läuft genau diese Suche
+bereits — dort für Fähigkeiten und für das Gedächtnis. Der Code ist nicht
+übertragbar (Node gegen Go ohne CGO), die Entscheidungen sind es:
+
+**Kein Vektorindex bei dieser Größe.** Im Kommentar von `src/skills/semantic.ts`
+steht es wörtlich: für Homelab-Maßstab braucht es keine Vektordatenbank —
+einbetten, in SQLite zwischenspeichern, roher Kosinus über die kleine Menge.
+Dieselbe Rechnung wie in Abschnitt 7. pgvector liegt hinter derselben
+Schnittstelle bereit, falls es je nötig wird.
+
+**Zwischenspeichern über einen Inhalts-Hash.** Nur was sich geändert hat, wird
+neu berechnet; bei einem angehängten Absatz kostet das Nachführen einen Absatz,
+nicht die Seite.
+
+**Schnittgrenzen entlang der Struktur, nicht nach Zeichenzahl.** Dort wird pro
+Gesprächsblock geschnitten, damit ein Treffer auf den tatsächlichen Wortwechsel
+zeigt. Für uns heißt das: an Blockgrenzen schneiden, nicht alle 700 Zeichen
+mitten im Satz.
+
+**Eine Kaskade statt eines Schalters.** `semantic → FTS5 → Teilstring`. Fehlt
+das Modell, ist der Zwischenspeicher kalt oder die Einbettung schlägt fehl,
+fällt die Suche eine Stufe tiefer — sie geht nie kaputt.
+
+**Eine Signatur über dem Zwischenspeicher.** `embedderSignature()` merkt sich,
+welches Modell die Vektoren erzeugt hat. Vektoren verschiedener Modelle liegen
+in verschiedenen Räumen und dürfen nie miteinander verglichen werden. Genau
+dafür ist die `model`-Spalte im Datenmodell unten da.
+
+**Threads gepinnt.** Der eingebaute Embedder setzt `intraOpNumThreads` auf 1 —
+begrenzt die Last auf einer kleinen Kiste und umgeht, dass ein LXC-Container
+keine CPU-Affinität setzen darf. Das betrifft unseren Proxmox-Container direkt.
+
+**Ein Zeitfenster.** Nur die letzten 120 Tage werden eingebettet, älteres bleibt
+bei der Volltextsuche. Ein Weg, die Menge klein zu halten, den wir uns notieren
+sollten — bei uns wäre das eher „nur nicht archivierte Seiten".
+
+Und der Unterschied, der alles entscheidet: **der Agent hat genau einen
+Benutzer.** Es gibt dort keine Rechteprüfung, weil es keine geben muss. Wer
+diese Bausteine übernimmt, ohne die zwei Filter aus Abschnitt 1 einzuziehen,
+baut das Leck ein, das dieses Papier verhindern soll.
+
+---
+
+## 4. Stufenplan
 
 ### Stufe 0 — die Volltextsuche schärfen
 
 Abschneide-Fehler, Umlaut-Faltung, Stemming. Kein neues Datenmodell, kein
 Modell, keine neuen Abhängigkeiten. Ein Nachmittag.
 
-### Stufe 1 — Kontext ohne neuronales Netz
+### Stufe 1 — eine Einbettungs-Adresse, mehr nicht
 
-Bedeutungsähnlichkeit lässt sich zu einem großen Teil mit **statischen
-Wortvektoren** erreichen: eine Tabelle Wort → 100–300 Zahlen, einmal
-mitgeliefert. Der Vektor eines Absatzes ist der gewichtete Mittelwert seiner
-Wortvektoren (SIF: seltene Wörter zählen mehr, die Hauptkomponente wird
-abgezogen — zwei Dutzend Zeilen Mathematik).
+Salt.md bekommt **eine Einstellung**: die URL eines OpenAI-kompatiblen
+`/v1/embeddings`-Endpunkts plus Modellname. Aus, solange nichts eingetragen
+ist; dann bleibt es bei der Volltextsuche.
 
-Warum das hier der richtige Einstieg ist:
+Das ist der billigste brauchbare Weg, und zwar aus einem konkreten Grund: der
+Homelab hat den Dienst schon. Ollama spricht dieses Format, der Agent nutzt
+genau diesen Weg als „Aufwertung" (`AGENT_EMBED_BASE_URL`). Salt.md muss also
+kein Modell mitbringen, das Binary bleibt eins, `CGO_ENABLED=0` bleibt, und
+für alle anderen Selfhoster bleibt es folgenlos aus.
 
-- **Reines Go, kein CGO.** Der Build bleibt `CGO_ENABLED=0`, ein Binary,
-  fünf Plattformen. Das ist keine Nebensache, sondern das Versprechen des
-  Projekts.
-- **Kosten pro Seite: Mikrosekunden.** Läuft auf dem Proxmox-Container mit,
-  ohne dass jemand es merkt.
-- **Deterministisch.** Gleicher Text, gleicher Vektor — kein Modell-Zoo, keine
-  Versionsdrift.
-- Qualität: deutlich über Schlagwort, deutlich unter Transformer. Für „finde
-  Verwandtes" und „was gehört thematisch zusammen" reicht es.
+Aufwand: das Abrufen des Vektors, die Abschnittstabelle, die Verschmelzung mit
+BM25. Kein Modellbau, keine WASM-Laufzeit, keine 40 MB im Binary.
 
-Größe: ein auf die häufigsten ~200 000 deutschen und englischen Wörter
-gekürztes, int8-quantisiertes Vektorenset liegt bei 20–40 MB. Das verdoppelt
-das Binary — vertretbar, aber es ist die Entscheidung, die man bewusst treffen
-muss.
+**Zwei Bedingungen.** Erstens: der Endpunkt ist eine Instanz-Einstellung und
+gehört dem Owner — Seiteninhalt wandert dorthin, das ist eine Entscheidung
+über Daten und keine Vorliebe. Zweitens: im Text der Einstellung muss stehen,
+dass Seiteninhalt an diese Adresse geht. Zeigt sie auf `localhost` oder in den
+eigenen Homelab, verlässt nichts das Haus; zeigt sie zu einem Anbieter, gilt
+das Versprechen der Instanz nicht mehr — und das darf nicht im Kleingedruckten
+stehen.
 
-### Stufe 2 — echte Satz-Einbettungen
+### Stufe 2 — nur falls „ohne Einrichtung" zählt
 
-Ein kleines Transformer-Modell (Klasse `multilingual-e5-small`, 384
-Dimensionen, ~120 M Parameter, int8) versteht Wortstellung und Verneinung, was
-Stufe 1 nicht kann. Das Problem ist nicht das Modell, sondern **wie es ohne C
-läuft**:
+Ein eingebautes Modell wäre der Komfort für fremde Selfhoster, die kein Ollama
+betreiben. In Go ohne CGO ist das die eigentliche Arbeit:
 
 | Weg | Einschätzung |
 |---|---|
 | `onnxruntime`-Bindings | schnell, aber CGO — beerdigt das Ein-Binary-Versprechen |
-| Sidecar-Prozess | funktioniert, macht aus dem Binary ein Gespann; für Selfhoster ein Rückschritt |
-| **wazero + Modell als WASM** | reines Go, kein CGO, läuft überall. Etwa 2–4× langsamer als nativ — bei diesen Größen egal |
-| Einbetten im Browser | keine Serverlast, aber jeder Client lädt das Modell; auf dem Handy unzumutbar, und Altbestand muss trotzdem irgendwo indexiert werden |
+| **spago** (reines Go, BERT-Familie) | passt zur Architektur von MiniLM; Reifegrad und Tempo vor einer Entscheidung messen |
+| **wazero + Modell als WASM** | reines Go, kein CGO, läuft überall; etwa 2–4× langsamer als nativ, bei diesen Größen egal |
+| Sidecar-Prozess | funktioniert, macht aus dem Binary ein Gespann — für Selfhoster ein Rückschritt |
+| Einbetten im Browser | keine Serverlast, aber jeder Client lädt das Modell; auf dem Handy unzumutbar |
 
-Empfehlung, falls Stufe 2 kommt: **wazero**. Es ist der einzige Weg, der die
-Auslieferung nicht verändert.
+Erst messen, ob Stufe 1 überhaupt zu wenig ist. Wenn ja, würde ich spago und
+wazero an einem Nachmittag gegeneinander prototypen, bevor eine davon in den
+Build kommt.
+
+**Modellwahl:** dieselbe wie im Agent —
+`paraphrase-multilingual-MiniLM-L12-v2`, 384 Dimensionen. Mehrsprachig, damit
+deutsche Seiten ordentlich einbetten, klein genug für die CPU, und es ist
+bereits an echtem Material erprobt.
 
 ---
 
-## 4. Datenmodell
+## 5. Datenmodell
 
 Eine Seite ist zu groß für einen Vektor. Geschnitten wird in Abschnitte von
 grob 500–800 Zeichen entlang der Blockgrenzen, mit etwas Überlappung.
@@ -136,7 +184,7 @@ schreiben, alte beim Aufräumen entfernen, die Abfrage nimmt nur den aktuellen.
 
 ---
 
-## 5. Der Abfrageweg
+## 6. Der Abfrageweg
 
 ```
 Frage
@@ -160,7 +208,7 @@ zusammenführen (Reciprocal Rank Fusion, drei Zeilen) schlägt beides einzeln.
 
 ---
 
-## 6. Was es kostet
+## 7. Was es kostet
 
 Gerechnet mit 384 Dimensionen, int8 (384 Byte je Abschnitt):
 
@@ -184,7 +232,7 @@ der Massenimport.
 
 ---
 
-## 7. Lebenszyklus
+## 8. Lebenszyklus
 
 | Ereignis | Was passiert |
 |---|---|
@@ -197,7 +245,7 @@ der Massenimport.
 
 ---
 
-## 8. Was ich nicht tun würde
+## 9. Was ich nicht tun würde
 
 - **Kein „ähnliche Seiten"-Endpunkt ohne Rechteprüfung.** Er wirkt harmlos und
   ist die bequemste Art, den Workspace-Filter zu umgehen.
@@ -206,13 +254,13 @@ der Massenimport.
   steht in keiner Einstellung, dass es nicht mehr gilt.
 - **Keine Vektoren im Klartext-Export**, solange nicht klar ist, wer ihn öffnet.
 - **Kein ANN-Index, bevor die lineare Suche wirklich zu langsam ist.** Siehe
-  Tabelle oben; das wird lange dauern.
+  Abschnitt 7; das wird lange dauern.
 - **Kein Modell im selben Prozess ohne Speichergrenze.** Ein Container mit
   512 MB ist der Normalfall beim Selfhosting.
 
 ---
 
-## 9. Reihenfolge
+## 10. Reihenfolge
 
 1. **Stufe 0** — Abschneide-Fehler, Umlaute, Stemming. Sofort, unabhängig vom
    Rest.
