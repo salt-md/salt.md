@@ -116,31 +116,34 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 
 	// Instance administration (admin-gated inside the handlers).
 	m.HandleFunc("GET /api/settings", s.auth(s.handleGetSettings))
-	m.HandleFunc("PUT /api/settings", s.auth(s.handlePutSettings))
+	m.HandleFunc("PUT /api/settings", s.auth(s.sessionOnly(s.handlePutSettings)))
 	m.HandleFunc("GET /api/admin/info", s.auth(s.handleAdminInfo))
-	m.HandleFunc("GET /api/admin/backup", s.auth(s.handleAdminBackup))
+	// Die Instanz-Sicherung enthaelt JEDEN Workspace samt Passwort-Hashes. Als
+	// GET kam frueher sogar ein NUR-LESE-Token durch — Lesen war ja erlaubt.
+	m.HandleFunc("GET /api/admin/backup", s.auth(s.sessionOnly(s.handleAdminBackup)))
 	m.HandleFunc("GET /api/admin/public-access", s.auth(s.handlePublicAccess))
 	m.HandleFunc("GET /api/public-base", s.auth(s.handlePublicBase))
-	m.HandleFunc("POST /api/admin/tunnel", s.auth(s.handleTunnelAction))
+	m.HandleFunc("POST /api/admin/tunnel", s.auth(s.sessionOnly(s.handleTunnelAction)))
 	m.HandleFunc("GET /api/admin/mail-oauth/{provider}/start", s.auth(s.handleMailOAuthStart))
 	m.HandleFunc("GET /api/admin/mail-oauth/{provider}/callback", s.auth(s.handleMailOAuthCallback))
-	m.HandleFunc("POST /api/admin/mail-oauth/disconnect", s.auth(s.handleMailOAuthDisconnect))
-	m.HandleFunc("POST /api/admin/mail-test", s.auth(s.handleMailTest))
-	m.HandleFunc("POST /api/invites", s.auth(s.handleCreateInvite))
+	m.HandleFunc("POST /api/admin/mail-oauth/disconnect", s.auth(s.sessionOnly(s.handleMailOAuthDisconnect)))
+	m.HandleFunc("POST /api/admin/mail-test", s.auth(s.sessionOnly(s.handleMailTest)))
+	// Einladen ist Kontenverwaltung, nicht Inhalt.
+	m.HandleFunc("POST /api/invites", s.auth(s.sessionOnly(s.handleCreateInvite)))
 	m.HandleFunc("GET /api/invites/{token}", s.handleInviteInfo)
 	m.HandleFunc("POST /api/invites/{token}/accept", s.handleAcceptInvite)
 	m.HandleFunc("GET /api/ics", s.auth(s.handleICSInfo))
 	m.HandleFunc("GET /ics/{token}", s.handleICSFeed)
-	m.HandleFunc("GET /api/2fa", s.auth(s.handle2FAStatus))
-	m.HandleFunc("POST /api/2fa/setup", s.auth(s.handle2FASetup))
-	m.HandleFunc("POST /api/2fa/enable", s.auth(s.handle2FAEnable))
-	m.HandleFunc("POST /api/2fa/disable", s.auth(s.handle2FADisable))
+	m.HandleFunc("GET /api/2fa", s.auth(s.sessionOnly(s.handle2FAStatus)))
+	m.HandleFunc("POST /api/2fa/setup", s.auth(s.sessionOnly(s.handle2FASetup)))
+	m.HandleFunc("POST /api/2fa/enable", s.auth(s.sessionOnly(s.handle2FAEnable)))
+	m.HandleFunc("POST /api/2fa/disable", s.auth(s.sessionOnly(s.handle2FADisable)))
 
 	m.HandleFunc("GET /api/users", s.adminOnly(s.handleListUsers))
 	m.HandleFunc("GET /api/admin/access", s.adminOnly(s.handleAccessOverview))
 	m.HandleFunc("PUT /api/admin/membership", s.adminOnly(s.handleAdminMembership))
 	m.HandleFunc("POST /api/users", s.adminOnly(s.handleCreateUser))
-	m.HandleFunc("PATCH /api/users/{id}", s.auth(s.handleUpdateUser))
+	m.HandleFunc("PATCH /api/users/{id}", s.auth(s.sessionOnly(s.handleUpdateUser)))
 	// ownerOnly, nicht adminOnly: Löschen vernichtet den persönlichen Bereich des
 	// Kontos endgültig. Genau das ist die Datenkontrolle, die ein Admin laut
 	// Rechtemodell NICHT hat — er soll Konten verwalten, nicht fremde Inhalte
@@ -157,9 +160,9 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("POST /api/admin/stranded-workspaces/{id}/adopt", s.ownerOnly(s.handleAdoptWorkspace))
 	m.HandleFunc("DELETE /api/admin/stranded-workspaces/{id}", s.ownerOnly(s.handleDeleteStrandedWorkspace))
 
-	m.HandleFunc("GET /api/tokens", s.auth(s.handleListTokens))
-	m.HandleFunc("POST /api/tokens", s.auth(s.handleCreateToken))
-	m.HandleFunc("DELETE /api/tokens/{id}", s.auth(s.handleDeleteToken))
+	m.HandleFunc("GET /api/tokens", s.auth(s.sessionOnly(s.handleListTokens)))
+	m.HandleFunc("POST /api/tokens", s.auth(s.sessionOnly(s.handleCreateToken)))
+	m.HandleFunc("DELETE /api/tokens/{id}", s.auth(s.sessionOnly(s.handleDeleteToken)))
 
 	m.HandleFunc("GET /api/pages", s.auth(s.handleListPages))
 	m.HandleFunc("POST /api/pages", s.auth(s.handleCreatePage))

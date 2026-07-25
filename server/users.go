@@ -216,14 +216,17 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// adminOnly: Instanz-Verwaltung. Verlangt zusaetzlich eine Anmeldung im
+// Browser — siehe sessionOnly. Ein Admin-Token waere sonst ein Admin-Ausweis
+// fuer jeden Agenten, dem man ihn gibt.
 func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {
-	return s.auth(func(w http.ResponseWriter, r *http.Request) {
+	return s.auth(s.sessionOnly(func(w http.ResponseWriter, r *http.Request) {
 		if !requestUser(r).IsAdmin {
 			httpError(w, http.StatusForbidden, "admin only")
 			return
 		}
 		next(w, r)
-	})
+	}))
 }
 
 func setSessionCookie(w http.ResponseWriter, r *http.Request, token string, maxAge int) {

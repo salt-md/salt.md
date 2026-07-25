@@ -236,12 +236,26 @@ func (s *Server) mcpMovePage(userID, pageID, parentID string) (string, error) {
 }
 
 // mcpListUsers returns people who share at least one workspace with the caller.
-func (s *Server) mcpListUsers(userID string) (string, error) {
+// mcpListUsers nennt die Menschen, mit denen man Workspaces teilt.
+//
+// Die Liste folgt der Begrenzung des TOKENS, nicht nur der des Kontos: ein auf
+// einen Workspace eingeschraenkter Zugang gab vorher trotzdem Namen und
+// E-Mail-Adressen aller Kolleginnen und Kollegen heraus, weil die Abfrage
+// direkt auf den Mitgliedschaften des Nutzers stand.
+func (s *Server) mcpListUsers(u *user) (string, error) {
+	ws := scopeWorkspaces(u, s.visibleWorkspaces(u.ID))
+	if len(ws) == 0 {
+		return "[]", nil
+	}
+	args := make([]any, 0, len(ws))
+	for _, w := range ws {
+		args = append(args, w)
+	}
 	rows, err := s.db.Query(`
 		SELECT DISTINCT u.id, u.name, u.email FROM users u
 		JOIN workspace_members m ON m.user_id = u.id
-		WHERE m.workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?)
-		ORDER BY u.name`, userID)
+		WHERE m.workspace_id IN (`+placeholders(len(ws))+`)
+		ORDER BY u.name`, args...)
 	if err != nil {
 		return "", err
 	}

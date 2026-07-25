@@ -285,15 +285,47 @@ func (s *Server) addOrgMember(userID string, isAdmin bool) {
 	}
 }
 
+// sessionOnly verlangt eine Anmeldung im Browser — ein API-Token wird
+// abgewiesen.
+//
+// Der Grund ist die Grenze, die das ganze Rechtemodell traegt: ein Token ist
+// ein ZWEITSCHLUESSEL FUER INHALTE, kein Ausweis fuer die Verwaltung. Es
+// traegt die volle Identitaet seines Menschen (siehe currentUser) und laesst
+// sich nur auf zwei Arten verengen — "nur lesen" und "nur diese Workspaces".
+// Beides wirkt ausschliesslich auf Seiten. Ohne diese Schranke stand einem
+// Token damit offen:
+//
+//   * die Instanz-Sicherung — als GET sogar mit einem NUR-LESE-Token, also
+//     jeder Workspace, jede Datei, jeder Passwort-Hash
+//   * die Kontenliste samt E-Mail-Adressen, trotz Workspace-Begrenzung
+//   * sich selbst ein neues, UNBEGRENZTES Token auszustellen, womit die
+//     Workspace-Begrenzung blosse Zierde war
+//
+// Wer einem Agenten einen Zugang gibt, gibt ihm Inhalte. Konten, Sicherung,
+// Notfallzugriff und Owner-Uebergabe bleiben an einem Menschen an der
+// Tastatur.
+func (s *Server) sessionOnly(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// TokenScope ist bei einer Cookie-Sitzung leer und bei jedem Token
+		// gesetzt ("read" oder "write").
+		if requestUser(r).TokenScope != "" {
+			httpError(w, http.StatusForbidden,
+				"Dieser Vorgang verlangt eine Anmeldung im Browser — ein API-Token reicht dafür nicht.")
+			return
+		}
+		next(w, r)
+	}
+}
+
 // ownerOnly bewacht Endpunkte, die nur dem Instanz-Owner offenstehen.
 func (s *Server) ownerOnly(next http.HandlerFunc) http.HandlerFunc {
-	return s.auth(func(w http.ResponseWriter, r *http.Request) {
+	return s.auth(s.sessionOnly(func(w http.ResponseWriter, r *http.Request) {
 		if !s.isOwner(requestUser(r).ID) {
 			httpError(w, http.StatusForbidden, "Das kann nur der Owner dieser Instanz.")
 			return
 		}
 		next(w, r)
-	})
+	}))
 }
 
 // handleTransferOwner übergibt die Instanz an ein anderes Konto.

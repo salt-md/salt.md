@@ -36,10 +36,17 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 		"can_write":   scope != "read",
 		// Was diesem Zugang bewusst verwehrt ist — damit ein Agent es gar nicht
 		// erst versucht und den Fehlschlag richtig deutet.
+		// Was dieser Zugang NICHT kann. Hier stand frueher "user accounts",
+		// obwohl list_users existiert — und "backup/restore", obwohl dasselbe
+		// Token die Sicherung ueber die REST-Schnittstelle erreichte. Beides
+		// stimmt jetzt: Verwaltung verlangt eine Anmeldung im Browser.
 		"not_available_via_mcp": []string{
-			"two-factor settings", "API tokens", "user accounts",
+			"two-factor settings", "API tokens", "creating or deleting accounts",
 			"backup/restore", "tunnel and instance settings",
+			"workspace membership and roles",
 		},
+		"note": "list_users names only the people you share a workspace with; " +
+			"account administration needs a signed-in browser session.",
 	}
 	if u.TokenWorkspaces == nil {
 		out["workspace_scope"] = "all workspaces you are a member of"
