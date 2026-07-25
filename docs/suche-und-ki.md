@@ -61,8 +61,11 @@ gelten weiter, wenn das Modell kommt.
 ## 3. Was im Agent-Repo schon gelöst ist
 
 Im Nachbarprojekt (`~/Code/agent`, Node/TypeScript) läuft genau diese Suche
-bereits — dort für Fähigkeiten und für das Gedächtnis. Der Code ist nicht
-übertragbar (Node gegen Go ohne CGO), die Entscheidungen sind es:
+bereits — dort für Fähigkeiten und für das Gedächtnis. Es hat mit Salt.md
+nichts zu tun und wird auch nicht Teil davon: es ist eine Quelle für
+Entscheidungen, die dort schon einmal getroffen und im Betrieb geprüft wurden.
+Der Code ist ohnehin nicht übertragbar (Node gegen Go ohne CGO), die
+Entscheidungen sind es:
 
 **Kein Vektorindex bei dieser Größe.** Im Kommentar von `src/skills/semantic.ts`
 steht es wörtlich: für Homelab-Maßstab braucht es keine Vektordatenbank —
@@ -110,50 +113,61 @@ baut das Leck ein, das dieses Papier verhindern soll.
 Abschneide-Fehler, Umlaut-Faltung, Stemming. Kein neues Datenmodell, kein
 Modell, keine neuen Abhängigkeiten. Ein Nachmittag.
 
-### Stufe 1 — eine Einbettungs-Adresse, mehr nicht
+### Stufe 1 — der Weg, noch ohne Modell
 
-Salt.md bekommt **eine Einstellung**: die URL eines OpenAI-kompatiblen
-`/v1/embeddings`-Endpunkts plus Modellname. Aus, solange nichts eingetragen
-ist; dann bleibt es bei der Volltextsuche.
+Die Abschnittstabelle anlegen, beim Speichern füllen, die Suche darüber laufen
+lassen — zunächst nur mit dem Volltext. Damit steht das ganze Gerüst: das
+Schneiden, das Nachführen beim Schreiben, das Mitlöschen, und vor allem die
+Rechteprüfung aus Abschnitt 1. Alles davon lässt sich prüfen, bevor eine
+einzige Zahl aus einem Modell kommt.
 
-Das ist der billigste brauchbare Weg, und zwar aus einem konkreten Grund: der
-Homelab hat den Dienst schon. Ollama spricht dieses Format, der Agent nutzt
-genau diesen Weg als „Aufwertung" (`AGENT_EMBED_BASE_URL`). Salt.md muss also
-kein Modell mitbringen, das Binary bleibt eins, `CGO_ENABLED=0` bleibt, und
-für alle anderen Selfhoster bleibt es folgenlos aus.
+Das ist die Stufe, die man nicht überspringt. Wer mit dem Modell anfängt, baut
+die Rechteprüfung nebenbei und merkt Fehler darin nicht, weil die Ergebnisse
+ja plausibel aussehen.
 
-Aufwand: das Abrufen des Vektors, die Abschnittstabelle, die Verschmelzung mit
-BM25. Kein Modellbau, keine WASM-Laufzeit, keine 40 MB im Binary.
+### Stufe 2 — das kleine Modell, im Programm
 
-**Zwei Bedingungen.** Erstens: der Endpunkt ist eine Instanz-Einstellung und
-gehört dem Owner — Seiteninhalt wandert dorthin, das ist eine Entscheidung
-über Daten und keine Vorliebe. Zweitens: im Text der Einstellung muss stehen,
-dass Seiteninhalt an diese Adresse geht. Zeigt sie auf `localhost` oder in den
-eigenen Homelab, verlässt nichts das Haus; zeigt sie zu einem Anbieter, gilt
-das Versprechen der Instanz nicht mehr — und das darf nicht im Kleingedruckten
-stehen.
+Kein Dienst nebenan, kein Endpunkt, keine Adresse zum Eintragen: das Modell
+läuft im selben Programm auf der CPU. Das ist der Punkt der ganzen Übung — eine
+Instanz soll nach dem Auspacken alles können, auch ohne Netz nach außen.
 
-### Stufe 2 — nur falls „ohne Einrichtung" zählt
+In Go ohne CGO gibt es dafür zwei ernsthafte Wege, plus eine billigere
+Näherung:
 
-Ein eingebautes Modell wäre der Komfort für fremde Selfhoster, die kein Ollama
-betreiben. In Go ohne CGO ist das die eigentliche Arbeit:
+| Weg | Größe | Güte | Aufwand |
+|---|---|---|---|
+| **Statische Wortvektoren** (gewichteter Mittelwert, SIF) | 20–40 MB | ordentlich für „thematisch verwandt", blind für Wortstellung und Verneinung | reines Go, ein paar Dutzend Zeilen Mathematik |
+| **wazero + Modell als WASM** | 30–120 MB | echte Satzbedeutung | reines Go-Laufzeit, aber Modell muss übersetzt und angebunden werden |
+| **spago** (reines Go, BERT-Familie) | dito | dito | passt zur MiniLM-Architektur; Reifegrad und Tempo vorher messen |
 
-| Weg | Einschätzung |
-|---|---|
-| `onnxruntime`-Bindings | schnell, aber CGO — beerdigt das Ein-Binary-Versprechen |
-| **spago** (reines Go, BERT-Familie) | passt zur Architektur von MiniLM; Reifegrad und Tempo vor einer Entscheidung messen |
-| **wazero + Modell als WASM** | reines Go, kein CGO, läuft überall; etwa 2–4× langsamer als nativ, bei diesen Größen egal |
-| Sidecar-Prozess | funktioniert, macht aus dem Binary ein Gespann — für Selfhoster ein Rückschritt |
-| Einbetten im Browser | keine Serverlast, aber jeder Client lädt das Modell; auf dem Handy unzumutbar |
+Was ausscheidet: `onnxruntime`-Bindings (CGO, beerdigt das Ein-Binary-Versprechen),
+ein Sidecar-Prozess (aus einem Binary wird ein Gespann) und Einbetten im
+Browser (jedes Handy lädt 100 MB).
 
-Erst messen, ob Stufe 1 überhaupt zu wenig ist. Wenn ja, würde ich spago und
-wazero an einem Nachmittag gegeneinander prototypen, bevor eine davon in den
-Build kommt.
+**Reihenfolge innerhalb der Stufe:** erst die statischen Vektoren. Sie sind an
+einem Tag gebaut, kosten Mikrosekunden je Seite und liefern eine Messlatte. Ist
+die Suche damit gut genug, ist die Sache erledigt. Ist sie es nicht, weiß man
+beim Prototyp von wazero und spago wenigstens, wogegen man misst.
 
-**Modellwahl:** dieselbe wie im Agent —
-`paraphrase-multilingual-MiniLM-L12-v2`, 384 Dimensionen. Mehrsprachig, damit
-deutsche Seiten ordentlich einbetten, klein genug für die CPU, und es ist
-bereits an echtem Material erprobt.
+**Wo das Modell herkommt.** 120 MB in ein 24-MB-Binary zu legen, ist zu viel.
+Drei Möglichkeiten: eine quantisierte Fassung (~30–40 MB) mit `go:embed`
+einbacken, sie beim ersten Bedarf einmalig herunterladen (bricht „läuft ohne
+Netz"), oder ins Docker-Image legen und beim Binary weglassen. Ich würde
+einbacken, wenn die quantisierte Fassung gut genug ist — sonst ist das
+Versprechen der einen Datei nur noch die halbe Wahrheit.
+
+**Modellwahl** falls es dazu kommt: `paraphrase-multilingual-MiniLM-L12-v2`,
+384 Dimensionen. Mehrsprachig, damit deutsche Seiten ordentlich einbetten,
+klein genug für die CPU — und im Nachbarprojekt an echtem Material erprobt.
+
+### Verworfen: ein Endpunkt zum Eintragen
+
+Naheliegend wäre, die Einbettung an einen OpenAI-kompatiblen Dienst
+auszulagern (Ollama & Co.). Das wäre die geringste Arbeit und ist trotzdem
+falsch für dieses Projekt: es macht aus „eine Datei, fertig" ein „eine Datei
+plus ein Dienst, den du selbst betreiben musst". Wer das will, hat die
+Volltextsuche und braucht uns nicht. Notiert, damit die Frage nicht zweimal
+gestellt wird.
 
 ---
 
@@ -263,14 +277,13 @@ der Massenimport.
 ## 10. Reihenfolge
 
 1. **Stufe 0** — Abschneide-Fehler, Umlaute, Stemming. Sofort, unabhängig vom
-   Rest.
-2. **Abschnittstabelle + Indexierung**, zunächst nur mit Volltext befüllt. Damit
-   ist der Weg gebaut und die Rechteprüfung erprobt, bevor Vektoren im Spiel
-   sind.
-3. **Stufe 1** — statische Vektoren, Verschmelzung mit BM25. Messen, ob es
-   reicht.
-4. **Stufe 2** nur, wenn Schritt 3 nachweislich zu schwach ist — und dann über
-   wazero.
+   Rest. Wirkt auch dann, wenn nie ein Modell dazukommt.
+2. **Stufe 1** — Abschnittstabelle und Indexierung, zunächst nur mit Volltext.
+   Der Weg steht, die Rechteprüfung ist erprobt, bevor Vektoren im Spiel sind.
+3. **Stufe 2a** — statische Wortvektoren, Verschmelzung mit BM25. An eigenem
+   Material messen, ob es reicht.
+4. **Stufe 2b** nur, wenn 2a nachweislich zu schwach ist — dann wazero oder
+   spago, vorher gegeneinander gemessen.
 
-Der Sprung von 2 auf 3 ist klein, wenn 2 richtig gebaut ist: es kommt eine
+Der Sprung von 1 auf 2 ist klein, wenn 1 richtig gebaut ist: es kommt eine
 Spalte hinzu und eine Funktion, die sie füllt.
