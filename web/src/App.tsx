@@ -18,6 +18,7 @@ import { announceModal } from './modal';
 import { toast } from './toast';
 import Logo from './Logo';
 import ThemeSwitch, { type ThemePref } from './ThemeSwitch';
+import { plural, t } from './i18n';
 
 /** Schriftwahl: 'system' laesst alles wie bisher, 'brand' schaltet die
  *  mitgelieferten Inter- und JetBrains-Mono-Schriften ein. */
@@ -54,9 +55,9 @@ export default function App() {
   const [pages, setPages] = useState<PageMeta[] | null>(null);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  // Der zuletzt geöffnete Workspace wird gemerkt. Ohne das landete man nach
-  // jedem Neuladen wieder im ersten Workspace — wer überwiegend in einem
-  // zweiten arbeitet, musste ihn bei jedem Seitenaufruf neu wählen.
+  // The last opened workspace is remembered. Without it every reload dropped
+  // you back into the first one — anybody who mostly works in a second had to
+  // pick it again on every page load.
   const [currentWs, setCurrentWs] = useState<string>(() => localStorage.getItem('salt-ws') ?? '');
   const [loadError, setLoadError] = useState(false);
   // Bear-style notes mode (middle notes column) — an explicit per-user setting
@@ -147,10 +148,10 @@ export default function App() {
     setSidebarOpen(true);
     setSidebarCollapsed(false);
   };
-  // Gespeichert wird die WAHL ('auto' eingeschlossen), angewendet das daraus
-  // abgeleitete Design. Wer vor dieser Änderung schon 'light'/'dark' gespeichert
-  // hatte, behält es — das war eine bewusste Einstellung, die ich nicht
-  // stillschweigend überschreibe. Neu ist 'auto' die Voreinstellung.
+  // What is stored is the CHOICE ('auto' included); what is applied is the
+  // theme derived from it. Anyone who had already stored 'light'/'dark' before
+  // this change keeps it — that was a deliberate setting, not something to
+  // overwrite quietly. 'auto' is the new default.
   const [themePref, setThemePref] = useState<ThemePref>(() => {
     const saved = localStorage.getItem('salt-theme');
     return saved === 'light' || saved === 'dark' || saved === 'auto' ? saved : 'auto';
@@ -158,8 +159,8 @@ export default function App() {
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia('(prefers-color-scheme: dark)').matches,
   );
-  // Bei 'auto' muss ein Wechsel der Systemeinstellung SOFORT durchschlagen —
-  // sonst wäre „automatisch" nur eine Momentaufnahme beim Laden.
+  // Under 'auto' a change to the system setting has to take effect AT ONCE, or
+  // "automatic" would only ever be a snapshot taken at load time.
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onChange = () => setSystemDark(mq.matches);
@@ -214,8 +215,8 @@ export default function App() {
     try {
       const ws = await api.listWorkspaces();
       setWorkspaces(ws);
-      // Der gemerkte Workspace gilt nur, wenn es ihn noch gibt und man noch
-      // Mitglied ist — sonst zurück auf den ersten erreichbaren.
+      // The remembered workspace only counts while it still exists and you are
+      // still a member — otherwise fall back to the first reachable one.
       setCurrentWs((cur) => (cur && ws.some((w) => w.id === cur) ? cur : ws[0]?.id ?? ''));
     } catch {
       /* keep current */
@@ -281,7 +282,7 @@ export default function App() {
       .then((m) => {
         setMe(m);
         if (m.version && m.version !== BUILD_VERSION) {
-          toast('Neue Version verfügbar — Seite neu laden');
+          toast(t('A new version is available — reload the page'));
         }
         if (m.authenticated) void loadAll();
       })
@@ -372,7 +373,7 @@ export default function App() {
         const msg = JSON.parse(e.data) as { type: string; version?: string };
         if (msg.type === 'hello' && msg.version && msg.version !== BUILD_VERSION && !warnedVersion) {
           warnedVersion = true;
-          toast('Neue Version verfügbar — Seite neu laden');
+          toast(t('A new version is available — reload the page'));
         }
         if (msg.type === 'pages') {
           window.clearTimeout(reloadTimer.current);
@@ -558,17 +559,20 @@ export default function App() {
       try {
         if (file.name.toLowerCase().endsWith('.zip')) {
           const r = await api.importZip(file);
-          toast(`Import: ${r.created} Seiten${r.skipped ? `, ${r.skipped} übersprungen` : ''}`);
+          toast(
+            t('Imported {pages}', { pages: plural(r.created, '{n} page', '{n} pages') }) +
+              (r.skipped ? ', ' + t('{n} skipped', { n: r.skipped }) : ''),
+          );
           void loadPages();
         } else {
           const text = await file.text();
           const r = await api.importMarkdown(null, '', text);
-          toast('Seite importiert');
+          toast(t('Page imported'));
           void loadPages();
           navigate(r.id);
         }
       } catch (err) {
-        toast((err as Error).message || 'Import fehlgeschlagen');
+        toast((err as Error).message || t('Import failed'));
       }
     },
     [loadPages, navigate],
@@ -605,7 +609,13 @@ export default function App() {
 
   const deleteForever = useCallback(
     async (id: string) => {
-      if (!(await confirm('Delete this page and all its sub-pages forever?', { danger: true, confirmText: 'Löschen' }))) return;
+      if (
+        !(await confirm(t('Delete this page and all its sub-pages forever?'), {
+          danger: true,
+          confirmText: t('Delete'),
+        }))
+      )
+        return;
       await api.deleteForever(id);
       await loadPages();
     },
@@ -625,9 +635,9 @@ export default function App() {
         .sort((a, b) => a - b);
       const tooDense = siblings.some((v, i) => i > 0 && v - siblings[i - 1] < 1e-6);
       if (tooDense) {
-        // Auf oberster Ebene braucht der Server den Workspace: sonst müsste er
-        // raten, welche Wurzelseiten gemeint sind — und traf früher alle der
-        // ganzen Instanz.
+        // At the top level the server needs the workspace: otherwise it has to
+        // guess which root pages are meant — and it used to take every one in
+        // the whole instance.
         await api.reindexSiblings(parentId, parentId ? undefined : currentWs).catch(() => {});
         setPages(await api.listPages());
       }
@@ -673,10 +683,10 @@ export default function App() {
     return (
       <div className="empty-state">
         <div className="empty-emoji">🍂</div>
-        <h2>Cannot reach the server</h2>
-        <p>Salt.md could not load your workspace.</p>
+        <h2>{t('Cannot reach the server')}</h2>
+        <p>{t('Salt.md could not load your workspace.')}</p>
         <button className="btn primary" onClick={() => window.location.reload()}>
-          Retry
+          {t('Retry')}
         </button>
       </div>
     );
@@ -703,9 +713,9 @@ export default function App() {
       );
     }
   }
-  // Auf den Anmeldemasken gibt es noch keine Seitenleiste — der Schalter
-  // schwebt deshalb frei in der Ecke. Wer nachts auf die Loginseite kommt,
-  // soll sie nicht weiß angeleuchtet bekommen, ohne etwas tun zu können.
+  // The sign-in screens have no sidebar yet, so the switch floats free in the
+  // corner. Anyone arriving at the login page at night should not be blasted
+  // with white and left unable to do anything about it.
   const authThemeSwitch = (
     <div className="auth-theme-switch">
       <ThemeSwitch value={themePref} onChange={setThemePref} />
@@ -751,10 +761,10 @@ export default function App() {
         currentId={currentId}
         open={sidebarOpen}
         onCollapse={() => {
-          // Ein Button für beide Welten: mobil ist die Seitenleiste ein Drawer,
-          // "einklappen" heißt dort schlicht zu. Auf dem Desktop wird sie zur
-          // Hover-Overlay — der collapsed-Zustand gilt nur dort, sonst bliebe
-          // er nach einem Handy-Tipp als unsichtbarer Nebeneffekt hängen.
+          // One button for both worlds: on mobile the sidebar is a drawer, and
+          // "collapse" there simply means closed. On the desktop it becomes a
+          // hover overlay — the collapsed state applies only there, or it would
+          // linger after a phone tap as an invisible side effect.
           setSidebarOpen(false);
           if (window.matchMedia('(min-width: 769px)').matches) {
             setSidebarCollapsed(true);
@@ -846,20 +856,21 @@ export default function App() {
             />
           </>
         ) : workspaces.length === 0 ? (
-          // Ohne jeden Workspace gab es bisher nur eine leere Fläche: die App
-          // zeigte "keine Seiten" und jeder Knopf lief ins Leere, weil Seiten
-          // einen Workspace brauchen. Seit W102 bekommt jedes Konto einen
-          // eigenen Bereich — bleibt trotzdem einer übrig (Zuweisung entzogen,
-          // Anlegen fehlgeschlagen), sagen wir wenigstens, was los ist.
+          // With no workspace at all this used to be a blank area: the app said
+          // "no pages" and every button led nowhere, because pages need a
+          // workspace. Since W102 every account gets a space of its own — but
+          // if someone is left without one anyway (assignment revoked, creation
+          // failed), at least say what is going on.
           <div className="empty-state">
             <button className="menu-btn empty-menu-btn" onClick={openSidebar}>
               ☰
             </button>
             <div className="empty-emoji"><Logo size={52} /></div>
-            <h2>Kein Workspace</h2>
+            <h2>{t('No workspace')}</h2>
             <p>
-              Dein Konto gehört derzeit zu keinem Workspace. Bitte einen Admin um Zugang — oder
-              leg dir einen eigenen an, falls die Instanz das erlaubt.
+              {t(
+                'Your account currently belongs to no workspace. Ask an admin for access — or create one of your own, if this instance allows it.',
+              )}
             </p>
             {me?.allowUserWorkspaces && (
               <div className="empty-actions">
@@ -867,19 +878,21 @@ export default function App() {
                   className="btn primary"
                   onClick={() => {
                     void (async () => {
-                      const name = await promptText('Name des neuen Workspace?', { placeholder: 'z.B. Persönlich' });
+                      const name = await promptText(t('Name for the new workspace?'), {
+                        placeholder: t('e.g. Personal'),
+                      });
                       if (!name?.trim()) return;
                       try {
                         const ws = await api.createWorkspace(name.trim());
                         await loadWorkspaces();
                         setCurrentWs(ws.id);
                       } catch (e) {
-                        toast((e as Error).message || 'Konnte nicht angelegt werden');
+                        toast((e as Error).message || t('Could not be created'));
                       }
                     })();
                   }}
                 >
-                  Workspace anlegen
+                  {t('Create workspace')}
                 </button>
               </div>
             )}
@@ -890,14 +903,14 @@ export default function App() {
               ☰
             </button>
             <div className="empty-emoji"><Logo size={52} /></div>
-            <h2>No pages yet</h2>
-            <p>Create your first page — or import from Notion (.zip) / Markdown (.md).</p>
+            <h2>{t('No pages yet')}</h2>
+            <p>{t('Create your first page — or import from Notion (.zip) / Markdown (.md).')}</p>
             <div className="empty-actions">
               <button className="btn primary" onClick={() => void createPage(null)}>
-                New page
+                {t('New page')}
               </button>
               <button className="btn" onClick={() => emptyImportRef.current?.click()}>
-                Import (.md / .zip)
+                {t('Import (.md / .zip)')}
               </button>
             </div>
             <input

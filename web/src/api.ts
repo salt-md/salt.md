@@ -10,14 +10,16 @@ import type {
   User,
   Workspace,
 } from './types';
+import { t } from './i18n';
+import { formatBytes } from './format';
 
-/** Fehler mit HTTP-Status und maschinenlesbarem Grund, damit Aufrufer darauf
- *  prüfen können statt auf den Meldungstext — der ändert sich mit jeder
- *  Umformulierung, und eine Verzweigung daran bricht still. */
+/** An error carrying an HTTP status and a machine-readable reason, so callers
+ *  can branch on those rather than on the message text — the text changes with
+ *  every rewording, and a branch on it breaks silently. */
 export class ApiError extends Error {
   status: number;
-  /** Grund aus dem Feld `code` der Antwort, etwa `2fa_required`. Leer, wenn
-   *  der Endpunkt keinen sendet. */
+  /** Reason from the response's `code` field, e.g. `2fa_required`. Empty when
+   *  the endpoint sends none. */
   code: string;
   constructor(message: string, status: number, code = '') {
     super(message);
@@ -26,13 +28,13 @@ export class ApiError extends Error {
   }
 }
 
-/** Fehlerantwort auswerten — dieselbe Behandlung für JSON-Aufrufe wie für die
- *  Datei-Uploads, die kein JSON senden können.
+/** Turn an error response into an ApiError — the same handling for JSON calls
+ *  as for file uploads, which cannot send JSON.
  *
- *  Wichtig ist der Fall "Antwort ist gar kein JSON": ein vorgelagerter Proxy
- *  meldet eine zu große Datei als HTML-Seite. Wer blind `res.json()` aufruft,
- *  wirft daran selbst — auf dem Bildschirm stand dann `Unexpected token '<'`
- *  statt einer Auskunft über die Dateigröße. */
+ *  The case that matters is "the response is not JSON at all": a proxy in front
+ *  reports an oversized file as an HTML page. Calling `res.json()` blindly
+ *  throws on that, and the screen then read `Unexpected token '<'` instead of
+ *  anything about the file's size. */
 async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   let msg = fallback || res.statusText;
   let code = '';
@@ -41,14 +43,14 @@ async function toApiError(res: Response, fallback: string): Promise<ApiError> {
     msg = body.error ?? msg;
     code = body.code ?? '';
   } catch {
-    if (res.status === 413) msg = 'Die Datei ist zu groß für diese Instanz.';
+    if (res.status === 413) msg = t('The file is too large for this instance.');
   }
   return new ApiError(msg, res.status, code);
 }
 
-/** Eine abgelaufene Sitzung führt zurück zum Anmeldebildschirm — außer auf den
- *  Anmelde-Endpunkten selbst, wo ein 401 einen fehlgeschlagenen Versuch meint
- *  und der Grund gebraucht wird (2FA nötig vs. falsches Passwort). */
+/** An expired session sends the user back to the sign-in screen — except on the
+ *  sign-in endpoints themselves, where a 401 means a failed attempt and the
+ *  reason is needed (2FA required vs. wrong password). */
 function throwApiError(url: string, err: ApiError): never {
   if (err.status === 401 && !/^\/api\/(login|signup|setup)\b/.test(url)) {
     window.dispatchEvent(new Event('salt:unauthorized'));
@@ -75,8 +77,8 @@ export const api = {
   logout: () => req<{ ok: boolean }>('/api/logout', { method: 'POST' }),
   signup: (name: string, email: string, password: string) =>
     req<User>('/api/signup', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
-  // Ohne allowedDomains: welche Absenderdomains eine Instanz für ihre eigenen
-  // hält, geht niemanden etwas an, der noch nicht angemeldet ist.
+  // No allowedDomains here: which sender domains an instance counts as its own
+  // is nobody's business before they have signed in.
   signupPolicy: () => req<{ mode: string; instanceName: string; oauthGoogle: boolean; oauthMicrosoft: boolean }>('/api/signup-policy'),
 
   getSettings: () =>
@@ -185,8 +187,8 @@ export const api = {
   updateUser: (id: string, patch: Partial<{ name: string; email: string; color: string; avatar: string; password: string; currentPassword: string; isAdmin: boolean }>) =>
     req<User>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteUser: (id: string) => req<{ ok: boolean }>(`/api/users/${id}`, { method: 'DELETE' }),
-  // Lebenszyklus (W105): Folgen vor dem Löschen, Stilllegen als Normalfall,
-  // und die Aufräum-Ansicht für Workspaces ohne Verantwortlichen.
+  // Lifecycle (W105): consequences before deletion, deactivation as the normal
+  // case, and the clean-up view for workspaces with nobody in charge.
   deletionImpact: (id: string) =>
     req<{
       userName: string;
@@ -195,8 +197,8 @@ export const api = {
       shared: { id: string; name: string; pages: number; members: number; heir?: string }[];
       pages: number;
     }>(`/api/users/${id}/deletion-impact`),
-  // Die Instanz an ein anderes Konto übergeben. Der einzige Weg, die
-  // Owner-Rolle weiterzureichen — vorher war sie eine Einbahnstraße.
+  // Hand the instance to another account. The only way to pass the owner role
+  // on — before this it was a one-way street.
   transferOwner: (userId: string) =>
     req<{ ok: boolean; owner: string }>('/api/admin/transfer-owner', {
       method: 'POST',
@@ -285,11 +287,12 @@ export const api = {
   importZip: async (file: File): Promise<{ created: number; skipped: number }> => {
     const fd = new FormData();
     fd.append('file', file);
-    // Rohes fetch (FormData verträgt den JSON-Header nicht), aber dieselbe
-    // Fehlerbehandlung wie überall: mit Status, mit Grund, und eine abgelaufene
-    // Sitzung landet auf dem Anmeldebildschirm statt in einem Text im Dialog.
+    // Raw fetch (FormData does not tolerate the JSON header), but the same
+    // error handling as everywhere else: with a status, with a reason, and an
+    // expired session lands on the sign-in screen rather than as text inside a
+    // dialog.
     const res = await fetch('/api/import-zip', { method: 'POST', body: fd });
-    if (!res.ok) throwApiError('/api/import-zip', await toApiError(res, 'Import fehlgeschlagen'));
+    if (!res.ok) throwApiError('/api/import-zip', await toApiError(res, t('Import failed')));
     return res.json() as Promise<{ created: number; skipped: number }>;
   },
   deleteForever: (id: string) =>
@@ -461,7 +464,13 @@ export const api = {
   upload: (file: File, pageId?: string): Promise<string> =>
     new Promise((resolve, reject) => {
       if (file.size > api.uploadMaxBytes) {
-        reject(new ApiError(`Datei zu groß (${(file.size / 1048576).toFixed(1)} MB) — max. 50 MB`, 413, 'file_too_large'));
+        reject(
+          new ApiError(
+            t('File too large ({size}) — 50 MB max.', { size: formatBytes(file.size) }),
+            413,
+            'file_too_large',
+          ),
+        );
         return;
       }
       const fd = new FormData();
@@ -480,25 +489,25 @@ export const api = {
           try {
             resolve((JSON.parse(xhr.responseText) as { url: string }).url);
           } catch {
-            reject(new ApiError('Upload fehlgeschlagen', xhr.status));
+            reject(new ApiError(t('Upload failed'), xhr.status));
           }
           return;
         }
-        // Auch hier mit Status und Grund — und eine abgelaufene Sitzung führt
-        // zum Anmeldebildschirm, statt als Text im Editor zu landen, während
-        // die Oberfläche weiter so tut, als wäre man angemeldet.
+        // Status and reason here too — and an expired session leads to the
+        // sign-in screen instead of landing as text in the editor while the
+        // interface goes on pretending you are signed in.
         if (xhr.status === 401) {
           window.dispatchEvent(new Event('salt:unauthorized'));
           return reject(new ApiError('unauthorized', 401, 'session_expired'));
         }
-        let msg = xhr.status === 413 ? 'Die Datei ist zu groß für diese Instanz.' : 'Upload fehlgeschlagen';
+        let msg = xhr.status === 413 ? t('The file is too large for this instance.') : t('Upload failed');
         let code = '';
         try {
           const body = JSON.parse(xhr.responseText) as { error?: string; code?: string };
           msg = body.error ?? msg;
           code = body.code ?? '';
         } catch {
-          /* keine JSON-Antwort (etwa eine Fehlerseite des Proxys) */
+          /* not a JSON response (a proxy's error page, say) */
         }
         reject(new ApiError(msg, xhr.status, code));
       };
