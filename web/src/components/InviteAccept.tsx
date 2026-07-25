@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import type { User } from '../types';
 import Logo from '../Logo';
 
@@ -64,13 +64,10 @@ export default function InviteAccept({
     try {
       finish(await api.acceptInvite(token, name, email, password, code));
     } catch (err) {
-      const msg = (err as Error).message || 'Beitritt fehlgeschlagen';
-      if (/2fa required/i.test(msg)) {
-        setNeedCode(true);
-        setError('Bitte gib deinen 2FA-Code ein.');
-      } else {
-        setError(msg);
-      }
+      // Wie beim Anmelden: am Grund aus der Antwort, nicht am Meldungstext.
+      const e = err as ApiError;
+      if (e.code === '2fa_required') setNeedCode(true);
+      setError(e.message || 'Beitritt fehlgeschlagen');
     } finally {
       setBusy(false);
     }

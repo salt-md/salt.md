@@ -493,7 +493,7 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		s.loginSem <- struct{}{}
 		defer func() { <-s.loginSem }()
 		if !verifyPassword(body.Password, hash) {
-			httpError(w, http.StatusUnauthorized, "wrong credentials")
+			httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Falsche E-Mail oder falsches Passwort.")
 			return
 		}
 		// Wie bei handleLogin: erst nach der Passwortpruefung ablehnen, damit die
@@ -501,16 +501,16 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		// stillgelegtes Konto ueber einen offenen Einladungslink eine frische
 		// Sitzung besorgen.
 		if disabled != 0 {
-			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
+			httpErrorCode(w, http.StatusForbidden, "account_disabled", "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
 			return
 		}
 		if totpEnabled != 0 {
 			if body.Code == "" {
-				httpError(w, http.StatusUnauthorized, "2fa required")
+				httpErrorCode(w, http.StatusUnauthorized, "2fa_required", "Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.")
 				return
 			}
 			if !verifyTOTP(totpSecret, body.Code) {
-				httpError(w, http.StatusUnauthorized, "invalid 2fa code")
+				httpErrorCode(w, http.StatusUnauthorized, "2fa_invalid", "Falscher Code — nochmal versuchen.")
 				return
 			}
 		}
@@ -595,7 +595,10 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 		// erlaubt
 	case "domain":
 		if !s.domainAllowsSelfSignup(email) {
-			httpError(w, 403, "self-registration is not allowed for this email")
+			// Ohne die Domain zu nennen: sonst wäre der Fehlertext dieselbe
+			// Auskunft, die aus der Richtlinie entfernt wurde — nur eine
+			// Anmeldemaske später.
+			httpError(w, 403, "Für diese E-Mail-Adresse ist keine Selbstregistrierung möglich. Bitte lass dich einladen.")
 			return
 		}
 	default:
@@ -630,12 +633,17 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 
 // signupPolicy is unauthenticated: tells the login screen whether to show a
 // "create account" option.
+//
+// Die erlaubten Domains stehen hier BEWUSST NICHT drin. Sie sagen einem
+// Fremden, welche Absenderadressen dieses Haus für vertrauenswürdig hält —
+// die halbe Vorarbeit für einen Anruf im Namen der IT oder eine Mail von einer
+// nachgemachten Adresse. Der Bildschirm braucht sie nicht: ob jemand sich
+// selbst registrieren darf, entscheidet der Server beim Versuch.
 func (s *Server) handleSignupPolicy(w http.ResponseWriter, r *http.Request) {
 	mode := s.setting("signup_mode", "invite")
 	g, m := s.oauthEnabled()
 	writeJSON(w, map[string]any{
 		"mode":           mode,
-		"allowedDomains": s.setting("allowed_domains", ""),
 		"instanceName":   s.setting("instance_name", ""),
 		"oauthGoogle":    g,
 		"oauthMicrosoft": m,

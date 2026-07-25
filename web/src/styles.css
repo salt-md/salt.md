@@ -4853,6 +4853,11 @@ button {
   padding: 8px 14px;
 }
 
+.oauth-btn,
+.oauth-btn:visited {
+  color: var(--fg);
+}
+
 .oauth-btn:hover {
   border-color: rgba(var(--accent-rgb), 0.35);
   box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.12);
@@ -4875,6 +4880,11 @@ a.btn {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
+  /* color: ein <a> ohne eigene Farbe faellt auf das Browser-Standardblau
+     (#0000EE) zurueck. Auf hellem Grund faellt das kaum auf, im Dark Mode
+     stand das Blau fast unlesbar auf der dunklen Karte — betraf die beiden
+     SSO-Knoepfe, die einzigen Links, die wie Schaltflaechen aussehen. */
+  color: var(--fg);
 }
 
 /* ---- W43: Anlege-Zeile unter dem Titel (Emoji / Cover / Beschreibung) ---- */

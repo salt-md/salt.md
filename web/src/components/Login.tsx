@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import type { User } from '../types';
 import Logo from '../Logo';
 
@@ -13,7 +13,6 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [signupOpen, setSignupOpen] = useState(false);
-  const [domains, setDomains] = useState('');
   const [instanceName, setInstanceName] = useState('');
   const [oauth, setOauth] = useState<{ google: boolean; microsoft: boolean }>({ google: false, microsoft: false });
 
@@ -22,7 +21,6 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
       .signupPolicy()
       .then((p) => {
         setSignupOpen(p.mode === 'open' || p.mode === 'domain');
-        setDomains(p.allowedDomains);
         setInstanceName(p.instanceName || '');
         if (p.instanceName) document.title = p.instanceName;
         setOauth({ google: p.oauthGoogle, microsoft: p.oauthMicrosoft });
@@ -51,17 +49,14 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
       const user = await api.login(email, password, needCode ? code : undefined);
       onSuccess(user);
     } catch (err) {
-      const msg = (err as Error).message;
-      if (msg === '2fa required') {
-        setNeedCode(true);
-        setError('Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.');
-      } else if (msg === 'invalid 2fa code') {
-        setError('Falscher Code — nochmal versuchen.');
-      } else if (msg === 'unauthorized' || msg === 'wrong credentials') {
-        setError('Falsche E-Mail oder Passwort');
-      } else {
-        setError(msg || 'Server nicht erreichbar');
-      }
+      // Am Grund aus der Antwort, nicht am Meldungstext: der Server schickt
+      // `code`, die Meldung selbst darf sich jederzeit ändern oder übersetzt
+      // werden. Vorher hing das Einblenden des 2FA-Feldes an einem wörtlichen
+      // Vergleich mit "2fa required" — eine Umformulierung hätte jedes Konto
+      // mit Zwei-Faktor-Anmeldung ausgesperrt.
+      const e = err as ApiError;
+      if (e.code === '2fa_required') setNeedCode(true);
+      setError(e.message || 'Server nicht erreichbar');
     } finally {
       setBusy(false);
     }
@@ -157,7 +152,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
             }}
           >
             {mode === 'login'
-              ? `Neu hier? Konto erstellen${domains ? ` (@${domains.split(',')[0].trim()})` : ''}`
+              ? 'Neu hier? Konto erstellen'
               : 'Zurück zum Login'}
           </button>
         )}

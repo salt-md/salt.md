@@ -418,13 +418,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		hash = dummyHash // verify anyway so timing doesn't reveal account existence
 	}
 	if !verifyPassword(body.Password, hash) || err != nil {
-		httpError(w, http.StatusUnauthorized, "wrong credentials")
+		httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Falsche E-Mail oder falsches Passwort.")
 		return
 	}
 	// Stillgelegtes Konto: erst NACH der Passwortprüfung ablehnen, sonst
 	// verriete die Antwort, dass es diese Adresse überhaupt gibt.
 	if disabled != 0 {
-		httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
+		httpErrorCode(w, http.StatusForbidden, "account_disabled", "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
 		return
 	}
 	// Second factor: password was correct, now require a valid TOTP code. The
@@ -432,11 +432,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// the password.
 	if totpEnabled != 0 {
 		if body.Code == "" {
-			httpError(w, http.StatusUnauthorized, "2fa required")
+			httpErrorCode(w, http.StatusUnauthorized, "2fa_required", "Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.")
 			return
 		}
 		if !verifyTOTP(totpSecret, body.Code) {
-			httpError(w, http.StatusUnauthorized, "invalid 2fa code")
+			httpErrorCode(w, http.StatusUnauthorized, "2fa_invalid", "Falscher Code — nochmal versuchen.")
 			return
 		}
 	}

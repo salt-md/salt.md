@@ -11,14 +11,50 @@ import type {
   Workspace,
 } from './types';
 
-/** Fehler mit HTTP-Status, damit Aufrufer auf den Status prüfen können statt
- *  auf den Meldungstext — der ändert sich mit jeder Umformulierung. */
+/** Fehler mit HTTP-Status und maschinenlesbarem Grund, damit Aufrufer darauf
+ *  prüfen können statt auf den Meldungstext — der ändert sich mit jeder
+ *  Umformulierung, und eine Verzweigung daran bricht still. */
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /** Grund aus dem Feld `code` der Antwort, etwa `2fa_required`. Leer, wenn
+   *  der Endpunkt keinen sendet. */
+  code: string;
+  constructor(message: string, status: number, code = '') {
     super(message);
     this.status = status;
+    this.code = code;
   }
+}
+
+/** Fehlerantwort auswerten — dieselbe Behandlung für JSON-Aufrufe wie für die
+ *  Datei-Uploads, die kein JSON senden können.
+ *
+ *  Wichtig ist der Fall "Antwort ist gar kein JSON": ein vorgelagerter Proxy
+ *  meldet eine zu große Datei als HTML-Seite. Wer blind `res.json()` aufruft,
+ *  wirft daran selbst — auf dem Bildschirm stand dann `Unexpected token '<'`
+ *  statt einer Auskunft über die Dateigröße. */
+async function toApiError(res: Response, fallback: string): Promise<ApiError> {
+  let msg = fallback || res.statusText;
+  let code = '';
+  try {
+    const body = (await res.json()) as { error?: string; code?: string };
+    msg = body.error ?? msg;
+    code = body.code ?? '';
+  } catch {
+    if (res.status === 413) msg = 'Die Datei ist zu groß für diese Instanz.';
+  }
+  return new ApiError(msg, res.status, code);
+}
+
+/** Eine abgelaufene Sitzung führt zurück zum Anmeldebildschirm — außer auf den
+ *  Anmelde-Endpunkten selbst, wo ein 401 einen fehlgeschlagenen Versuch meint
+ *  und der Grund gebraucht wird (2FA nötig vs. falsches Passwort). */
+function throwApiError(url: string, err: ApiError): never {
+  if (err.status === 401 && !/^\/api\/(login|signup|setup)\b/.test(url)) {
+    window.dispatchEvent(new Event('salt:unauthorized'));
+    throw new ApiError('unauthorized', 401, 'session_expired');
+  }
+  throw err;
 }
 
 async function req<T>(url: string, init?: RequestInit): Promise<T> {
@@ -26,23 +62,7 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
   });
-  if (!res.ok) {
-    let msg = res.statusText;
-    try {
-      msg = (await res.json()).error ?? msg;
-    } catch {
-      /* not JSON */
-    }
-    // A 401 from the auth endpoints is a failed sign-in attempt, and the exact
-    // reason matters ("2fa required" makes the login show the code field). Only
-    // a 401 ELSEWHERE means the session died — that's what boots to the login
-    // screen. Swallowing the body here once locked users out of 2FA accounts.
-    if (res.status === 401 && !/^\/api\/(login|signup|setup)\b/.test(url)) {
-      window.dispatchEvent(new Event('salt:unauthorized'));
-      throw new ApiError('unauthorized', 401);
-    }
-    throw new ApiError(msg, res.status);
-  }
+  if (!res.ok) throwApiError(url, await toApiError(res, ''));
   return res.json() as Promise<T>;
 }
 
@@ -55,7 +75,9 @@ export const api = {
   logout: () => req<{ ok: boolean }>('/api/logout', { method: 'POST' }),
   signup: (name: string, email: string, password: string) =>
     req<User>('/api/signup', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
-  signupPolicy: () => req<{ mode: string; allowedDomains: string; instanceName: string; oauthGoogle: boolean; oauthMicrosoft: boolean }>('/api/signup-policy'),
+  // Ohne allowedDomains: welche Absenderdomains eine Instanz für ihre eigenen
+  // hält, geht niemanden etwas an, der noch nicht angemeldet ist.
+  signupPolicy: () => req<{ mode: string; instanceName: string; oauthGoogle: boolean; oauthMicrosoft: boolean }>('/api/signup-policy'),
 
   getSettings: () =>
     req<{
@@ -263,8 +285,11 @@ export const api = {
   importZip: async (file: File): Promise<{ created: number; skipped: number }> => {
     const fd = new FormData();
     fd.append('file', file);
+    // Rohes fetch (FormData verträgt den JSON-Header nicht), aber dieselbe
+    // Fehlerbehandlung wie überall: mit Status, mit Grund, und eine abgelaufene
+    // Sitzung landet auf dem Anmeldebildschirm statt in einem Text im Dialog.
     const res = await fetch('/api/import-zip', { method: 'POST', body: fd });
-    if (!res.ok) throw new Error(((await res.json()) as { error?: string }).error ?? 'import failed');
+    if (!res.ok) throwApiError('/api/import-zip', await toApiError(res, 'Import fehlgeschlagen'));
     return res.json() as Promise<{ created: number; skipped: number }>;
   },
   deleteForever: (id: string) =>
@@ -436,7 +461,7 @@ export const api = {
   upload: (file: File, pageId?: string): Promise<string> =>
     new Promise((resolve, reject) => {
       if (file.size > api.uploadMaxBytes) {
-        reject(new Error(`Datei zu groß (${(file.size / 1048576).toFixed(1)} MB) — max. 50 MB`));
+        reject(new ApiError(`Datei zu groß (${(file.size / 1048576).toFixed(1)} MB) — max. 50 MB`, 413, 'file_too_large'));
         return;
       }
       const fd = new FormData();
@@ -451,17 +476,35 @@ export const api = {
       const finish = () => window.dispatchEvent(new Event('salt:upload-done'));
       xhr.onload = () => {
         finish();
-        if (xhr.status === 413) return reject(new Error('Datei zu groß — max. 50 MB'));
-        if (xhr.status < 200 || xhr.status >= 300) return reject(new Error('Upload fehlgeschlagen'));
-        try {
-          resolve((JSON.parse(xhr.responseText) as { url: string }).url);
-        } catch {
-          reject(new Error('Upload fehlgeschlagen'));
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            resolve((JSON.parse(xhr.responseText) as { url: string }).url);
+          } catch {
+            reject(new ApiError('Upload fehlgeschlagen', xhr.status));
+          }
+          return;
         }
+        // Auch hier mit Status und Grund — und eine abgelaufene Sitzung führt
+        // zum Anmeldebildschirm, statt als Text im Editor zu landen, während
+        // die Oberfläche weiter so tut, als wäre man angemeldet.
+        if (xhr.status === 401) {
+          window.dispatchEvent(new Event('salt:unauthorized'));
+          return reject(new ApiError('unauthorized', 401, 'session_expired'));
+        }
+        let msg = xhr.status === 413 ? 'Die Datei ist zu groß für diese Instanz.' : 'Upload fehlgeschlagen';
+        let code = '';
+        try {
+          const body = JSON.parse(xhr.responseText) as { error?: string; code?: string };
+          msg = body.error ?? msg;
+          code = body.code ?? '';
+        } catch {
+          /* keine JSON-Antwort (etwa eine Fehlerseite des Proxys) */
+        }
+        reject(new ApiError(msg, xhr.status, code));
       };
       xhr.onerror = () => {
         finish();
-        reject(new Error('Upload fehlgeschlagen'));
+        reject(new ApiError('Upload fehlgeschlagen — keine Verbindung zum Server.', 0));
       };
       xhr.send(fd);
     }),

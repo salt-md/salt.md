@@ -291,3 +291,17 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 	w.WriteHeader(code)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
+
+// httpErrorCode ist httpError mit einem maschinenlesbaren Grund.
+//
+// Der Anmeldebildschirm muss unterscheiden, WARUM eine Anmeldung scheiterte:
+// bei "2fa_required" blendet er das Feld für den Code ein, sonst zeigt er
+// "falsche Zugangsdaten". Beides ist ein 401, also reicht der Status nicht.
+// Bisher verglich die Oberfläche dafür den englischen Meldungstext Zeichen für
+// Zeichen — eine Umformulierung oder Übersetzung hätte das Code-Feld wortlos
+// verschwinden lassen und jedes Konto mit Zwei-Faktor-Anmeldung ausgesperrt.
+func httpErrorCode(w http.ResponseWriter, status int, code, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]string{"error": msg, "code": code})
+}
