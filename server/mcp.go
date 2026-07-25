@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -1109,47 +1110,55 @@ func (s *Server) mcpSearch(u *user, q string) (string, error) {
 	if len(ws) == 0 {
 		return "No results.", nil
 	}
-	terms := strings.Fields(q)
-	for i, t := range terms {
-		terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
-	}
 	qargs := make([]any, 0, len(ws)+1)
-	qargs = append(qargs, strings.Join(terms, " "))
+	qargs = append(qargs, ftsMatch(q))
 	for _, v := range ws {
 		qargs = append(qargs, v)
 	}
-	rows, err := s.db.Query(`
-		SELECT p.id, p.title, snippet(pages_fts, 2, '', '', '…', 14)
-		FROM pages_fts JOIN pages p ON p.id = pages_fts.id
-		WHERE pages_fts MATCH ? AND p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)
-		ORDER BY bm25(pages_fts, 0.0, 5.0, 1.0)
-		LIMIT 40`, qargs...)
-	if err != nil {
-		return "No results.", nil
-	}
 	type hit struct{ id, title, snip string }
-	var cand []hit
-	for rows.Next() {
-		var h hit
-		if rows.Scan(&h.id, &h.title, &h.snip) == nil {
-			cand = append(cand, h)
-		}
-	}
-	rows.Close() // drain before per-row canRead (single DB connection)
 	var b strings.Builder
 	n := 0
-	for _, h := range cand {
-		if !s.canRead(userID, h.id) {
-			continue
-		}
-		if h.title == "" {
-			h.title = "Untitled"
-		}
-		fmt.Fprintf(&b, "• %s (id: %s)\n  %s\n", h.title, h.id, h.snip)
-		n++
-		if n >= 20 {
+	// Nachladen wie in der REST-Suche: der canRead-Filter wirft Treffer weg,
+	// ein festes LIMIT liesse die Antwort still zu kurz werden. Fuer einen
+	// Agenten ist das schlimmer als fuer einen Menschen — er sieht der Liste
+	// nicht an, dass sie unvollstaendig ist, und schliesst daraus, es gebe
+	// nichts weiter.
+	for offset, round := 0, 0; n < 20 && round < 8; round++ {
+		args := append([]any{}, qargs...)
+		rows, err := s.db.Query(`
+			SELECT p.id, p.title, snippet(pages_fts, 2, '', '', '…', 14)
+			FROM pages_fts JOIN pages p ON p.id = pages_fts.id
+			WHERE pages_fts MATCH ? AND p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)
+			ORDER BY bm25(pages_fts, 0.0, 5.0, 1.0)
+			LIMIT 60 OFFSET `+strconv.Itoa(offset), args...)
+		if err != nil {
 			break
 		}
+		var cand []hit
+		for rows.Next() {
+			var h hit
+			if rows.Scan(&h.id, &h.title, &h.snip) == nil {
+				cand = append(cand, h)
+			}
+		}
+		rows.Close() // drain before per-row canRead (single DB connection)
+		for _, h := range cand {
+			if n >= 20 {
+				break
+			}
+			if !s.canRead(userID, h.id) {
+				continue
+			}
+			if h.title == "" {
+				h.title = "Untitled"
+			}
+			fmt.Fprintf(&b, "• %s (id: %s)\n  %s\n", h.title, h.id, h.snip)
+			n++
+		}
+		if len(cand) < 60 {
+			break
+		}
+		offset += 60
 	}
 	if n == 0 {
 		return "No results.", nil

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -849,11 +850,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, results)
 		return
 	}
-	terms := strings.Fields(q)
-	for i, t := range terms {
-		terms[i] = `"` + strings.ReplaceAll(t, `"`, `""`) + `"*`
-	}
-	match := strings.Join(terms, " ")
+	match := ftsMatch(q)
 
 	userID := requestUser(r).ID
 	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(userID))
@@ -866,37 +863,50 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	for _, v := range ws {
 		wargs = append(wargs, v)
 	}
-	rows, err := s.db.Query(`
-		SELECT p.id, p.title, p.icon, snippet(pages_fts, 2, char(1), char(2), '…', 14)
-		FROM pages_fts JOIN pages p ON p.id = pages_fts.id
-		WHERE pages_fts MATCH ? AND p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)
-		ORDER BY bm25(pages_fts, 0.0, 5.0, 1.0)
-		LIMIT 40`, wargs...)
-	if err != nil {
-		// An unparsable query should not 500; just return no results.
-		writeJSON(w, results)
-		return
-	}
-	// Drain the cursor BEFORE any per-row canRead query — with a single DB
-	// connection (SetMaxOpenConns 1) an open cursor + inner query deadlocks.
-	var cand []searchResult
-	for rows.Next() {
-		var res searchResult
-		if err := rows.Scan(&res.ID, &res.Title, &res.Icon, &res.Snippet); err != nil {
-			rows.Close()
-			httpError(w, 500, err.Error())
+	// Nachladen, statt einmal 40 zu holen: der canRead-Filter unten wirft
+	// Treffer weg, und mit einem festen LIMIT blieb die Liste kurz, sobald in
+	// einem Workspace viele fremde private Seiten liegen — man bekam vier
+	// Ergebnisse und dachte, mehr gebe es nicht. Der Offset waechst, bis 20
+	// zusammen sind oder der Index nichts mehr hergibt.
+	const want = 20
+	for offset, round := 0, 0; len(results) < want && round < 8; round++ {
+		qArgs := append([]any{}, wargs...)
+		rows, err := s.db.Query(`
+			SELECT p.id, p.title, p.icon, snippet(pages_fts, 2, char(1), char(2), '…', 14)
+			FROM pages_fts JOIN pages p ON p.id = pages_fts.id
+			WHERE pages_fts MATCH ? AND p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)
+			ORDER BY bm25(pages_fts, 0.0, 5.0, 1.0)
+			LIMIT 60 OFFSET `+strconv.Itoa(offset), qArgs...)
+		if err != nil {
+			// An unparsable query should not 500; just return no results.
+			writeJSON(w, results)
 			return
 		}
-		cand = append(cand, res)
-	}
-	rows.Close()
-	for _, res := range cand {
-		if s.canRead(userID, res.ID) { // drop private pages the user can't read
-			results = append(results, res)
-			if len(results) >= 20 {
+		// Drain the cursor BEFORE any per-row canRead query — with a single DB
+		// connection (SetMaxOpenConns 1) an open cursor + inner query deadlocks.
+		var cand []searchResult
+		for rows.Next() {
+			var res searchResult
+			if err := rows.Scan(&res.ID, &res.Title, &res.Icon, &res.Snippet); err != nil {
+				rows.Close()
+				httpError(w, 500, err.Error())
+				return
+			}
+			cand = append(cand, res)
+		}
+		rows.Close()
+		for _, res := range cand {
+			if len(results) >= want {
 				break
 			}
+			if s.canRead(userID, res.ID) { // drop private pages the user can't read
+				results = append(results, res)
+			}
 		}
+		if len(cand) < 60 {
+			break // Index erschoepft
+		}
+		offset += 60
 	}
 	writeJSON(w, results)
 }

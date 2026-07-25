@@ -21,7 +21,14 @@ CREATE TABLE IF NOT EXISTS pages (
 	trashed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_id);
-CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(id UNINDEXED, title, body);
+-- remove_diacritics 2: faltet ä→a, ü→u, ß→ss vor dem Indexieren. Zusammen mit
+-- der Praefixsuche faellt damit ein grosser Teil der deutschen Beugung weg
+-- ("Verträge" wird zu "vertrage" und ist ueber "vertrag*" erreichbar).
+-- Aenderungen hier brauchen eine neue ftsVersion in searchindex.go.
+CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
+	id UNINDEXED, title, body,
+	tokenize = "unicode61 remove_diacritics 2"
+);
 CREATE TABLE IF NOT EXISTS settings (
 	key TEXT PRIMARY KEY,
 	value TEXT NOT NULL

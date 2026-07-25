@@ -99,6 +99,11 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	if err := s.migrateOrg(); err != nil {
 		return nil, err
 	}
+	// Volltextindex auf die aktuelle Fassung bringen (Tokenizer, siehe
+	// searchindex.go). Baut bei Bedarf einmalig neu auf.
+	if err := s.migrateSearchIndex(); err != nil {
+		return nil, err
+	}
 	s.backfillSnippets()
 	s.deleteExpiredSessions()
 	s.startCleanup()
