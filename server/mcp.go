@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -1110,55 +1109,27 @@ func (s *Server) mcpSearch(u *user, q string) (string, error) {
 	if len(ws) == 0 {
 		return "No results.", nil
 	}
-	qargs := make([]any, 0, len(ws)+1)
-	qargs = append(qargs, ftsMatch(q))
-	for _, v := range ws {
-		qargs = append(qargs, v)
+	// Gesucht wird ueber die ABSCHNITTE (siehe chunks.go). Fuer einen Agenten
+	// ist das der eigentliche Unterschied: er bekommt den Absatz, der passt,
+	// samt Ueberschriften-Pfad — statt "in dieser 4000-Wort-Seite steht etwas"
+	// und der Notwendigkeit, sie ganz zu laden.
+	hits := s.searchChunks(userID, ftsMatch(q), ws, 20)
+	if len(hits) == 0 {
+		hits = s.searchPagesFallback(userID, ftsMatch(q), ws, 20)
 	}
-	type hit struct{ id, title, snip string }
 	var b strings.Builder
 	n := 0
-	// Nachladen wie in der REST-Suche: der canRead-Filter wirft Treffer weg,
-	// ein festes LIMIT liesse die Antwort still zu kurz werden. Fuer einen
-	// Agenten ist das schlimmer als fuer einen Menschen — er sieht der Liste
-	// nicht an, dass sie unvollstaendig ist, und schliesst daraus, es gebe
-	// nichts weiter.
-	for offset, round := 0, 0; n < 20 && round < 8; round++ {
-		args := append([]any{}, qargs...)
-		rows, err := s.db.Query(`
-			SELECT p.id, p.title, snippet(pages_fts, 2, '', '', '…', 14)
-			FROM pages_fts JOIN pages p ON p.id = pages_fts.id
-			WHERE pages_fts MATCH ? AND p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)
-			ORDER BY bm25(pages_fts, 0.0, 5.0, 1.0)
-			LIMIT 60 OFFSET `+strconv.Itoa(offset), args...)
-		if err != nil {
-			break
+	for _, h := range hits {
+		title := h.Title
+		if title == "" {
+			title = "Untitled"
 		}
-		var cand []hit
-		for rows.Next() {
-			var h hit
-			if rows.Scan(&h.id, &h.title, &h.snip) == nil {
-				cand = append(cand, h)
-			}
+		if h.Heading != "" {
+			fmt.Fprintf(&b, "• %s › %s (id: %s)\n  %s\n", title, h.Heading, h.ID, h.Snippet)
+		} else {
+			fmt.Fprintf(&b, "• %s (id: %s)\n  %s\n", title, h.ID, h.Snippet)
 		}
-		rows.Close() // drain before per-row canRead (single DB connection)
-		for _, h := range cand {
-			if n >= 20 {
-				break
-			}
-			if !s.canRead(userID, h.id) {
-				continue
-			}
-			if h.title == "" {
-				h.title = "Untitled"
-			}
-			fmt.Fprintf(&b, "• %s (id: %s)\n  %s\n", h.title, h.id, h.snip)
-			n++
-		}
-		if len(cand) < 60 {
-			break
-		}
-		offset += 60
+		n++
 	}
 	if n == 0 {
 		return "No results.", nil

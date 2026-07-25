@@ -29,6 +29,23 @@ CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
 	id UNINDEXED, title, body,
 	tokenize = "unicode61 remove_diacritics 2"
 );
+-- Abschnitte einer Seite (W110): die Sucheinheit unterhalb der Seite. Haengt
+-- per Kaskade an pages; chunks_fts wird von Hand nachgefuehrt, weil eine
+-- virtuelle Tabelle keine Fremdschluessel kennt.
+CREATE TABLE IF NOT EXISTS page_chunks (
+	id TEXT PRIMARY KEY,
+	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+	workspace_id TEXT NOT NULL DEFAULT '',
+	ord INTEGER NOT NULL DEFAULT 0,
+	heading TEXT NOT NULL DEFAULT '',
+	text TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_chunk_page ON page_chunks(page_id);
+CREATE INDEX IF NOT EXISTS idx_chunk_ws ON page_chunks(workspace_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
+	chunk_id UNINDEXED, title, heading, text,
+	tokenize = "unicode61 remove_diacritics 2"
+);
 CREATE TABLE IF NOT EXISTS settings (
 	key TEXT PRIMARY KEY,
 	value TEXT NOT NULL

@@ -29,7 +29,7 @@ import (
 
 // ftsVersion ist die Fassung, die dieser Build erwartet. Erhoehen, wenn sich
 // die Tokenizer-Zeile oder das Spaltenlayout aendert.
-const ftsVersion = "2"
+const ftsVersion = "3"
 
 // foldQuery faltet einen Suchbegriff genauso, wie der Index es tut.
 //
@@ -137,6 +137,10 @@ func (s *Server) migrateSearchIndex() error {
 	if _, err := s.db.Exec(`DROP TABLE IF EXISTS pages_fts`); err != nil {
 		return err
 	}
+	// Fassung 3: die Abschnitte kommen dazu. Beide Indizes werden von
+	// reindexPage gefuellt, also genuegt es, sie zu leeren.
+	s.db.Exec(`DELETE FROM chunks_fts`)
+	s.db.Exec(`DELETE FROM page_chunks`)
 	if _, err := s.db.Exec(`CREATE VIRTUAL TABLE pages_fts USING fts5(
 		id UNINDEXED, title, body,
 		tokenize = "unicode61 remove_diacritics 2"

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -662,6 +663,9 @@ func (s *Server) reindexPage(id string) error {
 	// Keep the outgoing-links index in sync with the current content.
 	s.updateLinks(id, content, trashedAt.Valid)
 	if trashedAt.Valid {
+		// Im Papierkorb: Abschnitte raeumen, sonst taucht die Seite in der
+		// abschnittsbasierten Suche weiter auf.
+		s.reindexChunks(id, "", "", nil, true)
 		return nil
 	}
 	// Refresh the notes-list preview (snippet + first image) alongside the index.
@@ -685,9 +689,19 @@ func (s *Server) reindexPage(id string) error {
 	// Strip the snippet highlight markers so page content can never inject
 	// fake <mark> tags into search results.
 	clean := strings.NewReplacer("\x01", "", "\x02", "")
-	_, err = s.db.Exec(`INSERT INTO pages_fts (id, title, body) VALUES (?, ?, ?)`,
-		id, clean.Replace(title), clean.Replace(body))
-	return err
+	if _, err := s.db.Exec(`INSERT INTO pages_fts (id, title, body) VALUES (?, ?, ?)`,
+		id, clean.Replace(title), clean.Replace(body)); err != nil {
+		return err
+	}
+	// Abschnitte im selben Zug (siehe chunks.go). Fehler hier duerfen die
+	// Seitenindexierung nicht scheitern lassen — die Volltextsuche ist die
+	// Grundlage, die Abschnitte sind die Verfeinerung.
+	var wsID string
+	s.db.QueryRow(`SELECT workspace_id FROM pages WHERE id = ?`, id).Scan(&wsID)
+	if err := s.reindexChunks(id, wsID, clean.Replace(title), []byte(content), false); err != nil {
+		log.Printf("reindexChunks %s: %v", id, err)
+	}
+	return nil
 }
 
 func (s *Server) handleDeletePage(w http.ResponseWriter, r *http.Request) {
@@ -726,6 +740,14 @@ func (s *Server) handleDeletePage(w http.ResponseWriter, r *http.Request) {
 		// Explicitly clear extracted file text for the subtree: older DBs may
 		// predate the file_texts foreign key, so CASCADE can't be relied on.
 		if _, err := tx.Exec(`DELETE FROM file_texts WHERE page_id IN (`+placeholders(len(ids))+`)`, idArgs...); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+		// chunks_fts ist virtuell und kennt keine Kaskade — sonst blieben die
+		// Abschnitte der geloeschten Seiten im Suchindex stehen und lieferten
+		// Treffer auf Text, den es nicht mehr gibt.
+		if _, err := tx.Exec(`DELETE FROM chunks_fts WHERE chunk_id IN
+			(SELECT id FROM page_chunks WHERE page_id IN (`+placeholders(len(ids))+`))`, idArgs...); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}
@@ -841,6 +863,10 @@ type searchResult struct {
 	Title   string `json:"title"`
 	Icon    string `json:"icon"`
 	Snippet string `json:"snippet"`
+	// Heading: der Ueberschriften-Pfad des getroffenen Abschnitts
+	// ("Verträge › Kündigung"). Leer, wenn der Treffer aus der
+	// Rueckfallebene kommt oder ueber keiner Ueberschrift steht.
+	Heading string `json:"heading,omitempty"`
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -863,14 +889,93 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	for _, v := range ws {
 		wargs = append(wargs, v)
 	}
+	// Gesucht wird ueber die ABSCHNITTE, nicht ueber ganze Seiten (siehe
+	// chunks.go): der Textausschnitt stammt dann aus dem Absatz, der wirklich
+	// passt, und traegt seinen Ueberschriften-Pfad mit.
+	//
 	// Nachladen, statt einmal 40 zu holen: der canRead-Filter unten wirft
 	// Treffer weg, und mit einem festen LIMIT blieb die Liste kurz, sobald in
 	// einem Workspace viele fremde private Seiten liegen — man bekam vier
-	// Ergebnisse und dachte, mehr gebe es nicht. Der Offset waechst, bis 20
-	// zusammen sind oder der Index nichts mehr hergibt.
-	const want = 20
-	for offset, round := 0, 0; len(results) < want && round < 8; round++ {
-		qArgs := append([]any{}, wargs...)
+	// Ergebnisse und dachte, mehr gebe es nicht.
+	results = s.searchChunks(userID, match, ws, 20)
+	// Rueckfallebene: findet die Abschnittssuche nichts, zaehlt die alte
+	// Seitensuche. Sie ist die Grundlage; ein Fehler beim Schneiden darf
+	// Inhalte nicht unauffindbar machen.
+	if len(results) == 0 {
+		results = s.searchPagesFallback(userID, match, ws, 20)
+	}
+	writeJSON(w, results)
+}
+
+// searchChunks sucht ueber die Abschnitte und liefert je Seite den BESTEN.
+//
+// Die Entdopplung passiert in Go und nicht in SQL: `GROUP BY page_id` wuerfe
+// die Rangfolge durcheinander, weil FTS5 seine Sortierung nur auf der
+// aeusseren Abfrage garantiert. Da die Zeilen ohnehin nach Rang kommen, ist
+// der erste Treffer je Seite der beste.
+func (s *Server) searchChunks(userID, match string, ws []string, want int) []searchResult {
+	out := []searchResult{}
+	seen := map[string]bool{}
+	args := make([]any, 0, len(ws)+1)
+	args = append(args, match)
+	for _, v := range ws {
+		args = append(args, v)
+	}
+	for offset, round := 0, 0; len(out) < want && round < 8; round++ {
+		qArgs := append([]any{}, args...)
+		rows, err := s.db.Query(`
+			SELECT c.page_id, p.title, p.icon, c.heading,
+			       snippet(chunks_fts, 3, char(1), char(2), '…', 18)
+			FROM chunks_fts
+			JOIN page_chunks c ON c.id = chunks_fts.chunk_id
+			JOIN pages p ON p.id = c.page_id
+			WHERE chunks_fts MATCH ? AND p.trashed_at IS NULL
+			  AND c.workspace_id IN (`+placeholders(len(ws))+`)
+			ORDER BY bm25(chunks_fts, 0.0, 5.0, 3.0, 1.0)
+			LIMIT 60 OFFSET `+strconv.Itoa(offset), qArgs...)
+		if err != nil {
+			return out
+		}
+		// Cursor VOR jeder canRead-Abfrage leeren — bei einer einzigen
+		// DB-Verbindung blockiert eine Abfrage im offenen Cursor den Server.
+		var cand []searchResult
+		for rows.Next() {
+			var res searchResult
+			if rows.Scan(&res.ID, &res.Title, &res.Icon, &res.Heading, &res.Snippet) == nil {
+				cand = append(cand, res)
+			}
+		}
+		rows.Close()
+		for _, res := range cand {
+			if len(out) >= want {
+				break
+			}
+			if seen[res.ID] {
+				continue
+			}
+			if s.canRead(userID, res.ID) {
+				seen[res.ID] = true
+				out = append(out, res)
+			}
+		}
+		if len(cand) < 60 {
+			break
+		}
+		offset += 60
+	}
+	return out
+}
+
+// searchPagesFallback ist die alte, seitenweise Suche.
+func (s *Server) searchPagesFallback(userID, match string, ws []string, want int) []searchResult {
+	out := []searchResult{}
+	args := make([]any, 0, len(ws)+1)
+	args = append(args, match)
+	for _, v := range ws {
+		args = append(args, v)
+	}
+	for offset, round := 0, 0; len(out) < want && round < 8; round++ {
+		qArgs := append([]any{}, args...)
 		rows, err := s.db.Query(`
 			SELECT p.id, p.title, p.icon, snippet(pages_fts, 2, char(1), char(2), '…', 14)
 			FROM pages_fts JOIN pages p ON p.id = pages_fts.id
@@ -878,37 +983,30 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			ORDER BY bm25(pages_fts, 0.0, 5.0, 1.0)
 			LIMIT 60 OFFSET `+strconv.Itoa(offset), qArgs...)
 		if err != nil {
-			// An unparsable query should not 500; just return no results.
-			writeJSON(w, results)
-			return
+			return out
 		}
-		// Drain the cursor BEFORE any per-row canRead query — with a single DB
-		// connection (SetMaxOpenConns 1) an open cursor + inner query deadlocks.
 		var cand []searchResult
 		for rows.Next() {
 			var res searchResult
-			if err := rows.Scan(&res.ID, &res.Title, &res.Icon, &res.Snippet); err != nil {
-				rows.Close()
-				httpError(w, 500, err.Error())
-				return
+			if rows.Scan(&res.ID, &res.Title, &res.Icon, &res.Snippet) == nil {
+				cand = append(cand, res)
 			}
-			cand = append(cand, res)
 		}
 		rows.Close()
 		for _, res := range cand {
-			if len(results) >= want {
+			if len(out) >= want {
 				break
 			}
-			if s.canRead(userID, res.ID) { // drop private pages the user can't read
-				results = append(results, res)
+			if s.canRead(userID, res.ID) {
+				out = append(out, res)
 			}
 		}
 		if len(cand) < 60 {
-			break // Index erschoepft
+			break
 		}
 		offset += 60
 	}
-	writeJSON(w, results)
+	return out
 }
 
 func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {

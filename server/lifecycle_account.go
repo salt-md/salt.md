@@ -73,6 +73,15 @@ func (s *Server) purgeWorkspace(wsID string) error {
 	if _, err := tx.Exec(`DELETE FROM pages_fts WHERE id IN (SELECT id FROM pages WHERE workspace_id = ?)`, wsID); err != nil {
 		return err
 	}
+	// chunks_fts ebenso von Hand: virtuelle Tabellen kennen keine Kaskade.
+	// page_chunks selbst haengt am Fremdschluessel und faellt mit den Seiten.
+	if _, err := tx.Exec(`DELETE FROM chunks_fts WHERE chunk_id IN
+		(SELECT id FROM page_chunks WHERE workspace_id = ?)`, wsID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM page_chunks WHERE workspace_id = ?`, wsID); err != nil {
+		return err
+	}
 	if _, err := tx.Exec(`DELETE FROM pages WHERE workspace_id = ?`, wsID); err != nil {
 		return err
 	}
