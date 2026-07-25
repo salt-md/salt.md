@@ -77,7 +77,10 @@ var fileRefPattern = regexp.MustCompile(`/files/([A-Za-z0-9._%-]+)`)
 func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
 	wsID := r.PathValue("id")
-	if !s.isMember(u.ID, wsID) && !u.IsAdmin {
+	// Mitgliedschaft (oder ein laufender, protokollierter Notfallzugriff) ist
+	// Pflicht. Früher genügte hier das Instanz-Admin-Flag — damit konnte ein
+	// Admin JEDEN fremden Workspace komplett herunterladen, ohne Spur.
+	if !s.isMember(u.ID, wsID) && !s.hasBreakGlass(u.ID, wsID) {
 		httpError(w, 404, "workspace not found")
 		return
 	}
@@ -327,8 +330,8 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO workspaces (id, name, created_at, icon, image) VALUES (?, ?, ?, ?, ?)`,
-		wsID, wsName, now(), manifest.Workspace.Icon, remap.Replace(manifest.Workspace.Image)); err != nil {
+	if _, err := tx.Exec(`INSERT INTO workspaces (id, name, created_at, icon, image, owner_id) VALUES (?, ?, ?, ?, ?, ?)`,
+		wsID, wsName, now(), manifest.Workspace.Icon, remap.Replace(manifest.Workspace.Image), u.ID); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}

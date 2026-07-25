@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -91,6 +92,11 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 		return nil, err
 	}
 	if err := s.migrateWorkspaces(); err != nil {
+		return nil, err
+	}
+	// Nach den Workspaces: Organisation, Instanzrollen und Workspace-Eigentümer
+	// aus dem Bestand ableiten (idempotent, siehe roles.go).
+	if err := s.migrateOrg(); err != nil {
 		return nil, err
 	}
 	s.backfillSnippets()
@@ -174,6 +180,11 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	// nicht als Workspace-ID geparst wird).
 	m.HandleFunc("POST /api/workspaces/import", s.auth(s.handleImportWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/export", s.auth(s.handleExportWorkspace))
+	// Notfallzugriff: anfordern darf nur der Owner; einsehen und beenden auch
+	// die Verantwortlichen des betroffenen Workspace.
+	m.HandleFunc("POST /api/workspaces/{id}/break-glass", s.ownerOnly(s.handleBreakGlass))
+	m.HandleFunc("GET /api/workspaces/{id}/break-glass", s.auth(s.handleListBreakGlass))
+	m.HandleFunc("DELETE /api/workspaces/{id}/break-glass/{grantId}", s.auth(s.handleRevokeBreakGlass))
 	m.HandleFunc("PATCH /api/workspaces/{id}", s.auth(s.handleUpdateWorkspace))
 	m.HandleFunc("DELETE /api/workspaces/{id}", s.auth(s.handleDeleteWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/members", s.auth(s.handleListMembers))
@@ -216,6 +227,14 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 
 	filesInner := http.StripPrefix("/files/", http.FileServer(http.Dir(filepath.Join(dataDir, "files"))))
 	m.HandleFunc("GET /files/", s.auth(func(w http.ResponseWriter, r *http.Request) {
+		// http.FileServer liefert für ein Verzeichnis ohne index.html eine
+		// Auflistung — hier wäre das ein Inhaltsverzeichnis SÄMTLICHER Uploads
+		// der Instanz, workspace-übergreifend, für jeden angemeldeten Nutzer.
+		// Die Zufallsnamen schützen nur, solange sie niemand aufzählen kann.
+		if strings.HasSuffix(r.URL.Path, "/") {
+			httpError(w, 404, "not found")
+			return
+		}
 		// Uploads are user-controlled: sandbox them so an uploaded .html/.svg
 		// can never run scripts on the app origin (stored XSS).
 		w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'")

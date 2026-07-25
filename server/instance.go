@@ -61,8 +61,12 @@ func (s *Server) handleAdminInfo(w http.ResponseWriter, r *http.Request) {
 // snapshot + all uploads) — the same archive `salt backup` produces on the
 // CLI, but downloadable from the browser.
 func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
-	if !requestUser(r).IsAdmin {
-		httpError(w, 403, "admin only")
+	// Owner, nicht Admin: dieses Archiv enthält JEDEN Workspace, alle Uploads,
+	// Passwort-Hashes und Sitzungs-Token. Einem Admin gegeben, wäre die ganze
+	// Trennung hinfällig — der Einzelexport wäre nur der umständlichere Weg zu
+	// denselben Daten.
+	if !s.isOwner(requestUser(r).ID) {
+		httpError(w, 403, "Nur der Owner kann ein Instanz-Backup herunterladen — es enthält alle Workspaces.")
 		return
 	}
 	tmp, err := os.CreateTemp("", "salt-backup-*.tar.gz")

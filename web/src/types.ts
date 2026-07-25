@@ -62,6 +62,8 @@ export interface User {
   color: string;
   avatar: string;
   isAdmin: boolean;
+  /** Instanzrolle: owner betreibt die Instanz, admin verwaltet Menschen. */
+  orgRole?: 'owner' | 'admin' | 'member';
 }
 
 export interface Me {

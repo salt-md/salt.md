@@ -488,6 +488,21 @@ func (s *Server) handleCollab(w http.ResponseWriter, r *http.Request) {
 		if typ != websocket.MessageBinary || len(data) < 1 {
 			continue
 		}
+		// Wer nur lesen darf, darf auch hier nur lesen. Der Socket blieb bisher
+		// die eine Schreibtür, die an canWrite vorbeiführt: er wurde beim
+		// Verbindungsaufbau allein gegen canRead geprüft, und jedes eingehende
+		// Yjs-Update landete ungeprüft in der Datenbank. Das betraf Betrachter
+		// ebenso wie einen Notfallzugriff, der ausdrücklich nur lesen darf.
+		// Empfangen (und damit Live-Mitlesen) bleibt erlaubt — nur Senden nicht.
+		//
+		// Die Prüfung läuft bei JEDEM Frame, nicht einmal beim Verbinden: sonst
+		// würde ein offener Socket den Ablauf oder den Widerruf des
+		// Notfallzugriffs überdauern.
+		if data[0] == frameUpdate || data[0] == frameSnapshot {
+			if !s.canWriteReq(r, pageID) {
+				continue
+			}
+		}
 		switch data[0] {
 		case frameUpdate:
 			s.persistUpdate(ctx, room, conn, data)

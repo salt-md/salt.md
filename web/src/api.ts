@@ -135,6 +135,19 @@ export const api = {
     req<{ workspaces: { id: string; name: string }[]; memberships: { userId: string; workspaceId: string; role: string }[] }>('/api/admin/access'),
   setMembership: (userId: string, workspaceId: string, role: string) =>
     req<{ ok: boolean }>('/api/admin/membership', { method: 'PUT', body: JSON.stringify({ userId, workspaceId, role }) }),
+  // Notfallzugriff: befristete Einsicht in einen fremden Workspace. Anfordern
+  // darf nur der Owner; einsehen und beenden auch dessen Verantwortliche.
+  breakGlass: (workspaceId: string, reason: string) =>
+    req<{ ok: boolean; expiresAt: string; workspace: string }>(`/api/workspaces/${workspaceId}/break-glass`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
+  listBreakGlass: (workspaceId: string) =>
+    req<
+      { id: string; user: string; reason: string; createdAt: string; expiresAt: string; revokedAt: string | null; active: boolean }[]
+    >(`/api/workspaces/${workspaceId}/break-glass`),
+  revokeBreakGlass: (workspaceId: string, grantId: string) =>
+    req<{ ok: boolean }>(`/api/workspaces/${workspaceId}/break-glass/${grantId}`, { method: 'DELETE' }),
   createUser: (u: { name: string; email: string; password: string; isAdmin: boolean; workspaces?: { id: string; role: string }[] }) =>
     req<User>('/api/users', { method: 'POST', body: JSON.stringify(u) }),
   updateUser: (id: string, patch: Partial<{ name: string; email: string; color: string; avatar: string; password: string; currentPassword: string; isAdmin: boolean }>) =>
@@ -208,10 +221,10 @@ export const api = {
     req<{ ok: boolean }>(`/api/pages/${id}?permanent=1`, { method: 'DELETE' }),
   restorePage: (id: string) =>
     req<{ ok: boolean }>(`/api/pages/${id}/restore`, { method: 'POST' }),
-  reindexSiblings: (parentId: string | null) =>
+  reindexSiblings: (parentId: string | null, workspaceId?: string) =>
     req<{ reindexed: number }>('/api/reindex-siblings', {
       method: 'POST',
-      body: JSON.stringify({ parentId }),
+      body: JSON.stringify({ parentId, workspaceId }),
     }),
   search: (q: string) => req<SearchResult[]>(`/api/search?q=${encodeURIComponent(q)}`),
   backlinks: (id: string) => req<Backlink[]>(`/api/pages/${id}/backlinks`),

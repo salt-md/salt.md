@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { ApiToken, AuditEntry, User, Workspace } from '../types';
 import Portal from './Portal';
-import { confirm } from '../dialog';
+import { confirm, promptText } from '../dialog';
 import { toast } from '../toast';
 import { useExclusiveModal } from '../modal';
 import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSettings';
@@ -415,6 +415,24 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
     }
   };
 
+  // Notfallzugriff: die Begründung ist Pflicht, weil genau sie den Unterschied
+  // zwischen kontrolliertem Zugriff und stiller Hintertür ausmacht.
+  const requestBreakGlass = async (wsId: string, wsName: string) => {
+    setError(null);
+    const reason = await promptText(`Notfallzugriff auf „${wsName}" — warum?`, {
+      placeholder: 'z.B. Rechtliche Prüfung Az. …, Freigabe durch …',
+    });
+    if (!reason?.trim()) return;
+    try {
+      const res = await api.breakGlass(wsId, reason.trim());
+      const until = new Date(res.expiresAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+      toast(`Lesezugriff auf „${wsName}" bis ${until} — die Verantwortlichen wurden informiert.`);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   const toggleAdmin = async (u: User) => {
     setError(null);
     try {
@@ -472,7 +490,9 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                     <span className="users-li-text">
                       <span className="users-li-name">
                         {u.name}
-                        {u.isAdmin && <span className="badge">admin</span>}
+                        {u.orgRole === 'owner'
+                          ? <span className="badge">owner</span>
+                          : u.isAdmin && <span className="badge">admin</span>}
                       </span>
                       <span className="users-li-email">{u.email}</span>
                     </span>
@@ -496,22 +516,32 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                     <div className="users-detail-id">
                       <div className="users-detail-name">
                         {sel.name}
-                        {sel.isAdmin && <span className="badge">Instanz-Admin</span>}
+                        {sel.orgRole === 'owner'
+                          ? <span className="badge">Instanz-Owner</span>
+                          : sel.isAdmin && <span className="badge">Instanz-Admin</span>}
                       </div>
                       <div className="users-detail-email">{sel.email}</div>
                     </div>
                   </div>
 
+                  {/* Der Owner betreibt die Instanz — er lässt sich hier weder
+                      degradieren noch löschen, sonst stünde sie ohne
+                      Verantwortlichen da. */}
                   <div className="users-detail-actions">
-                    {sel.id !== me.id && (
+                    {sel.id !== me.id && sel.orgRole !== 'owner' && (
                       <button className="btn-sm" onClick={() => void toggleAdmin(sel)}>
                         {sel.isAdmin ? 'Admin-Rechte entziehen' : 'Zum Instanz-Admin machen'}
                       </button>
                     )}
-                    {sel.id !== me.id && (
+                    {sel.id !== me.id && sel.orgRole !== 'owner' && (
                       <button className="btn-sm danger" onClick={() => void remove(sel)}>
                         Nutzer löschen
                       </button>
+                    )}
+                    {sel.orgRole === 'owner' && (
+                      <span className="dialog-hint">
+                        Der Owner betreibt diese Instanz — seine Rolle wird hier nicht geändert.
+                      </span>
                     )}
                   </div>
 
@@ -519,14 +549,40 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                   <div className="ws-access-list">
                     {access.workspaces.map((ws) => {
                       const role = roleOf(sel.id, ws.id);
+                      // Der Server lässt Rollenänderungen nur zu, wo sie
+                      // zustehen: nie für sich selbst (dafür gibt es den
+                      // Notfallzugriff), und als Admin nur in eigenen
+                      // Workspaces. Die Oberfläche zeigt dieselbe Grenze,
+                      // statt Klicks in ein 403 laufen zu lassen.
+                      const mayEdit =
+                        sel.id !== me.id &&
+                        (me.orgRole === 'owner' || roleOf(me.id, ws.id) === 'admin');
+                      const mayPeek = sel.id === me.id && me.orgRole === 'owner' && role === 'none';
                       return (
                         <div key={ws.id} className={'ws-access-row' + (role !== 'none' ? ' has-access' : '')}>
                           <span className="ws-access-name">{ws.name}</span>
+                          {mayPeek && (
+                            <button
+                              className="btn-sm"
+                              title="Befristete Einsicht mit Begründung — wird protokolliert und den Verantwortlichen angezeigt"
+                              onClick={() => void requestBreakGlass(ws.id, ws.name)}
+                            >
+                              Notfallzugriff
+                            </button>
+                          )}
                           <div className="ws-role-seg">
                             {ROLES.map((r) => (
                               <button
                                 key={r.v}
                                 className={'ws-role-btn' + (role === r.v ? ' active' : '')}
+                                disabled={!mayEdit}
+                                title={
+                                  mayEdit
+                                    ? undefined
+                                    : sel.id === me.id
+                                      ? 'Eigenen Zugriff kann man sich hier nicht geben.'
+                                      : 'Nur der Owner oder ein Admin dieses Workspace kann das ändern.'
+                                }
                                 onClick={() => void setRole(sel.id, ws.id, r.v)}
                               >
                                 {r.label}

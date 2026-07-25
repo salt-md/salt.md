@@ -319,6 +319,13 @@ func (s *Server) sendMail(to, subject, body string) error {
 		from = "salt@" + host
 	}
 	addr := host + ":" + port
+	// Kopfzeilen duerfen keine Zeilenumbrueche enthalten: ein Betreff mit
+	// "\r\nBcc: ..." wuerde sonst einen zusaetzlichen Empfaenger einschmuggeln
+	// oder — mit einer Leerzeile — den ganzen Mailtext ersetzen. Betrifft jeden
+	// Betreff, der Nutzereingaben enthaelt (etwa einen Workspace-Namen).
+	subject = headerSafe(subject)
+	to = headerSafe(to)
+	from = headerSafe(from)
 	msg := "From: " + from + "\r\nTo: " + to + "\r\nSubject: " + subject +
 		"\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n" + body
 
@@ -506,6 +513,7 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	s.addOrgMember(uid, false)
 	s.joinWorkspace(ws, uid, role)
 	s.db.Exec(`DELETE FROM invites WHERE token_hash = ?`, tokenHash(token))
 
@@ -599,6 +607,7 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 500, err.Error())
 		return
 	}
+	s.addOrgMember(uid, false)
 	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, uid)
 	sessTok, err := s.createSession(uid)
 	if err != nil {

@@ -6649,3 +6649,57 @@ a,
   .ws-role-seg { width: 100%; }
   .ws-role-btn { flex: 1; text-align: center; }
 }
+
+/* ---- W101: Notfallzugriffe (Break-Glass) ---------------------------------
+   Ein laufender Zugriff muss ins Auge fallen, ein abgelaufener nicht. */
+
+.bg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 48vh;
+  overflow-y: auto;
+  margin: 12px 0 4px;
+}
+
+.bg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+.bg-row.active {
+  border-color: rgba(var(--glow-orange), 0.5);
+  background: rgba(var(--glow-orange), 0.06);
+}
+
+.bg-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.bg-when {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bg-reason {
+  font-size: 13px;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+
+/* Gesperrte Rollen-Segmente: sichtbar vorhanden, aber erkennbar nicht nutzbar
+   — besser als sie zu verstecken, weil die Zeile sonst je nach Rechten
+   unterschiedlich aussieht und man das Raster nicht mehr lesen kann. */
+.ws-role-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -9,8 +9,9 @@ import Portal from './Portal';
 import IconPicker from './IconPicker';
 import { PageIcon } from '../pageIcon';
 import AgentConnectModal from './AgentConnect';
+import BreakGlassLog from './BreakGlassLog';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Network, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star } from 'lucide-react';
+import { Sun, Moon, Search, Network, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -694,6 +695,7 @@ export default function Sidebar({
     }
   };
 
+  const [bgLogOpen, setBgLogOpen] = useState(false);
   const wsImportRef = useRef<HTMLInputElement | null>(null);
   const importWorkspace = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -756,6 +758,15 @@ export default function Sidebar({
               {currentWs && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); setMembersOpen(true); }}>
                   <Users size={15} /> Mitglieder
+                </button>
+              )}
+              {activeWs?.role === 'admin' && (
+                <button
+                  className="menu-item"
+                  title="Wer hat sich als Instanz-Owner Einsicht verschafft — und warum"
+                  onClick={() => { setWsMenuOpen(false); setBgLogOpen(true); }}
+                >
+                  <ShieldAlert size={15} /> Notfallzugriffe
                 </button>
               )}
               {currentWs && (
@@ -1007,6 +1018,13 @@ export default function Sidebar({
             myRole={activeWs?.role ?? 'member'}
             onClose={() => setMembersOpen(false)}
             onChanged={onWorkspacesChanged}
+          />
+        )}
+        {bgLogOpen && currentWs && (
+          <BreakGlassLog
+            workspaceId={currentWs}
+            workspaceName={activeWs?.name ?? 'Workspace'}
+            onClose={() => setBgLogOpen(false)}
           />
         )}
         {agentOpen && (

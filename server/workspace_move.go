@@ -97,7 +97,7 @@ func (s *Server) mcpCreateWorkspace(userID, name string) (string, error) {
 		return "", fmt.Errorf("name is too long")
 	}
 	id := newID()
-	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)`, id, name, now()); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id) VALUES (?, ?, ?, ?)`, id, name, now(), userID); err != nil {
 		return "", err
 	}
 	// Wie der REST-Handler: workspace_members hat kein created_at.

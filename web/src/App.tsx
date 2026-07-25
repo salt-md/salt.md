@@ -36,7 +36,7 @@ if (mailOauthMsg) {
 
 // Kept in sync with server.Version. A stale open tab after a deploy sees a
 // different server version (via /api/me and the SSE hello) and is told to reload.
-const BUILD_VERSION = '1.0.2';
+const BUILD_VERSION = '1.1.0';
 
 function pageIdFromLocation(): string | null {
   const m = window.location.pathname.match(/^\/p\/([0-9a-f]+)$/);
@@ -605,11 +605,14 @@ export default function App() {
         .sort((a, b) => a - b);
       const tooDense = siblings.some((v, i) => i > 0 && v - siblings[i - 1] < 1e-6);
       if (tooDense) {
-        await api.reindexSiblings(parentId).catch(() => {});
+        // Auf oberster Ebene braucht der Server den Workspace: sonst müsste er
+        // raten, welche Wurzelseiten gemeint sind — und traf früher alle der
+        // ganzen Instanz.
+        await api.reindexSiblings(parentId, parentId ? undefined : currentWs).catch(() => {});
         setPages(await api.listPages());
       }
     },
-    [],
+    [currentWs],
   );
 
   const handleMissing = useCallback(

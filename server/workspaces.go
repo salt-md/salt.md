@@ -128,7 +128,7 @@ func (s *Server) canRead(userID, pageID string) bool {
 	if err := s.db.QueryRow(`SELECT workspace_id FROM pages WHERE id = ?`, pageID).Scan(&ws); err != nil {
 		return false
 	}
-	if !s.isMember(userID, ws) {
+	if !s.isMember(userID, ws) && !s.hasBreakGlass(userID, ws) {
 		return false
 	}
 	return !s.forbiddenPrivateAncestor(userID, pageID, ws)
@@ -145,7 +145,12 @@ func (s *Server) canWrite(userID, pageID string) bool {
 	if err := s.db.QueryRow(`SELECT workspace_id FROM pages WHERE id = ?`, pageID).Scan(&ws); err != nil {
 		return false
 	}
-	return s.workspaceRole(userID, ws) != "viewer"
+	// Echte Mitgliedschaft verlangen, nicht nur "kein Betrachter": ein
+	// Notfallzugriff (break_glass) kommt durch canRead, hat aber gar keine
+	// Rolle — und "" wäre ungleich "viewer" und damit versehentlich
+	// schreibberechtigt. Notfallzugriff heißt ausdrücklich nur lesen.
+	role := s.workspaceRole(userID, ws)
+	return role != "" && role != "viewer"
 }
 
 // canReadReq / canWriteReq are canRead / canWrite PLUS the request's API-token
@@ -219,7 +224,12 @@ func (u *user) tokenCanReach(ws string) bool {
 // approximated at the SQL layer by checking the page and NOT having any private
 // ancestor owned by someone else; the exact per-page check is canRead.
 func (s *Server) visibleWorkspaces(userID string) []string {
-	rows, err := s.db.Query(`SELECT workspace_id FROM workspace_members WHERE user_id = ?`, userID)
+	// Mitgliedschaften plus laufende Notfallzugriffe — sonst käme ein Owner
+	// zwar durch canRead, sähe die Seiten aber in keiner Liste.
+	rows, err := s.db.Query(`SELECT workspace_id FROM workspace_members WHERE user_id = ?
+		UNION
+		SELECT workspace_id FROM break_glass
+		WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ?`, userID, userID, nowFixed())
 	if err != nil {
 		return nil
 	}
@@ -462,7 +472,10 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := newID()
-	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)`, id, strings.TrimSpace(body.Name), now()); err != nil {
+	// Wer ihn anlegt, gehört er — nicht nur als Rolle, sondern als Eigentümer.
+	// Damit ist auch dann beantwortbar, wer zuständig ist, wenn Rollen wegfallen.
+	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id) VALUES (?, ?, ?, ?)`,
+		id, strings.TrimSpace(body.Name), now(), requestUser(r).ID); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}
@@ -710,9 +723,23 @@ func (s *Server) handlePublicPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAccessOverview: fuer die Nutzerverwaltung — welcher Nutzer ist in
-// welchem Workspace und mit welcher Rolle. Nur fuer Instanz-Admins.
+// welchem Workspace und mit welcher Rolle.
+//
+// Der Owner sieht alle Workspaces der Instanz; ein Admin nur die, die er
+// selbst verwaltet. Sonst stünden hier die Namen aller privaten Workspaces
+// samt Mitgliederlisten — Kenntnisse, mit denen ein Admin ohnehin nichts
+// anfangen darf, seit er dort keine Rollen mehr ändern kann.
 func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
-	wsRows, err := s.db.Query(`SELECT id, name FROM workspaces ORDER BY name`)
+	me := requestUser(r)
+	query := `SELECT id, name FROM workspaces ORDER BY name`
+	args := []any{}
+	if !s.isOwner(me.ID) {
+		query = `SELECT w.id, w.name FROM workspaces w
+			JOIN workspace_members m ON m.workspace_id = w.id
+			WHERE m.user_id = ? AND m.role = 'admin' ORDER BY w.name`
+		args = append(args, me.ID)
+	}
+	wsRows, err := s.db.Query(query, args...)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -740,10 +767,16 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 		WorkspaceID string `json:"workspaceId"`
 		Role        string `json:"role"`
 	}
+	// Nur Mitgliedschaften der oben sichtbaren Workspaces — sonst verriete die
+	// Liste, wer in den nicht gezeigten Workspaces sitzt.
+	shown := map[string]bool{}
+	for _, x := range workspaces {
+		shown[x.ID] = true
+	}
 	memberships := []mem{}
 	for mRows.Next() {
 		var m mem
-		if mRows.Scan(&m.UserID, &m.WorkspaceID, &m.Role) == nil {
+		if mRows.Scan(&m.UserID, &m.WorkspaceID, &m.Role) == nil && shown[m.WorkspaceID] {
 			memberships = append(memberships, m)
 		}
 	}
@@ -752,10 +785,11 @@ func (s *Server) handleAccessOverview(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleAdminMembership setzt die Rolle eines Nutzers in EINEM Workspace —
-// instanzweit, fuer die Nutzerverwaltung. Anders als die
-// /api/workspaces/{id}/members-Endpunkte (Workspace-Admin) darf hier ein
-// INSTANZ-Admin jeden Workspace anfassen, auch wenn er dort selbst nicht
-// Mitglied ist. role "none" = Mitgliedschaft entfernen.
+// der Weg der Nutzerverwaltung, im Gegensatz zu den
+// /api/workspaces/{id}/members-Endpunkten. role "none" = Mitgliedschaft
+// entfernen. Wer hier was darf, steht in den Prüfungen unten: der Owner
+// überall, ein Admin nur in den Workspaces, die er selbst verwaltet — und
+// niemand für sich selbst.
 func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		UserID      string `json:"userId"`
@@ -773,6 +807,24 @@ func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 	var wsName string
 	if s.db.QueryRow(`SELECT name FROM workspaces WHERE id = ?`, body.WorkspaceID).Scan(&wsName) != nil {
 		httpError(w, 404, "workspace not found")
+		return
+	}
+	// Wer hier Mitgliedschaften vergibt, verwaltet ANDERE. Zwei Grenzen:
+	//
+	//  1. Niemand verschafft sich über diesen Weg selbst Zugriff. Sonst wäre
+	//     "Admin darf keine fremden Inhalte lesen" mit einem Aufruf ausgehebelt.
+	//     Der ehrliche Weg für einen Owner heißt Notfallzugriff — befristet,
+	//     begründet, protokolliert, den Verantwortlichen angezeigt.
+	//  2. Ein Admin (kein Owner) darf nur dort zuweisen, wo er selbst
+	//     Workspace-Admin ist — sonst könnte er einen Strohmann in einen
+	//     fremden Workspace setzen.
+	me := requestUser(r)
+	if body.UserID == me.ID {
+		httpError(w, 403, "Du kannst dir hier keinen Zugriff selbst geben — nutze den Notfallzugriff, er wird protokolliert.")
+		return
+	}
+	if !s.isOwner(me.ID) && !s.isWorkspaceAdmin(me.ID, body.WorkspaceID) {
+		httpError(w, 403, "Nur der Owner oder ein Admin dieses Workspace kann seine Mitglieder ändern.")
 		return
 	}
 	// Den letzten Admin eines Workspace nie entfernen oder degradieren — sonst

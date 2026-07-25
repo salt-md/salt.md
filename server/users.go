@@ -32,6 +32,10 @@ type user struct {
 	Color   string `json:"color"`
 	Avatar  string `json:"avatar"`
 	IsAdmin bool   `json:"isAdmin"`
+	// OrgRole ist die Instanzrolle: owner | admin | member. Sie kommt aus
+	// org_members und wird mitgeladen, damit die Oberfläche Owner-Aktionen
+	// zeigen kann, ohne dafür eine zweite Abfrage zu brauchen.
+	OrgRole string `json:"orgRole"`
 	// TokenScope is set only when the request authenticated via an API token:
 	// "write" (full) or "read" (read-only). Empty for cookie/session auth,
 	// which is always full access. Not serialized.
@@ -121,12 +125,20 @@ func (s *Server) createSession(userID string) (string, error) {
 func (s *Server) userByID(id string) *user {
 	var u user
 	var isAdmin int
-	err := s.db.QueryRow(`SELECT id, email, name, color, avatar, is_admin FROM users WHERE id = ?`, id).
-		Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin)
+	err := s.db.QueryRow(`SELECT u.id, u.email, u.name, u.color, u.avatar, u.is_admin, COALESCE(m.role, '')
+		FROM users u LEFT JOIN org_members m ON m.user_id = u.id WHERE u.id = ?`, id).
+		Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin, &u.OrgRole)
 	if err != nil {
 		return nil
 	}
 	u.IsAdmin = isAdmin != 0
+	if u.OrgRole == "" {
+		// Konto ohne Organisationszeile (Altbestand): die alte Spalte entscheidet.
+		u.OrgRole = roleMember
+		if u.IsAdmin {
+			u.OrgRole = roleAdmin
+		}
+	}
 	return &u
 }
 
@@ -323,9 +335,20 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	var wsID string
 	if s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&wsID) != nil || wsID == "" {
 		wsID = newID()
-		s.db.Exec(`INSERT INTO workspaces (id, name, created_at) VALUES (?, 'Workspace', ?)`, wsID, now())
+		s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id) VALUES (?, 'Workspace', ?, ?)`, wsID, now(), id)
+	} else {
+		s.db.Exec(`UPDATE workspaces SET owner_id = ? WHERE id = ? AND owner_id = ''`, id, wsID)
 	}
 	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin') ON CONFLICT DO NOTHING`, wsID, id)
+	// Die Organisation ist die Ebene über den Workspaces; wer die Instanz
+	// einrichtet, ist ihr Owner. Derselbe Ablauf trägt später eine gehostete
+	// Registrierung — dann mit einer Organisation je Kunde statt genau einer.
+	orgID := s.defaultOrg()
+	if orgID == "" {
+		orgID = newID()
+		s.db.Exec(`INSERT INTO organizations (id, name, created_at) VALUES (?, ?, ?)`, orgID, "Salt.md", now())
+	}
+	s.db.Exec(`INSERT INTO org_members (org_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, orgID, id, roleOwner)
 	// Claim any orphaned pages (e.g. the seeded welcome page created before a
 	// workspace existed) into this workspace, owned by the first admin.
 	s.db.Exec(`UPDATE pages SET workspace_id = ?, owner_id = COALESCE(NULLIF(owner_id,''), ?) WHERE workspace_id = ''`, wsID, id)
@@ -416,7 +439,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(`SELECT id, email, name, color, avatar, is_admin FROM users ORDER BY created_at`)
+	rows, err := s.db.Query(`SELECT u.id, u.email, u.name, u.color, u.avatar, u.is_admin, COALESCE(m.role, '')
+		FROM users u LEFT JOIN org_members m ON m.user_id = u.id ORDER BY u.created_at`)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -426,11 +450,17 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var u user
 		var isAdmin int
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Color, &u.Avatar, &isAdmin, &u.OrgRole); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}
 		u.IsAdmin = isAdmin != 0
+		if u.OrgRole == "" {
+			u.OrgRole = roleMember
+			if u.IsAdmin {
+				u.OrgRole = roleAdmin
+			}
+		}
 		users = append(users, u)
 	}
 	writeJSON(w, users)
@@ -466,10 +496,20 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "email already in use")
 		return
 	}
+	s.addOrgMember(id, body.IsAdmin)
+	me := requestUser(r)
 	if len(body.Workspaces) > 0 {
 		// Ausdrueckliche Zuweisung: nur diese Workspaces, mit gewaehlter Rolle.
+		//
+		// Und nur solche, die der Anlegende auch vergeben darf. Ohne diese
+		// Pruefung waere die gesamte Rechtetrennung wirkungslos: ein Admin
+		// legt ein Konto mit selbst gewaehltem Passwort an, setzt es als
+		// Workspace-Admin in einen fremden Workspace und meldet sich damit an.
 		for _, ws := range body.Workspaces {
 			if ws.Role == "none" || ws.ID == "" {
+				continue
+			}
+			if !s.isOwner(me.ID) && !s.isWorkspaceAdmin(me.ID, ws.ID) {
 				continue
 			}
 			// Der Nutzer wurde eben angelegt; eine unbekannte Workspace-Id faellt
@@ -480,8 +520,24 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Ohne Angabe wie bisher: der Neue tritt allen Workspaces des anlegenden
 		// Admins bei (als Mitglied), damit der geteilte Workspace geteilt bleibt.
-		for _, ws := range s.visibleWorkspaces(requestUser(r).ID) {
-			s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, ws, id, "member")
+		//
+		// ECHTE Mitgliedschaften, nicht visibleWorkspaces: dort zaehlt seit W101
+		// auch ein laufender Notfallzugriff mit. Sonst wuerde ein waehrend der
+		// Einsicht angelegtes Konto zum DAUERHAFTEN Mitglied des fremden
+		// Workspace — aus befristetem Lesen wuerde bleibender Schreibzugriff.
+		rows, err := s.db.Query(`SELECT workspace_id FROM workspace_members WHERE user_id = ?`, me.ID)
+		if err == nil {
+			var wsIDs []string
+			for rows.Next() {
+				var ws string
+				if rows.Scan(&ws) == nil {
+					wsIDs = append(wsIDs, ws)
+				}
+			}
+			rows.Close()
+			for _, ws := range wsIDs {
+				s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, ws, id, "member")
+			}
 		}
 	}
 	writeJSON(w, s.userByID(id))
@@ -519,6 +575,15 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Ein FREMDES Passwort zu setzen heißt, sich als dieser Mensch anmelden und
+	// alles lesen zu können, was er sieht. Das ist keine Nutzerverwaltung mehr,
+	// sondern Datenzugriff — und bleibt deshalb dem Owner vorbehalten, der die
+	// Datei ohnehin hat. Dasselbe gilt für eine fremde E-Mail: sie entscheidet
+	// über die künftige SSO-Identität.
+	if me.ID != id && changingSensitive && !s.isOwner(me.ID) {
+		httpError(w, 403, "Nur der Owner kann Passwort oder E-Mail eines anderen Kontos ändern. Als Admin kannst du eine Einladung verschicken.")
+		return
+	}
 	if body.IsAdmin != nil && me.IsAdmin && !*body.IsAdmin {
 		// Sich SELBST die Admin-Rechte zu nehmen sperrt einen aus dem offenen
 		// Verwaltungsdialog aus (jede weitere Aktion faellt auf 403) — und man
@@ -531,6 +596,12 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?`, id).Scan(&others)
 		if others == 0 {
 			httpError(w, 400, "cannot remove the last admin")
+			return
+		}
+		// Dem Owner is_admin zu nehmen ließe ihn halb ausgesperrt zurück: die
+		// Owner-Rolle behielte er, aber jede adminOnly-Route wäre zu.
+		if s.isOwner(id) {
+			httpError(w, 400, "Dem Owner können die Rechte nicht entzogen werden — übertrage die Owner-Rolle zuerst.")
 			return
 		}
 	}
@@ -568,10 +639,19 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	// ---- Ab hier ist alles geprueft; jetzt anwenden.
 	if body.IsAdmin != nil && me.IsAdmin {
 		v := 0
+		role := roleMember
 		if *body.IsAdmin {
 			v = 1
+			role = roleAdmin
 		}
 		s.db.Exec(`UPDATE users SET is_admin = ? WHERE id = ?`, v, id)
+		// Die Instanzrolle mitziehen, sonst driften beide auseinander: der
+		// Rückfall in orgRole greift nur bei FEHLENDER Zeile, nicht bei einer
+		// veralteten. Ein Owner wird hier nie berührt — das verhindert die
+		// Prüfung oben.
+		if org := s.defaultOrg(); org != "" {
+			s.db.Exec(`UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ? AND role != ?`, role, org, id, roleOwner)
+		}
 	}
 	if body.Email != nil {
 		s.db.Exec(`UPDATE users SET email = ?, email_verified = 0 WHERE id = ?`, newEmail, id)
@@ -609,6 +689,15 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE is_admin = 1 AND id != ?`, id).Scan(&admins)
 	if admins == 0 {
 		httpError(w, 400, "cannot delete the last admin")
+		return
+	}
+	// Den Owner nicht löschen. Seine org_members-Zeile verschwände per CASCADE
+	// mit, und die Migration vergibt die Rolle nur an Konten OHNE Zeile — die
+	// Instanz bliebe dauerhaft ohne Owner: kein Notfallzugriff, kein
+	// Passwort-Reset, kein Instanz-Backup. Reparabel wäre das nur von Hand in
+	// der Datenbank. Erst übertragen, dann löschen.
+	if s.isOwner(id) {
+		httpError(w, 400, "Der Owner kann nicht gelöscht werden — übertrage die Owner-Rolle zuerst an ein anderes Konto.")
 		return
 	}
 	if _, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id); err != nil {

@@ -93,6 +93,36 @@ CREATE TABLE IF NOT EXISTS workspace_members (
 	role TEXT NOT NULL DEFAULT 'member',
 	PRIMARY KEY (workspace_id, user_id)
 );
+-- Die Organisation ist die Ebene ÜBER den Workspaces: heute genau eine Zeile
+-- (diese Instanz), damit "wem gehört die Instanz" eine Abfrage statt einer
+-- Annahme ist. org_members spiegelt bewusst workspace_members — wenn daraus
+-- einmal eine gehostete Mehrmandanten-Version wird, ist org_id bereits die
+-- Schranke und es bleibt beim Zuschneiden der Abfragen statt eines Umbaus.
+CREATE TABLE IF NOT EXISTS organizations (
+	id TEXT PRIMARY KEY,
+	name TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS org_members (
+	org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	role TEXT NOT NULL DEFAULT 'member', -- owner | admin | member
+	PRIMARY KEY (org_id, user_id)
+);
+-- Notfallzugriff ("Break-Glass"): ein Owner kann sich bewusst, befristet und
+-- protokolliert Lesezugriff auf einen Workspace verschaffen, dem er nicht
+-- angehört. Ohne diesen Weg gäbe es nur die stille Hintertür (Passwort
+-- zurücksetzen, sich selbst eintragen) — die genau deshalb geschlossen wird.
+CREATE TABLE IF NOT EXISTS break_glass (
+	id TEXT PRIMARY KEY,
+	workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	reason TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	expires_at TEXT NOT NULL,
+	revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_break_glass_ws ON break_glass(workspace_id);
 CREATE TABLE IF NOT EXISTS share_links (
 	token_hash TEXT PRIMARY KEY,
 	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -281,6 +311,12 @@ func openDB(path string) (*sql.DB, error) {
 	// kuenftige SSO-Identitaet eines Kollegen unter den Nagel reissen.
 	if err := ensureColumn(db, "users", "email_verified", `email_verified INTEGER NOT NULL DEFAULT 1`); err != nil {
 		return nil, fmt.Errorf("migrate users.email_verified: %w", err)
+	}
+	// W101: Ein Workspace hat einen Eigentümer, nicht nur Mitglieder mit Rollen
+	// — sonst gibt es keine Antwort auf "wem fällt er zu, wenn der Letzte geht"
+	// und er kann herrenlos zurückbleiben.
+	if err := ensureColumn(db, "workspaces", "owner_id", `owner_id TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.owner_id: %w", err)
 	}
 	// Record the schema/app version so an operator (and future migrations) can
 	// see what a data dir was last written by. Additive, idempotent.

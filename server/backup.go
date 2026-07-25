@@ -17,7 +17,7 @@ import (
 // a stale client can detect a mismatch (audit Q42).
 // Version wird beim Release-Build per -ldflags "-X salt/server.Version=..."
 // auf den Git-Tag gesetzt; lokal bleibt es der Standardwert.
-var Version = "1.0.2"
+var Version = "1.1.0"
 
 // Backup writes a consistent gzip'd tar of the workspace: the SQLite DB
 // (snapshotted with VACUUM INTO so WAL contents are included) plus all uploads.

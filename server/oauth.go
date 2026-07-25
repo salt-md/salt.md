@@ -352,6 +352,7 @@ func (s *Server) oauthCreateUser(email, name string) (string, error) {
 		uid, email, name, s.nextColor(), hashPassword(hex.EncodeToString(randPw)), now()); err != nil {
 		return "", fmt.Errorf("Konto konnte nicht erstellt werden.")
 	}
+	s.addOrgMember(uid, false)
 	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, uid)
 	return uid, nil
 }

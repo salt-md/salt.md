@@ -553,11 +553,34 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 // heavy reordering. The client calls this when a computed gap gets too small.
 func (s *Server) handleReindexSiblings(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ParentID *string `json:"parentId"`
+		ParentID    *string `json:"parentId"`
+		WorkspaceID string  `json:"workspaceId"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		httpError(w, 400, "invalid JSON")
 		return
+	}
+	// Der Endpunkt hatte gar keine Prüfung: mit parentId=null traf er
+	// `parent_id IS NULL` und schrieb damit die Reihenfolge ALLER Wurzelseiten
+	// der GESAMTEN Instanz neu — für jedes angemeldete Konto, quer durch alle
+	// Workspaces. Unterhalb einer Seite braucht es Schreibrecht auf sie; auf
+	// oberster Ebene wird auf den eigenen Workspace eingegrenzt.
+	me := requestUser(r)
+	var wsFilter string
+	if body.ParentID != nil {
+		if !s.canWriteReq(r, *body.ParentID) {
+			httpError(w, 404, "page not found")
+			return
+		}
+	} else {
+		wsFilter = strings.TrimSpace(body.WorkspaceID)
+		if wsFilter == "" {
+			wsFilter = s.userDefaultWorkspace(me.ID)
+		}
+		if !s.isMember(me.ID, wsFilter) || !s.tokenReachesWorkspace(r, wsFilter) {
+			httpError(w, 404, "workspace not found")
+			return
+		}
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -566,7 +589,8 @@ func (s *Server) handleReindexSiblings(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.Query(`SELECT id FROM pages WHERE parent_id IS ? AND trashed_at IS NULL ORDER BY position, created_at`, body.ParentID)
+	rows, err := tx.Query(`SELECT id FROM pages WHERE parent_id IS ? AND trashed_at IS NULL
+		AND (? = '' OR workspace_id = ?) ORDER BY position, created_at`, body.ParentID, wsFilter, wsFilter)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
