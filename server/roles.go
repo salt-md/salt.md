@@ -291,10 +291,10 @@ func (s *Server) addOrgMember(userID string, isAdmin bool) {
 // only" and "these workspaces only". Both act on pages and nothing else.
 // Without this guard, a token had the run of:
 //
-//   * the instance backup — as a GET, so even with a READ-ONLY token: every
+//   - the instance backup — as a GET, so even with a READ-ONLY token: every
 //     workspace, every file, every password hash
-//   * the account list including email addresses, workspace limit or not
-//   * issuing itself a new, UNLIMITED token, which made the workspace limit
+//   - the account list including email addresses, workspace limit or not
+//   - issuing itself a new, UNLIMITED token, which made the workspace limit
 //     pure decoration
 //
 // Handing an agent access hands it content. Accounts, backups, emergency

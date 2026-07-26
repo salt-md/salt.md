@@ -157,7 +157,7 @@ func (s *Server) handleICSFeed(w http.ResponseWriter, r *http.Request) {
 						b.WriteString("UID:" + rw.id + "-" + pid + "@salt.md\r\n")
 						b.WriteString("DTSTAMP:" + stamp + "\r\n")
 						b.WriteString(dt + "\r\n")
-						b.WriteString("SUMMARY:" + icsEscape(title) + " ("+icsEscape(pname)+")\r\n")
+						b.WriteString("SUMMARY:" + icsEscape(title) + " (" + icsEscape(pname) + ")\r\n")
 						b.WriteString("DESCRIPTION:" + icsEscape(c.title) + "\r\n")
 						b.WriteString("END:VEVENT\r\n")
 					}

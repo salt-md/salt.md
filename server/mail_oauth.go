@@ -54,7 +54,7 @@ func (s *Server) handleMailOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	clientID, clientSecret := s.oauthClient(pname)
 	if clientID == "" || clientSecret == "" {
-		httpError(w, 400, "enter the client ID and secret in the Access tab first")
+		httpErrorCode(w, 400, "mail_oauth_no_client", "Enter the client ID and secret in the Access tab first.")
 		return
 	}
 	// The same canonicalisation hop as the login (the cookie is host-scoped).
@@ -212,7 +212,7 @@ func (s *Server) handleMailTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.sendMail(u.Email, "Salt.md test message", "Sending mail works! 🧂"); err != nil {
-		httpError(w, 400, err.Error())
+		httpErrorFrom(w, 400, err)
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "to": u.Email})
@@ -227,7 +227,7 @@ func (s *Server) refreshedAccessToken(provider string) (string, error) {
 	clientID, clientSecret := s.oauthClient(provider)
 	refresh := s.setting("mail_oauth_refresh", "")
 	if clientID == "" || refresh == "" {
-		return "", fmt.Errorf("mail provider not connected")
+		return "", coded("mail_not_connected", "No mail provider is connected.")
 	}
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
@@ -257,7 +257,7 @@ func (s *Server) refreshedAccessToken(provider string) (string, error) {
 		if msg == "" {
 			msg = tok.Error
 		}
-		return "", fmt.Errorf("token refresh failed: %s — reconnect if needed", msg)
+		return "", coded("mail_refresh_failed", "The connection to the mailbox has expired — connect it again.", msg)
 	}
 	// Microsoft rotates refresh tokens — keep the new one.
 	if tok.RefreshToken != "" && tok.RefreshToken != refresh {
@@ -306,7 +306,8 @@ func (s *Server) sendViaGoogle(to, subject, body string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("Gmail send failed (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
+		return coded("mail_send_failed", "The provider refused to send the message.",
+			fmt.Sprintf("Gmail HTTP %d: %s", resp.StatusCode, truncate(string(b), 200)))
 	}
 	return nil
 }
@@ -342,7 +343,8 @@ func (s *Server) sendViaMicrosoft(to, subject, body string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("Microsoft send failed (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
+		return coded("mail_send_failed", "The provider refused to send the message.",
+			fmt.Sprintf("Microsoft HTTP %d: %s", resp.StatusCode, truncate(string(b), 200)))
 	}
 	return nil
 }

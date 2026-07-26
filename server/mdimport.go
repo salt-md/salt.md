@@ -12,10 +12,10 @@ import (
 // bold/italic/strike/code/links.
 
 type mBlock struct {
-	Type     string           `json:"type"`
-	Props    map[string]any   `json:"props,omitempty"`
-	Content  any              `json:"content,omitempty"`
-	Children []*mBlock        `json:"children,omitempty"`
+	Type     string         `json:"type"`
+	Props    map[string]any `json:"props,omitempty"`
+	Content  any            `json:"content,omitempty"`
+	Children []*mBlock      `json:"children,omitempty"`
 }
 
 func inlineText(text string, styles map[string]any) map[string]any {
@@ -111,7 +111,7 @@ var (
 	checkRe    = regexp.MustCompile(`^[-*+]\s+\[([ xX])\]\s+(.*)$`)
 	bulletRe   = regexp.MustCompile(`^[-*+]\s+(.*)$`)
 	numberedRe = regexp.MustCompile(`^\d+[.)]\s+(.*)$`)
-	imageRe = regexp.MustCompile(`^!\[([^\]]*)\]\(([^)]+)\)\s*$`)
+	imageRe    = regexp.MustCompile(`^!\[([^\]]*)\]\(([^)]+)\)\s*$`)
 	// Opening fence: 3+ backticks + arbitrary info string (only the first
 	// token is used as the language). Closing fence: backticks only.
 	fenceOpenRe  = regexp.MustCompile("^(`{3,})\\s*(\\S*).*$")

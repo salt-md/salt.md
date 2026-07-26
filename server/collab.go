@@ -34,9 +34,11 @@ import (
 //     resurrecting a stale row.
 //
 // Binary frames: [type byte][payload]
-//   0 = yjs update
-//   1 = awareness update (relayed, never persisted)
-//   2 = client snapshot: [2][8-byte BE seq][full-state update]
+//
+//	0 = yjs update
+//	1 = awareness update (relayed, never persisted)
+//	2 = client snapshot: [2][8-byte BE seq][full-state update]
+//
 // Text frames (server→client) are JSON: {"isNew":bool}, {"synced":true},
 // {"snapshotRequest":seq}.
 const (

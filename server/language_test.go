@@ -28,6 +28,18 @@ var germanWords = regexp.MustCompile(`(?i)\b(und|nicht|wird|werden|sind|eine|ein
 
 var umlauts = regexp.MustCompile(`[äöüßÄÖÜ]`) // i18n-ok: the letters are the subject
 
+// germanStrong holds words that need no second witness: one of them in a line
+// is German, full stop.
+//
+// The two-word rule above reads prose well and misses short remarks. A real
+// one: "laufende Massenimporte (siehe …)" — i18n-ok: German example. It has no
+// umlaut and one listed word, and it sat in server.go through three passes that
+// all reported the file clean.
+//
+// Same trade as germanInString: no English homographs, because a check that
+// cries wolf is a check somebody switches off.
+var germanStrong = regexp.MustCompile(`(?i)\b(siehe|laufende|laufenden|einmalig|bringen|sichern|aktuelle|aktuellen|fassung|bedarf|alten|beim|damit|deshalb|jedoch|sondern|zuerst|bereits|gemeinsam|jeweils|nämlich|übrigens|zunächst|schliesslich|schließlich)\b`) // i18n-ok: this list IS the detector
+
 // The marker is assembled from a constant instead of being written out in one
 // piece. Spelled whole — marker, hyphen, "file", colon — it would match its OWN
 // definition, and this file, the one that enforces the rule, would be the
@@ -98,7 +110,8 @@ func germanLines(t *testing.T, rel string) []int {
 		if exemptLine.MatchString(line) {
 			continue
 		}
-		if umlauts.MatchString(line) || len(germanWords.FindAllString(line, -1)) >= 2 {
+		if umlauts.MatchString(line) || germanStrong.MatchString(line) ||
+			len(germanWords.FindAllString(line, -1)) >= 2 {
 			hits = append(hits, i+1)
 		}
 	}

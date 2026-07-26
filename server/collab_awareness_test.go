@@ -56,11 +56,11 @@ func TestEncodeAwarenessRemovalRoundTrip(t *testing.T) {
 
 func TestParseAwarenessMalformed(t *testing.T) {
 	for _, bad := range [][]byte{
-		{},                         // empty
-		{0x05},                     // promises 5 entries, delivers none
-		{0x01, 0xff},               // clientID varint truncated
-		{0x01, 0x01, 0x01, 0x30},   // string length runs past the buffer
-		{0xff, 0xff, 0xff, 0x7f},   // absurd entry count (>1024)
+		{},                       // empty
+		{0x05},                   // promises 5 entries, delivers none
+		{0x01, 0xff},             // clientID varint truncated
+		{0x01, 0x01, 0x01, 0x30}, // string length runs past the buffer
+		{0xff, 0xff, 0xff, 0x7f}, // absurd entry count (>1024)
 	} {
 		if _, ok := parseAwareness(bad); ok {
 			t.Fatalf("accepted malformed frame % x", bad)

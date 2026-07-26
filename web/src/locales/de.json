@@ -712,5 +712,10 @@
   "Shown in your time zone.": "In deiner Zeitzone angezeigt.",
   "Time zone": "Zeitzone",
   "Week starts on": "Woche beginnt am",
-  "The language changes when you save.": "Die Sprache wechselt beim Speichern."
+  "The language changes when you save.": "Die Sprache wechselt beim Speichern.",
+  "Enter the client ID and secret in the Access tab first.": "Trag zuerst Client-ID und Secret im Zugang-Tab ein.",
+  "No mail delivery is configured — set up SMTP, or connect Google or Microsoft.": "Es ist kein Mailversand eingerichtet — SMTP hinterlegen oder Google bzw. Microsoft verbinden.",
+  "No mail provider is connected.": "Es ist kein Mail-Anbieter verbunden.",
+  "The connection to the mailbox has expired — connect it again.": "Die Verbindung zum Postfach ist abgelaufen — bitte neu verbinden.",
+  "The provider refused to send the message.": "Der Anbieter hat den Versand abgelehnt."
 }

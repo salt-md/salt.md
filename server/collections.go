@@ -86,10 +86,11 @@ func (s *Server) handlePutCollection(w http.ResponseWriter, r *http.Request) {
 // handleCollectionRows returns a collection's child rows filtered, sorted and
 // paginated SERVER-SIDE via SQLite json_extract, so a 50k-row database doesn't
 // force the client to pull everything. Query params:
-//   limit, offset          — pagination (default 100, max 500)
-//   filter=<propId>:<value> — equals (repeatable); empty value = "is set";
-//                              matches a scalar OR an array element (multiselect)
-//   sort=<propId>:<asc|desc>
+//
+//	limit, offset          — pagination (default 100, max 500)
+//	filter=<propId>:<value> — equals (repeatable); empty value = "is set";
+//	                           matches a scalar OR an array element (multiselect)
+//	sort=<propId>:<asc|desc>
 type collectionRow struct {
 	ID       string          `json:"id"`
 	Title    string          `json:"title"`

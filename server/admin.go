@@ -309,7 +309,7 @@ func (s *Server) sendMail(to, subject, body string) error {
 	}
 	host := s.setting("smtp_host", "")
 	if host == "" {
-		return fmt.Errorf("no mail delivery configured — set up SMTP or connect Google/Microsoft")
+		return coded("mail_not_configured", "No mail delivery is configured — set up SMTP, or connect Google or Microsoft.")
 	}
 	port := s.setting("smtp_port", "587")
 	user := s.setting("smtp_user", "")

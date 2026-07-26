@@ -113,7 +113,7 @@ func (s *Server) mcpPrependMarkdown(u *user, pageID, md string) (string, error) 
 	if len(blocks) == 0 {
 		return "", fmt.Errorf("markdown is empty")
 	}
-	s.snapshotRevision(pageID, u.ID, u.Name) // alten Stand sichern, siehe mcpReplaceContent
+	s.snapshotRevision(pageID, u.ID, u.Name) // save the old state first, see mcpReplaceContent
 	tx, err := s.db.Begin()
 	if err != nil {
 		return "", err

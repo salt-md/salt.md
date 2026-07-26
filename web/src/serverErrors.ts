@@ -20,6 +20,11 @@ export type ErrorData = Record<string, unknown>;
 
 export function serverMessage(code: string, fallback: string, data?: ErrorData): string {
   const n = typeof data?.pages === 'number' ? (data.pages as number) : 0;
+  // Text the PROVIDER produced — Google's rejection, an HTTP body. Nobody can
+  // translate it, so it travels beside the sentence instead of being baked into
+  // it, and is appended verbatim (see codedError in server/server.go).
+  const detail = typeof data?.detail === 'string' ? (data.detail as string) : '';
+  const withDetail = (s: string) => (detail ? `${s} (${detail})` : s);
   switch (code) {
     // ---- registration and sign-in ----
     case 'signup_not_allowed':
@@ -158,6 +163,18 @@ export function serverMessage(code: string, fallback: string, data?: ErrorData):
       return t('Token exchange failed.');
     case 'mail_oauth_provider':
       return t('The provider refused the connection.');
+    // ---- sending mail, once a mailbox is connected ----
+    case 'mail_not_configured':
+      return t('No mail delivery is configured — set up SMTP, or connect Google or Microsoft.');
+    case 'mail_not_connected':
+      return t('No mail provider is connected.');
+    case 'mail_oauth_no_client':
+      return t('Enter the client ID and secret in the Access tab first.');
+    case 'mail_refresh_failed':
+      return withDetail(t('The connection to the mailbox has expired — connect it again.'));
+    case 'mail_send_failed':
+      return withDetail(t('The provider refused to send the message.'));
+
     case 'mail_oauth_no_refresh':
       return t(
         'No refresh token received — remove the access in your account settings and connect again.',

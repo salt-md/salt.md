@@ -20,7 +20,7 @@ import (
 // The frontend is stamped from the same string (SALT_VERSION → vite define),
 // because two hand-kept numbers drift and the mismatch banner then fires
 // forever.
-var Version = "1.4.0"
+var Version = "1.5.0"
 
 // Backup writes a consistent gzip'd tar of the workspace: the SQLite DB
 // (snapshotted with VACUUM INTO so WAL contents are included) plus all uploads.

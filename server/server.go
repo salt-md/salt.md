@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io/fs"
 	"log"
 	"net/http"
@@ -28,7 +29,7 @@ type Server struct {
 	collab      *collabHub
 	mcpRate     *rateLimiter
 	mcpIcon     string          // data URI of the logo for serverInfo.icons (see mcp.go)
-	ingest      *ingestRegistry // laufende Massenimporte (siehe ingest.go)
+	ingest      *ingestRegistry // bulk imports in flight (see ingest.go)
 	loginRate   *rateLimiter
 	formRate    *rateLimiter
 	stopCleanup chan struct{}
@@ -98,8 +99,8 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	if err := s.migrateOrg(); err != nil {
 		return nil, err
 	}
-	// Volltextindex auf die aktuelle Fassung bringen (Tokenizer, siehe
-	// searchindex.go). Baut bei Bedarf einmalig neu auf.
+	// Bring the full-text index up to the current version (the tokenizer, see
+	// searchindex.go). Rebuilds once if it has to.
 	if err := s.migrateSearchIndex(); err != nil {
 		return nil, err
 	}
@@ -334,4 +335,54 @@ func httpErrorData(w http.ResponseWriter, status int, code, msg string, data map
 		body[k] = v
 	}
 	json.NewEncoder(w).Encode(body)
+}
+
+// codedError is an error that knows its own translation code.
+//
+// The three helpers above work where the handler itself decides what went
+// wrong. They do not help when the failure happens several calls down — the
+// mail path is the case in point: sendMail can fail for five different reasons,
+// and every one of them arrived at the browser as `httpError(w, 400,
+// err.Error())`, a bare English sentence with nothing for serverErrors.ts to
+// translate.
+//
+// `detail` carries text the PROVIDER produced (Google's rejection, an HTTP
+// body). Nobody can translate that, so it travels beside the sentence rather
+// than being baked into it — the same bargain loginErrorRedirect makes.
+type codedError struct {
+	code   string
+	msg    string
+	detail string
+}
+
+func (e *codedError) Error() string {
+	if e.detail != "" {
+		return e.msg + ": " + e.detail
+	}
+	return e.msg
+}
+
+func coded(code, msg string, detail ...string) error {
+	e := &codedError{code: code, msg: msg}
+	if len(detail) > 0 {
+		e.detail = detail[0]
+	}
+	return e
+}
+
+// httpErrorFrom writes an error out, using its code when it has one.
+//
+// An error without a code still works and still says something English —
+// converting a call site to this is an improvement, never a prerequisite.
+func httpErrorFrom(w http.ResponseWriter, status int, err error) {
+	var ce *codedError
+	if errors.As(err, &ce) {
+		if ce.detail != "" {
+			httpErrorData(w, status, ce.code, ce.msg, map[string]any{"detail": ce.detail})
+			return
+		}
+		httpErrorCode(w, status, ce.code, ce.msg)
+		return
+	}
+	httpError(w, status, err.Error())
 }
