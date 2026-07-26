@@ -64,16 +64,26 @@ people outside the workspace can submit entries into it.
 `Ctrl/Cmd + K` searches everything as you type. Two details that matter in
 practice:
 
-**Search works in German.** Most search boxes do not. Searching for `Verträge`
-finds `Vertrag`, `Strasse` finds `Straße`, and a compound like
-`Vertragsverlängerung` is reachable from `Vertrag`. Accents are folded and
-common endings are cut, so you find the document you were thinking of rather
-than the one you typed correctly.
+**Search survives languages that inflect.** Most search boxes are built for
+English, where a word barely changes. Everywhere else they quietly fail: you
+search for the form you were thinking of and the document you wanted has the
+other one.
 
-**Results point at the paragraph, not the page.** A hit says which passage
-matched and which headings it sits under, so "somewhere in this 4000-word
-document" becomes "this section, here". Uploaded PDFs are searched by their text
-content too.
+Salt.md folds accents and cuts common endings before it matches, so a plural
+finds its singular and a compound is reachable from its parts. German is the
+worked example because it is the hardest common case — `Verträge` finds
+`Vertrag`, `Strasse` finds `Straße`, and `Vertragsverlängerung` is reachable
+from `Vertrag` — but the same mechanism is what makes search behave for Dutch,
+the Scandinavian languages and anything else with cases or compounds.
+
+**Results point at the paragraph, not the page.** Search runs over passages,
+not whole documents: a hit says which passage matched and which headings it sits
+under, so "somewhere in this 4000-word document" becomes "this section, here".
+That matters twice over — for a person scanning results, and for an assistant,
+which gets the paragraph that answers the question instead of loading a whole
+page into its context.
+
+Uploaded PDFs are searched by their text content too.
 
 ### Working with other people
 
@@ -332,10 +342,17 @@ Read this section as a sign that the rest is accurate.
 - **One server, not a cluster.** One SQLite file is the whole point, and it is
   also the limit. This is right for a team; it is not built for tens of
   thousands of concurrent editors.
-- **No plugin system.** What is in the box is what there is.
-- **Search is keyword-based, not semantic.** It finds the words you type and
-  their German forms. "Find me everything about that topic" using meaning is
-  designed but not built — see `docs/search-and-ai.md`.
+- **No plugin system** — deliberately, and there is a route that does the same
+  job. Extending Salt.md means the REST API or the 49 MCP tools, from outside
+  the process. That covers more than a plugin API usually does, and it does not
+  ask you to run somebody else's code inside the thing holding your company's
+  notes. What it does not give you is new block types in the editor.
+- **Search matches words, not meaning — yet.** It finds what you type and the
+  inflected forms of it, across passages rather than whole pages. Asking for a
+  *topic* without naming its words is the remaining step. The groundwork is not
+  a plan on paper: the passage layer a meaning-based search needs is built and
+  running in production, and what is missing is the model on top (see
+  `docs/search-and-ai.md`, where it is costed and staged).
 - **It is young.** The core works and is tested. Compared to a tool with ten
   years behind it, the edges are not filled in.
 
