@@ -221,6 +221,7 @@ func (s *Server) handleCreatePage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit("human", userID, requestUser(r).Name, "create_page", id, workspaceID, body.Title)
 	s.pagesChanged()
+	s.fireWebhook("page.created", id)
 	writeJSON(w, p)
 }
 
@@ -569,6 +570,11 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 	if metaChanged {
 		s.pagesChanged()
 	}
+	// One event for a save, whether the body changed, the metadata did, or both
+	// — a receiver wants "this page changed", not our internal split.
+	if len(body.Content) > 0 || metaChanged {
+		s.fireWebhook("page.updated", id)
+	}
 	p, err := s.getPage(id)
 	if err != nil {
 		httpError(w, 500, err.Error())
@@ -779,6 +785,11 @@ func (s *Server) handleDeletePage(w http.ResponseWriter, r *http.Request) {
 		s.collab.reset(pid)
 	}
 	s.pagesChanged()
+	// One event per page in the subtree: a receiver filtering on a single page
+	// would otherwise never hear that it went, because only the root was named.
+	for _, pid := range ids {
+		s.fireWebhook("page.trashed", pid)
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

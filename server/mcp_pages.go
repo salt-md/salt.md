@@ -113,6 +113,7 @@ func (s *Server) mcpReplaceContent(u *user, pageID, md string) (string, error) {
 	s.resetYjsDoc(pageID)
 	s.reindexPage(pageID)
 	s.pagesChanged()
+	s.fireWebhook("page.updated", pageID)
 	return fmt.Sprintf("Replaced content of page %s", pageID), nil
 }
 

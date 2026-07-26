@@ -106,6 +106,16 @@ Apple Calendar or Google Calendar subscribe to.
 
 ### Getting your data in and out
 
+**Webhooks.** When a page is created, changed or trashed, Salt.md calls a URL
+you configure. That is what lets Zapier, Make, n8n or a script of your own react
+to what happens here — the piece that turns "there is an API" into "it plugs
+into what you already use".
+
+The payload names the page — id, title, workspace, path — and never carries its
+body: a webhook URL is typed once and then sends forever, and it should not
+quietly become an export of everything anybody writes. Every call is signed
+(`X-Salt-Signature`) so the receiver can tell ours from anybody else's.
+
 **In:** Markdown files, CSV, and a Notion export ZIP — including Notion's
 databases, which most importers drop. There is also a bulk importer that fetches
 straight from a URL or an API and maps the fields, so moving several hundred

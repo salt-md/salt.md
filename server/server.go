@@ -33,6 +33,10 @@ type Server struct {
 	loginRate   *rateLimiter
 	formRate    *rateLimiter
 	stopCleanup chan struct{}
+	// webhookTransport overrides how webhook deliveries reach the network. Nil
+	// in every real build; set only by tests, whose receiver lives on an address
+	// safeDial refuses by design (see webhooks.go).
+	webhookTransport http.RoundTripper
 }
 
 // Close stops background maintenance and releases the database. Call on
@@ -167,6 +171,13 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("GET /api/admin/stranded-workspaces", s.ownerOnly(s.handleStrandedWorkspaces))
 	m.HandleFunc("POST /api/admin/stranded-workspaces/{id}/adopt", s.ownerOnly(s.handleAdoptWorkspace))
 	m.HandleFunc("DELETE /api/admin/stranded-workspaces/{id}", s.ownerOnly(s.handleDeleteStrandedWorkspace))
+
+	// Webhooks are instance configuration, not content: an admin points the
+	// server at a foreign host and it calls out from then on. adminOnly, and
+	// deliberately absent from MCP for the same reason API tokens are.
+	m.HandleFunc("GET /api/webhooks", s.adminOnly(s.handleListWebhooks))
+	m.HandleFunc("POST /api/webhooks", s.adminOnly(s.handleCreateWebhook))
+	m.HandleFunc("DELETE /api/webhooks/{id}", s.adminOnly(s.handleDeleteWebhook))
 
 	m.HandleFunc("GET /api/tokens", s.auth(s.sessionOnly(s.handleListTokens)))
 	m.HandleFunc("POST /api/tokens", s.auth(s.sessionOnly(s.handleCreateToken)))

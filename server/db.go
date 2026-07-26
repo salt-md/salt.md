@@ -362,6 +362,21 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "users", "disabled", `disabled INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate users.disabled: %w", err)
 	}
+	// W114: outbound webhooks. Instance-wide and admin-managed: a hook is a
+	// standing arrangement to call a foreign host, which is instance
+	// configuration rather than content.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS webhooks (
+		id TEXT PRIMARY KEY,
+		url TEXT NOT NULL,
+		secret TEXT NOT NULL,
+		events TEXT NOT NULL,
+		active INTEGER NOT NULL DEFAULT 1,
+		created_at TEXT NOT NULL,
+		last_status TEXT,
+		last_at TEXT
+	)`); err != nil {
+		return nil, fmt.Errorf("create webhooks: %w", err)
+	}
 	// W112: language and time preferences, per account rather than per browser.
 	// Empty means AUTOMATIC — follow the browser, which is what happened before
 	// there was a setting and stays the default. prefs.go says why the absence

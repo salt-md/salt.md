@@ -853,6 +853,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 				return "", err
 			}
 			s.pagesChanged()
+			s.fireWebhook("page.created", id)
 			return fmt.Sprintf("Created page %q with id %s (path: /p/%s)", args.Title, id, id), nil
 		case "list_cover_presets":
 			out, err := json.Marshal(map[string]any{"covers": coverPresets})
