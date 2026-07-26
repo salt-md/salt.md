@@ -125,6 +125,16 @@ Trello cards does not mean an assistant retyping them one at a time.
 views, tags, uploads), and a print/PDF view. Nothing is locked in: the storage is
 one SQLite file you own.
 
+### Extending it
+
+There is no plugin system, and that is on purpose. Extension happens from
+outside the process, through the **REST API** or the **49 MCP tools** — which
+reaches further than a plugin API usually does, and does not ask you to run
+somebody else's code inside the thing holding your company's notes.
+
+What that does not give you is new block types in the editor. If you need those,
+this is not the tool yet.
+
 ### For AI assistants
 
 Salt.md speaks the Model Context Protocol. Point Claude, ChatGPT or any
