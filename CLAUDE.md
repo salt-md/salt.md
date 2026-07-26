@@ -193,9 +193,11 @@ building one side without `SALT_VERSION`).
 
 ## State
 
-**Nothing is rolled out or pushed without the user saying so.** Local commits
-are fine. Before any deploy, say which address you mean and wait for a yes —
-see the table above for why.
+**Deploy finished work to the test server without asking** — the owner wants to
+look at it, not read about it: build, run the gate, roll out, then report.
+**Production and pushing to GitHub stay closed** until he says otherwise. Local
+commits are fine. Name the address in the report either way — see the table
+above for why.
 
 Branch `i18n-groundwork` holds the English-first conversion. Frontend, server
 messages and the four permission files (`roles`, `lifecycle_account`, `users`,
