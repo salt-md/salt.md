@@ -6883,38 +6883,30 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
    zieht den Blick genau dorthin, wo man gerade tippt. Die Regel "ein farbiges
    Element pro Bildschirm" gilt auch fuer die eigenen guten Ideen. */
 
-/* ---- Rang ----------------------------------------------------------------
-   Die Rollen-Schalter tragen ihre Stufe als Farbe: je mehr jemand darf, desto
-   weiter wandert der Ton ins Warme. Das ist keine Deko — in einer Reihe aus
-   vier gleich aussehenden Schaltern ist die ausgewaehlte Stufe sonst nur an
-   der Fuellung zu erkennen, und welche Stufe WEITER GEHT als eine andere,
-   sieht man gar nicht. */
-.ws-role-btn[data-role='viewer'].active {
-  color: #2563eb;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #3b82f6 45%, transparent);
-}
+/* ---- Rank ----------------------------------------------------------------
+   The role buttons carry their level as a colour: the further someone's
+   rights reach, the warmer the tone. That is not decoration — in a row of
+   four identical buttons the chosen level would otherwise show only as a
+   fill, and which level goes FURTHER than another would not show at all.
 
-.ws-role-btn[data-role='member'].active {
-  color: #15803d;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #22c55e 45%, transparent);
-}
+   The colour rides on the FILL, never on the label. It used to be the other
+   way round: these rules set `color` and left `background` alone, so the rank
+   colour landed on top of the green fill that `.ws-role-btn.active` already
+   paints — blue text on green, unreadable. The label stays white throughout,
+   which is also the only way to keep contrast without checking four
+   foreground/background pairs by hand.
 
-.ws-role-btn[data-role='admin'].active {
-  color: #b45309;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, #ff8a2d 50%, transparent);
-}
+   "No access" gets a neutral grey rather than the accent: a green chip
+   reading "no access" says the opposite of what it means. */
+.ws-role-btn[data-role='none'].active { background: #6b6a66; }
+.ws-role-btn[data-role='viewer'].active { background: #2563eb; }
+.ws-role-btn[data-role='member'].active { background: #15803d; }
+.ws-role-btn[data-role='admin'].active { background: #b45309; }
 
-[data-theme='dark'] .ws-role-btn[data-role='viewer'].active {
-  color: #7cb0ff;
-}
-
-[data-theme='dark'] .ws-role-btn[data-role='member'].active {
-  color: #5fd68b;
-}
-
-[data-theme='dark'] .ws-role-btn[data-role='admin'].active {
-  color: #ffb066;
-}
+[data-theme='dark'] .ws-role-btn[data-role='none'].active { background: #5c5b58; }
+[data-theme='dark'] .ws-role-btn[data-role='viewer'].active { background: #2f6fd0; }
+[data-theme='dark'] .ws-role-btn[data-role='member'].active { background: #1d7a45; }
+[data-theme='dark'] .ws-role-btn[data-role='admin'].active { background: #a1560c; }
 
 /* Bewegungsempfindlichkeit: der Rand bleibt, er dreht sich nur nicht mehr.
    Ihn ganz zu entfernen waere ein anderer Bildschirm — das ist nicht gemeint,

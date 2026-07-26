@@ -749,7 +749,7 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                               <button
                                 key={r.v}
                                 className={'ws-role-btn' + (role === r.v ? ' active' : '')}
-                    data-role={r.v}
+                                data-role={r.v}
                                 disabled={!mayEdit}
                                 title={
                                   mayEdit
@@ -855,7 +855,7 @@ function InvitePanel({
                     type="button"
                     key={r.v}
                     className={'ws-role-btn' + (role === r.v ? ' active' : '')}
-                                data-role={r.v}
+                    data-role={r.v}
                     onClick={() => setRoles((m) => ({ ...m, [ws.id]: r.v }))}
                   >
                     {r.label}
