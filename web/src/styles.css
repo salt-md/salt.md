@@ -1,11 +1,11 @@
 :root {
-  /* Hoehe der Dokument-Kopfzeile. Wird von .topbar UND von der
-     Kommentarspalte gelesen, damit die eine unter der anderen beginnt. */
+  /* Height of the document header. Read by .topbar AND by the comment
+     column, so that one begins below the other. */
   --topbar-h: 47px;
-  /* EINE Spaltenbreite fuer Titel, Eigenschaften und Fliesstext. Vorher lief
-     der Titel auf 860px und der Text auf 760px — beide zentriert, wodurch der
-     Text 50px weiter rechts begann als die Ueberschrift und 100px schmaler
-     war. Genau das liess die Seite unfertig wirken. */
+  /* ONE column width for the title, the properties and the body text. The
+     title used to run at 860px and the text at 760px — both centred, so the
+     text began 50px further right than the heading and was 100px narrower.
+     That is exactly what made the page look unfinished. */
   --doc-width: 940px;
   --doc-pad: 56px;
   --bg: #ffffff;
@@ -93,9 +93,9 @@ button {
 
 /* ---------- Sidebar ---------- */
 
-/* Die Seitenleiste ist das Zuhause der App — sie darf Platz haben. Große
-   Zeilen, ruhige Typografie, klare Trefferflächen (Bear-Vorbild) statt einer
-   dichten Baumliste. */
+/* The sidebar is the home of the app — it is allowed to take room. Big rows,
+   quiet typography, clear hit areas (Bear as the model) rather than a dense
+   tree list. */
 .sidebar {
   width: 292px;
   flex-shrink: 0;
@@ -121,8 +121,8 @@ button {
   gap: 6px;
 }
 
-/* Runde Icon-Buttons im Kopf: klar als eigenständige Aktion erkennbar und
-   mit echter Fingerfläche, ohne dass sie optisch schwer werden. */
+/* Round icon buttons in the header: clearly recognisable as an action of
+   their own and with a real finger area, without becoming visually heavy. */
 .sidebar-header .icon-btn {
   width: 34px;
   height: 34px;
@@ -140,9 +140,9 @@ button {
   color: var(--fg);
 }
 
-/* Der Drawer-Schließer gehört nur aufs Handy. Die Regel oben ist spezifischer
-   als das globale `.menu-btn { display: none }` und würde ihn sonst auch auf
-   dem Desktop einblenden. */
+/* The drawer close button belongs on the phone only. The rule above is more
+   specific than the global `.menu-btn { display: none }` and would otherwise
+   show it on the desktop too. */
 .sidebar-header .menu-btn {
   display: none;
 }
@@ -213,8 +213,8 @@ button {
   padding: 2px 8px 16px;
 }
 
-/* Eine Zeile ist eine Pille, kein Listeneintrag: volle Breite, weiche Ecken,
-   genug Höhe zum Treffen — auch mit dem Daumen. */
+/* A row is a pill, not a list item: full width, soft corners, enough height
+   to hit — with a thumb as well. */
 .tree-item {
   display: flex;
   align-items: center;
@@ -228,12 +228,12 @@ button {
   position: relative;
   border-top: 2px solid transparent;
   border-bottom: 2px solid transparent;
-  /* Die 2px-Rahmen oben/unten gibt es für die Drag-Marker. Ohne diese Zeile
-     malt der Hintergrund darunter durch (border-box ist die Vorgabe) — die
-     Pillen benachbarter Zeilen berührten sich direkt und klebten optisch
-     zusammen. Mit padding-box endet die Füllung am Innenrand, und aus den
-     vorhandenen Rahmen wird der Abstand: 2px + 2px = 4px zwischen zwei Zeilen,
-     ohne Zeilenhöhe oder Listenlänge zu verändern. */
+  /* The 2px borders top and bottom exist for the drag markers. Without this
+       line the background paints through underneath them (border-box is the
+       default) — the pills of neighbouring rows touched directly and looked
+       glued together. With padding-box the fill ends at the inner edge, and the
+       existing borders become the gap: 2px + 2px = 4px between two rows, without
+       changing row height or list length. */
   background-clip: padding-box;
 }
 
@@ -241,11 +241,11 @@ button {
   background-color: var(--hover); /* siehe .tree-item.active: keine Kurzschreibweise */
 }
 
-/* Die aktive Seite trägt Farbe statt nur Grau — sie ist auf einen Blick
-   auffindbar, auch wenn die Liste lang wird.
-   WICHTIG: `background-color`, NICHT die Kurzschreibweise `background` — die
-   würde `background-clip: padding-box` aus der Grundregel zurücksetzen und die
-   Pillen benachbarter Zeilen wieder aneinanderkleben lassen. */
+/* The active page carries colour rather than mere grey — it is findable at a
+   glance, even once the list grows long.
+   IMPORTANT: `background-color`, NOT the shorthand `background` — that would
+   reset `background-clip: padding-box` from the base rule and glue the pills of
+   neighbouring rows back together. */
 .tree-item.active {
   background-color: var(--accent-soft);
   color: var(--accent);
@@ -679,19 +679,18 @@ button {
   height: 100%;
   min-width: 0;
   overflow: hidden;
-  /* Bezugsrahmen fuer die Kommentarspalte: sie wird zwar innerhalb von
-     .page-body gerendert, soll aber NICHT mitscrollen. Weil ihr
-     Bezugsrahmen ausserhalb des Scrollers liegt, schneidet der sie auch
-     nicht ab. */
+  /* Containing block for the comment column: it renders inside .page-body
+       but must NOT scroll along. Because its containing block sits outside
+       the scroller, the scroller does not clip it either. */
   position: relative;
 }
 
 .topbar {
   display: flex;
   align-items: center;
-  /* Feste Hoehe, weil die Kommentarspalte darunter beginnen muss. Ohne einen
-     gemeinsamen Wert deckte sie die Aktionen rechts oben zu — Stern, Schloss
-     und ⋯ waren nicht mehr erreichbar. Beide lesen jetzt --topbar-h. */
+  /* A fixed height, because the comment column has to begin below it. Without
+       a shared value it covered the actions at the top right — star, lock and ⋯
+       were out of reach. Both read --topbar-h now. */
   min-height: var(--topbar-h);
   box-sizing: border-box;
   /* Left-aligned flow (hamburger → breadcrumbs), actions pushed right via
@@ -1003,9 +1002,9 @@ button {
   display: inline-flex;
   align-items: center;
   vertical-align: middle;
-  /* Der Abstand stand bisher als Leerzeichen INNERHALB dieses Spans — in
-     einem inline-flex-Kasten wird Leerraum aber nicht gerendert, also klebte
-     das Emoji direkt am Text. */
+  /* The gap used to be a space INSIDE this span — but whitespace is not
+       rendered in an inline-flex box, so the emoji stuck directly to the
+       text. */
   margin-right: 0.45em;
 }
 
@@ -1116,12 +1115,12 @@ button {
   overflow-y: auto;
 }
 
-/* Ist ein Dialog hoeher als der (gepolsterte) sichtbare Bereich — das Profil
-   mit Passwort-Bestaetigung, aktuellem Passwort und 2FA-Zeile auf einem kurzen
-   Laptop —, deckelt max-height ihn passend zum Overlay-Rand und er scrollt
-   INTERN. Vorher rutschte die Speichern-Zeile unter den Bildschirmrand und war
-   nicht erreichbar; blosses Overlay-Scrollen half nicht, weil die
-   Flex-Zentrierung den Scrollweg auffrass. */
+/* If a dialog is taller than the (padded) visible area — the profile with
+   password confirmation, current password and the 2FA row on a short laptop —
+   max-height caps it to match the overlay edge and it scrolls INTERNALLY. The
+   save row used to slide below the edge of the screen and was out of reach;
+   scrolling the overlay alone did not help, because the flex centring ate the
+   scroll distance. */
 .modal-overlay > .dialog {
   max-height: calc(100dvh - 9dvh);
   overflow-y: auto;
@@ -1305,10 +1304,10 @@ button {
   flex-direction: column;
 }
 
-/* Nur im Board: schrumpfen duerfen, damit die Hoehe bis zu den Spalten
-   durchgereicht wird und diese einzeln scrollen (siehe .board). Tabelle,
-   Liste und Galerie behalten bewusst das Verhalten darueber — dort soll die
-   ganze Seite scrollen, Kopf inklusive. */
+/* In the board only: allowed to shrink, so the height is passed down to the
+   columns and they scroll individually (see .board). Table, list and gallery
+   deliberately keep the behaviour above — there the whole page should scroll,
+   header included. */
 .collection-scroll.is-board {
   flex: 1 1 auto;
   min-height: 0;
@@ -1575,14 +1574,14 @@ button {
 
 /* Board */
 
-/* Spalten scrollen einzeln, die Seite bleibt stehen — wie in Trello.
-   Damit das greift, muss die Hoehe von .page-body bis hier durchgereicht
-   werden: jedes Glied braucht min-height:0, sonst weigert sich ein Flex-Kind
-   zu schrumpfen und das Board waechst auf die Hoehe seiner laengsten Spalte
-   (bei 300 Karten waren das 5969px, und die ganze Seite scrollte).
-   min-height auf .board haelt das Board bedienbar, falls der Seitenkopf mit
-   Cover und Beschreibung viel Platz nimmt — dann scrollt eben doch die
-   Seite, statt die Spalten auf ein paar Pixel zu quetschen. */
+/* Columns scroll individually while the page stays put — as in Trello.
+   For that to work, the height of .page-body has to be passed all the way
+   down here: every link needs min-height:0, or a flex child refuses to shrink
+   and the board grows to the height of its longest column (with 300 cards
+   that was 5969px, and the whole page scrolled).
+   min-height on .board keeps the board usable if the page header with cover
+   and description takes a lot of room — then the page scrolls after all,
+   rather than squeezing the columns into a few pixels. */
 .board {
   display: flex;
   gap: 12px;
@@ -1590,10 +1589,10 @@ button {
   align-items: stretch;
   overflow-x: auto;
   flex: 1 1 auto;
-  /* Mindestens fast Fensterhoehe: auf kleinen Monitoren liess der Seitenkopf
-     dem Board sonst nur einen schmalen Streifen, und die Spalten waren zu
-     kurz. Ist das Board hoeher als der Platz, scrollt .page-body den Kopf
-     weg — wie in Trello, wo die Spalten das Fenster fuellen. */
+  /* At least almost the window height: on small monitors the page header
+       otherwise left the board nothing but a narrow strip, and the columns were
+       too short. If the board is taller than the space, .page-body scrolls the
+       header away — as in Trello, where the columns fill the window. */
   min-height: max(320px, calc(100dvh - var(--topbar-h) - 108px));
   overscroll-behavior-x: contain;
 }
@@ -1622,14 +1621,14 @@ button {
   background: color-mix(in srgb, var(--accent) 8%, var(--sidebar-bg));
 }
 
-/* Die gezogene Karte bleibt als blasse Luecke an ihrem Platz — man sieht,
-   woher sie kommt, und die Spalte springt nicht zusammen. */
+/* The dragged card stays in place as a pale gap — you can see where it came
+   from, and the column does not collapse. */
 .board-card.is-dragging {
   opacity: 0.32;
 }
 .board-card.is-dragging * { pointer-events: none; }
 
-/* Waehrend eines Ziehens keine Textauswahl und ueberall der Greifen-Cursor. */
+/* No text selection during a drag, and the grabbing cursor everywhere. */
 .board.is-dragging, .board.is-dragging * {
   user-select: none;
   cursor: grabbing !important;
@@ -1685,8 +1684,7 @@ button {
   overscroll-behavior-y: contain;
   min-height: 0;
   flex: 1 1 auto;
-  /* Platz fuer den Scrollbalken, damit die Karten beim Erscheinen nicht
-     springen. */
+  /* Room for the scrollbar, so the cards do not jump when they appear. */
   padding-right: 2px;
   scrollbar-width: thin;
 }
@@ -2106,9 +2104,9 @@ button {
   flex-wrap: wrap;
   gap: 5px;
   align-items: center;
-  /* Eigene Zeile unter Name+Typ, volle Breite. Vorher lag der Block in
-     derselben Zeile und wurde vom Namensfeld an den rechten Rand gequetscht —
-     die Chips standen als schmale, abgeschnittene Spalte da. */
+  /* A row of its own below name and type, full width. The block used to sit in
+       the same row and was squeezed against the right edge by the name field —
+       the chips stood there as a narrow, cut-off column. */
   padding: 2px 4px 8px 8px;
 }
 .opt-chip-wrap { position: relative; display: inline-flex; }
@@ -2529,12 +2527,12 @@ button {
   border-radius: 4px;
 }
 
-/* ... aber NICHT auf Schreibflaechen. Die Regel oben ist fuer Knoepfe und
-   Eingabefelder gedacht; der Editor ist jedoch eine riesige Region, und der
-   Ring zog einen gruenen Kasten um das gesamte Dokument. Kein Textprogramm
-   macht das — bei Bear, Notion und Word zeigt der CURSOR den Fokus, und der
-   ist als Fokusanzeige fuer Textfelder auch anerkannt. Der Ring bleibt
-   ueberall dort, wo er wirklich gebraucht wird: Knoepfe, Menues, Kaestchen. */
+/* ... but NOT on writing surfaces. The rule above is meant for buttons and
+   input fields; the editor, though, is one enormous region, and the ring drew
+   a green box around the entire document. No text program does that — in Bear,
+   Notion and Word the CURSOR shows the focus, and that is an accepted focus
+   indicator for text fields. The ring stays everywhere it is really needed:
+   buttons, menus, checkboxes. */
 .ProseMirror:focus-visible,
 .bn-editor:focus-visible,
 [contenteditable]:focus-visible,
@@ -3030,9 +3028,9 @@ button {
   font-size: 15px;
   line-height: 1.5;
   margin-bottom: 14px;
-  /* pre-line: die Folgen-Vorschau vor dem Loeschen und die Rueckfrage wegen
-     privater Seiten setzen ihre Punkte mit \n untereinander. Ohne das fielen
-     sie in 380 px Breite zu einem einzigen Fliesstext-Klumpen zusammen. */
+  /* pre-line: the preview of consequences before a deletion, and the question
+       about private pages, put their points one under another with \n. Without
+       this they collapsed into a single lump of running text at 380px wide. */
   white-space: pre-line;
 }
 
@@ -3460,7 +3458,7 @@ button {
 
 .cover-grid {
   display: grid;
-  /* 18 Presets seit W96: sechs Spalten halten das Menue kompakt (3 Reihen). */
+  /* 18 presets since W96: six columns keep the menu compact (3 rows). */
   grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   margin-top: 8px;
@@ -3613,10 +3611,10 @@ button {
     transition: transform 0.22s ease;
   }
 
-  /* Der Schatten NUR im geoeffneten Zustand. Die geschlossene Schublade steht
-     mit ihrer rechten Kante exakt auf x=0 — ein Schatten mit 24px Weichzeichnung
-     ragte damit als grauer Streifen ins Bild, obwohl die Schublade selbst
-     unsichtbar ist. Genau der Fleck, den man links oben sah. */
+  /* The shadow ONLY in the open state. The closed drawer has its right edge
+       exactly on x=0 — so a shadow with 24px of blur stuck into the picture as a
+       grey strip although the drawer itself is invisible. Exactly the smudge you
+       could see at the top left. */
   .sidebar.open {
     transform: translateX(0);
     box-shadow: 2px 0 24px rgba(0, 0, 0, 0.28);
@@ -3680,17 +3678,16 @@ button {
        Columns/+New stay reachable on narrow screens without wrapping. */
     flex-wrap: nowrap;
     overflow-x: auto;
-    /* overflow-y AUSDRUECKLICH auf hidden. Steht nur overflow-x, macht der
-       Browser aus dem `visible` der anderen Achse automatisch `auto` — die
-       Leiste wurde damit selbst vertikal scrollbar, und die Reiter fuhren in
-       einem 16px hohen Fenster hoch und runter, ohne je ganz sichtbar zu
-       sein. */
+    /* overflow-y EXPLICITLY hidden. With only overflow-x set, the browser
+           silently turns the other axis's `visible` into `auto` — which made the
+           bar itself scrollable vertically, and the tabs rode up and down inside
+           a 16px-high window without ever being fully visible. */
     overflow-y: hidden;
-    /* flex: none, weil dieselbe Zeile noch einen zweiten Schaden anrichtete:
-       ein Flex-Element darf unter seine Inhaltsgroesse schrumpfen, sobald
-       sein Overflow nicht mehr `visible` ist (die automatische Mindestgroesse
-       faellt dann auf 0). Die Leiste sackte dadurch von 43px auf 17px
-       zusammen. Sie ist eine Leiste, kein Inhalt — sie schrumpft nicht. */
+    /* flex: none, because the same line did a second kind of damage: a flex
+           item is allowed to shrink below its content size as soon as its overflow
+           is no longer `visible` (the automatic minimum size drops to 0 then). The
+           bar collapsed from 43px to 17px because of it. It is a bar, not content
+           — it does not shrink. */
     flex: none;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
@@ -4216,9 +4213,9 @@ button {
      the pointer is still over the sidebar, and without the lock :hover would
      re-reveal instantly, making the click feel like it did nothing. It clears
      once the pointer actually moves away. */
-  /* Schatten nur, wenn die Leiste tatsaechlich hereingefahren ist — dieselbe
-     Falle wie beim mobilen Schubfach: eingeklappt steht ihre rechte Kante auf
-     x=0, und die 24px Weichzeichnung lagen als grauer Streifen im Bild. */
+  /* The shadow only when the bar has actually slid in — the same trap as with
+       the mobile drawer: collapsed, its right edge sits on x=0 and the 24px of
+       blur lay in the picture as a grey strip. */
   .app.sidebar-collapsed:not(.hover-lock) .sidebar-hotzone:hover ~ .sidebar,
   .app.sidebar-collapsed:not(.hover-lock) .sidebar:hover,
   .app.sidebar-collapsed:not(.hover-lock) .sidebar:focus-within {
@@ -4270,12 +4267,12 @@ button {
 }
 
 /* ============================================================
-   W37 — Glow-Design (Taskade-inspiriert)
-   Bunte, leuchtende Buttons, Akzent-Rahmen mit Farb-Schatten,
-   Ambient-Farbflächen auf Login & Empty-State. Light + Dark.
+   W37 — glow design (inspired by Taskade)
+   Colourful, glowing buttons, accent borders with coloured shadows,
+   ambient colour fields on login and empty state. Light + dark.
    ============================================================ */
 
-/* ---- Primäre Aktionen: Gradient-Pill mit Glow ---- */
+/* ---- Primary actions: gradient pill with a glow ---- */
 
 .btn,
 .btn-sm {
@@ -4320,7 +4317,7 @@ button {
   box-shadow: 0 2px 12px rgba(196, 85, 77, 0.35);
 }
 
-/* ---- Login: Ambient-Farbglühen + leuchtende Karte ---- */
+/* ---- Login: ambient colour glow + a glowing card ---- */
 
 .login-wrap {
   position: relative;
@@ -4348,7 +4345,7 @@ button {
   padding: 9px 16px;
 }
 
-/* ---- Empty-State: gleiche Bühne wie der Login ---- */
+/* ---- Empty state: the same stage as the login ---- */
 
 .empty-state {
   background:
@@ -4362,7 +4359,7 @@ button {
   border-radius: 999px;
 }
 
-/* ---- Datenbank-View-Tabs: aktiver Tab als getönte Glow-Pille ---- */
+/* ---- Database view tabs: the active tab as a tinted glow pill ---- */
 
 .view-tab {
   border: 1px solid transparent;
@@ -4381,9 +4378,9 @@ button {
   box-shadow: 0 2px 10px rgba(var(--accent-rgb), 0.16);
 }
 
-/* ---- Tags & Chips: sanftes Leuchten in der eigenen Farbe ---- */
+/* ---- Tags and chips: a soft glow in their own colour ---- */
 
-/* Tag-Chips bewusst OHNE Schatten — die Farbe reicht (User-Feedback W43). */
+/* Tag chips deliberately WITHOUT a shadow — the colour is enough (user feedback, W43). */
 
 /* ---- Karten: Hover mit Lift + farbigem Schein ---- */
 
@@ -4455,7 +4452,7 @@ button {
   box-shadow: 0 2px 12px rgba(var(--accent-rgb), 0.14);
 }
 
-/* Dark Mode: Ambient etwas kräftiger, damit es auf Dunkel leuchtet. */
+/* Dark mode: the ambient a little stronger, so it glows on dark. */
 [data-theme='dark'] .login-wrap {
   background:
     radial-gradient(600px 420px at 18% 22%, rgba(var(--glow-green), 0.2), transparent 65%),
@@ -4474,11 +4471,11 @@ button {
 }
 
 /* ============================================================
-   W39 — Eleganz-Pass (Taskade, aber richtig)
-   Prinzipien der Vorlage: Tints bei 4–9%, EIN Rainbow-Element,
-   schwarze Pille clean mit neutralem Schatten (Farbschein nur
-   beim Hover), Pastell-Buttons mit farbigem Text, Farbe trägt
-   das Icon — nicht der Rahmen.
+   W39 — elegance pass (Taskade, but done right)
+   Principles of the model: tints at 4–9%, ONE rainbow element,
+   the black pill clean with a neutral shadow (colour glow only
+   on hover), pastel buttons with coloured text, the icon carries
+   the colour — not the border.
    ============================================================ */
 
 :root {
@@ -4495,7 +4492,7 @@ button {
   );
 }
 
-/* ---- Große CTAs: cleane schwarze Pille, Rainbow nur als Hover-Schein ---- */
+/* ---- Large CTAs: a clean black pill, rainbow only as a hover glow ---- */
 
 .btn.primary {
   position: relative;
@@ -4554,7 +4551,7 @@ button {
     0 4px 14px rgba(var(--accent-rgb), 0.22);
 }
 
-/* ---- View-Tabs: Farbe pro Typ, aber leise — das Icon trägt die Farbe ---- */
+/* ---- View tabs: colour per type, but quietly — the icon carries it ---- */
 
 .view-tab {
   --vt: var(--accent-rgb);
@@ -4584,11 +4581,11 @@ button {
   color: rgb(var(--vt));
 }
 
-/* Spaltenfarbe kommt aus der OPTION (--col-c, gesetzt in BoardView), nicht
-   mehr aus der Position. Der alte nth-child-Regenbogen faerbte nach Reihenfolge:
-   beim Umsortieren sprangen die Farben, und die seit W94 waehlbaren
-   Optionsfarben hatten auf die Spalte keinerlei Wirkung. Ohne gesetzte Farbe
-   bleibt die Spalte neutral — ruhiger als falsch-bunt. */
+/* The column colour comes from the OPTION (--col-c, set in BoardView), no
+   longer from the position. The old nth-child rainbow coloured by order: on
+   re-sorting the colours jumped, and the option colours choosable since W94 had
+   no effect on the column at all. With no colour set the column stays neutral —
+   quieter than wrongly colourful. */
 .board-col {
   background: color-mix(in srgb, var(--col-c, transparent) 6%, var(--sidebar-bg));
   border-color: color-mix(in srgb, var(--col-c, transparent) 16%, transparent);
@@ -4597,9 +4594,9 @@ button {
   background: color-mix(in srgb, var(--col-c, transparent) 10%, var(--sidebar-bg));
   border-color: color-mix(in srgb, var(--col-c, transparent) 22%, transparent);
 }
-/* Der Drop-Highlight muss die Tint-Regel schlagen — im Dunkelmodus stand sie
-   spaeter in der Datei und bei gleicher Spezifitaet gewann sonst der Tint, der
-   Ziel-Rahmen war unsichtbar. Hoehere Spezifitaet (Attribut + zwei Klassen). */
+/* The drop highlight has to beat the tint rule — in dark mode that one sits
+   later in the file, and at equal specificity the tint won and the target
+   border was invisible. Higher specificity (attribute + two classes). */
 .board-col.drag-over,
 [data-theme='dark'] .board-col.drag-over {
   border-color: var(--accent);
@@ -4680,11 +4677,11 @@ button {
 .topbar-right > :nth-child(4):hover svg,
 .topbar-right > :nth-child(5):hover svg { color: #7e3ad1; }
 
-/* ---- Login: DAS eine Rainbow-Element (Haarlinie) + ruhige Karte ---- */
+/* ---- Login: THE one rainbow element (a hairline) + a quiet card ---- */
 
-/* Die frühere starre 2,5px-Linie am oberen Rand ist dem laufenden Ring
-   gewichen (siehe .ring am Dateiende) — dieselbe Farbe, aber sie umschließt
-   die Karte, statt oben aufzuliegen. */
+/* The earlier rigid 2.5px line along the top edge has given way to the
+   running ring (see .ring at the end of the file) — the same colour, but it
+   encloses the card instead of resting on top of it. */
 
 .login-card {
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
@@ -4760,7 +4757,7 @@ button {
     0 4px 20px rgba(var(--accent-rgb), 0.07);
 }
 
-/* ---- W40: Öffentlicher Zugang (Karten + Status) ---- */
+/* ---- W40: public access (cards + status) ---- */
 
 .pa-card {
   border: 1px solid var(--border);
@@ -4891,10 +4888,10 @@ a.btn {
   text-decoration: none;
   display: inline-flex;
   align-items: center;
-  /* color: ein <a> ohne eigene Farbe faellt auf das Browser-Standardblau
-     (#0000EE) zurueck. Auf hellem Grund faellt das kaum auf, im Dark Mode
-     stand das Blau fast unlesbar auf der dunklen Karte — betraf die beiden
-     SSO-Knoepfe, die einzigen Links, die wie Schaltflaechen aussehen. */
+  /* color: an <a> without a colour of its own falls back to the browser's
+       default blue (#0000EE). On a light background that hardly shows; in dark
+       mode the blue sat almost unreadable on the dark card — it affected the two
+       SSO buttons, the only links that look like buttons. */
   color: var(--fg);
 }
 
@@ -5049,7 +5046,7 @@ a.btn {
     0 2px 10px rgba(74, 168, 255, 0.1);
 }
 
-/* Icon zykelt dynamisch durch alle Farbtöne. */
+/* The icon cycles dynamically through every hue. */
 .agents-ic {
   display: inline-flex;
   color: #e05fb0;
@@ -5665,8 +5662,8 @@ a.btn {
 }
 .mode-dot.on { background: var(--accent); border-color: var(--accent); }
 
-/* Agent gallery: real brand logos (selfh.st/icons, lokal gebündelt). Mono =
-   schwarze Marken (Claude, OpenAI) — im Dark Mode invertiert. */
+/* Agent gallery: real brand logos (selfh.st/icons, bundled locally). Mono =
+   black marks (Claude, OpenAI) — inverted in dark mode. */
 .agent-img { width: 26px; height: 26px; object-fit: contain; border-radius: 6px; }
 [data-theme='dark'] .agent-img--mono { filter: invert(1); }
 
@@ -5686,9 +5683,9 @@ a.btn {
 /* ---- Sidebar sections (W66): collapsible topic blocks with count, per-section
    filter and an inline "new" action. Replaces the flat, endlessly growing list. */
 .sb-section { margin: 2px 0; }
-/* Favoriten und Tags hängen direkt in der Seitenleiste, Dokumente/Datenbanken
-   liegen in `.tree` (8px Innenabstand). Ohne Ausgleich stünden ihre Icons
-   8px weiter links — die Topics säßen sichtbar nicht auf einer Achse. */
+/* Favourites and tags hang directly in the sidebar, while documents and
+   databases live in `.tree` (8px of padding). Without compensating, their icons
+   would sit 8px further left — the topics would visibly be off one axis. */
 .sidebar > .sb-section { padding: 0 8px; }
 .sb-section-head {
   display: flex;
@@ -5696,10 +5693,10 @@ a.btn {
   gap: 2px;
   padding: 0 2px;
 }
-/* Ein Topic ist eine vollwertige Zeile, nur kräftiger gesetzt als die Seiten
-   darunter — dieselbe Höhe, dasselbe Icon-Raster, derselbe Radius. Das ist der
-   ruhige Apple-Eindruck: EINE Zeilensprache, Hierarchie nur über Gewicht und
-   Einrückung, nicht über eine zweite Mikro-Typografie. */
+/* A topic is a full row, merely set more strongly than the pages below it —
+   the same height, the same icon grid, the same radius. That is the quiet Apple
+   impression: ONE language of rows, hierarchy through weight and indentation
+   alone, not through a second micro-typography. */
 .sb-section-toggle {
   flex: 1;
   min-width: 0;
@@ -5716,13 +5713,13 @@ a.btn {
   padding: 7px 10px;
   border-radius: 10px;
   cursor: pointer;
-  text-align: left; /* <button> zentriert sonst — der Titel muss linksbündig
-                       auf derselben Achse wie die Seitentitel darunter sitzen */
+  text-align: left; /* <button> centres otherwise — the title has to sit flush
+                       left on the same axis as the page titles below it */
 }
 .sb-section-toggle:hover { background: var(--hover); }
 
-/* Gleiche 20px-Box wie .tree-icon, damit Topic-Icons und Seiten-Icons exakt
-   auf einer Achse sitzen. */
+/* The same 20px box as .tree-icon, so topic icons and page icons sit on
+   exactly one axis. */
 .sb-section-icon {
   flex: none;
   width: 20px;
@@ -5732,8 +5729,8 @@ a.btn {
   color: var(--muted);
 }
 
-/* Das Chevron sitzt rechts (Bear/iOS) und zeigt den Zustand, ohne den Blick
-   vom Titel wegzuziehen. */
+/* The chevron sits on the right (Bear/iOS) and shows the state without
+   pulling the eye away from the title. */
 .sb-section-caret {
   flex: none;
   display: inline-flex;
@@ -5742,8 +5739,8 @@ a.btn {
   opacity: 0.7;
 }
 .sb-section-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Die Anzahl ist Nebeninformation — schlicht und grau, kein Badge, das mit dem
-   Titel um Aufmerksamkeit konkurriert (iOS-Manier). */
+/* The count is secondary information — plain and grey, not a badge competing
+   with the title for attention (the iOS manner). */
 .sb-section-count {
   font-size: 12.5px;
   font-weight: 500;
@@ -5753,8 +5750,8 @@ a.btn {
   font-variant-numeric: tabular-nums;
 }
 
-/* Die Seiten einer Sektion rücken unter ihr Topic ein — die Einrückung trägt
-   die Hierarchie, seit die Überschrift keine eigene Typografie mehr hat. */
+/* The pages of a section indent under their topic — the indentation carries
+   the hierarchy, now that the heading has no typography of its own. */
 .sb-section-body { padding-left: 10px; }
 
 .sb-section-add {
@@ -5780,20 +5777,20 @@ a.btn {
 }
 
 /* ==========================================================================
-   Touch-Geräte: nichts darf hinter :hover versteckt sein
+   Touch devices: nothing may hide behind :hover
    --------------------------------------------------------------------------
-   Ein Touchscreen kennt kein Hovern. iOS/Safari behilft sich damit, dass der
-   erste Tipp auf ein Element mit Hover-Regeln nur den Hover-Zustand setzt und
-   den Klick verschluckt — erst der zweite Tipp löst aus. In der Praxis hieß
-   das: "man muss alles doppelt antippen".
+   A touchscreen knows no hovering. iOS/Safari helps itself along by having the
+   first tap on an element with hover rules set only the hover state and swallow
+   the click — the second tap is what fires. In practice that meant: "you have
+   to tap everything twice".
 
-   Deshalb gilt für Geräte ohne echten Hover: alles, was sonst per :hover
-   eingeblendet wird, ist dauerhaft sichtbar (der erste Tipp trifft also
-   direkt), und die rein dekorativen Hover-Effekte sind aus — die blieben nach
-   einem Tipp sonst hängen und sahen aus wie ein Darstellungsfehler.
+   So for devices with no real hover: everything otherwise revealed on :hover is
+   permanently visible (the first tap therefore lands), and the purely decorative
+   hover effects are off — those would otherwise stay stuck after a tap and look
+   like a rendering fault.
    ========================================================================== */
 @media (hover: none) {
-  /* Hover-Reveals — dauerhaft sichtbar statt erst nach dem "Hover-Tipp". */
+  /* Hover reveals — permanently visible instead of only after the "hover tap". */
   .tree-actions {
     display: inline-flex;
   }
@@ -5808,8 +5805,8 @@ a.btn {
     opacity: 1;
   }
 
-  /* Dekorative Lifts/Scales: ohne Pointer, der das Element wieder verlässt,
-     bleiben sie nach dem Antippen stehen. */
+  /* Decorative lifts and scales: with no pointer to leave the element
+       again, they stay put after a tap. */
   .btn.primary:hover,
   .btn-sm.primary:hover,
   .gallery-card:hover,
@@ -5818,8 +5815,8 @@ a.btn {
     transform: none;
   }
 
-  /* Fingerkuppen brauchen Fläche. Die kleinen Icon-Buttons wachsen auf ein
-     brauchbares Trefferfeld; ihr Icon bleibt gleich groß. */
+  /* Fingertips need area. The small icon buttons grow to a usable hit
+       target; their icon stays the same size. */
   .sb-section-add {
     width: 32px;
     height: 32px;
@@ -5831,7 +5828,7 @@ a.btn {
     min-width: 30px;
     min-height: 30px;
   }
-  /* Volle Daumenhöhe für die Zeilen, die man am häufigsten trifft. */
+  /* Full thumb height for the rows that are hit most often. */
   .tree-item {
     min-height: 44px;
   }
@@ -5848,8 +5845,8 @@ a.btn {
     min-height: 26px;
     padding: 4px 9px;
   }
-  /* Tag-Chips sind im Ruhezustand nur ~21px hoch — als Filter tippt man sie
-     ständig an, also brauchen sie eine echte Fingerfläche. */
+  /* At rest, tag chips are only ~21px tall — as filters they are tapped
+       constantly, so they need a real finger area. */
   .tag-chip {
     min-height: 32px;
     padding-top: 6px;
@@ -5857,8 +5854,8 @@ a.btn {
   }
 }
 
-/* Doppeltipp-zum-Zoomen abschalten: Safari wartet sonst auf einen möglichen
-   zweiten Tipp, bevor es den Klick zustellt — das fühlt sich träge an. */
+/* Switch off double-tap-to-zoom: Safari otherwise waits for a possible second
+   tap before it delivers the click — which feels sluggish. */
 button,
 a,
 [role='button'],
@@ -5869,10 +5866,11 @@ a,
   touch-action: manipulation;
 }
 
-/* ---- Tag-Vorschläge -------------------------------------------------------
-   Ohne Vorschlagsliste tippt man denselben Tag jedes Mal neu und leicht anders;
-   der Workspace zerfasert dann in „projekt" / „Projekte" / „Projekt". Die Liste
-   zeigt Vorhandenes samt Häufigkeit — und markiert Tippfehler-Verdächtige. */
+/* ---- Tag suggestions -------------------------------------------------------
+   Without a suggestion list you type the same tag afresh and slightly
+   differently every time; the workspace then frays into "project" /
+   "Projects" / "Project". The list shows what exists along with its frequency —
+   and marks the ones that look like typos. */
 .tag-input-wrap {
   position: relative;
   display: inline-flex;
@@ -5914,7 +5912,7 @@ a,
 
 .tag-suggest-item .tag-chip {
   flex: none;
-  pointer-events: none; /* der ganze Eintrag ist der Klick */
+  pointer-events: none; /* the whole entry is the click target */
 }
 
 .tag-suggest-count {
@@ -5925,7 +5923,7 @@ a,
   font-variant-numeric: tabular-nums;
 }
 
-/* „ähnlich" heißt: steht nicht im Getippten, sieht aber nach Vertipper aus. */
+/* "similar" means: not contained in what was typed, but looks like a typo. */
 .tag-suggest-hint {
   flex: none;
   font-size: 10.5px;
@@ -5935,10 +5933,10 @@ a,
   padding: 1px 6px;
 }
 
-/* ---- Listen-Ansicht -------------------------------------------------------
-   Bewusst kein Spaltenraster: eine ruhige Zeilenliste, in der der Titel führt
-   und die Eigenschaften dezent dahinter stehen. Wer Werte spaltenweise
-   vergleichen will, nimmt die Tabelle — das ist der Unterschied. */
+/* ---- List view -------------------------------------------------------------
+   Deliberately no column grid: a quiet list of rows in which the title leads
+   and the properties sit discreetly behind it. Anybody who wants to compare
+   values column by column takes the table — that is the difference. */
 .list-view {
   display: flex;
   flex-direction: column;
@@ -5972,8 +5970,8 @@ a,
   color: var(--muted);
 }
 
-/* Der Titel bekommt den Platz und darf umbrechen statt abzuschneiden — in
-   einer Notizenliste ist der Titel die Information. */
+/* The title gets the room and may wrap rather than being cut off — in a list
+   of notes, the title IS the information. */
 .list-row-title {
   flex: 1;
   min-width: 0;
@@ -5996,7 +5994,7 @@ a,
   font-size: 13px;
 }
 
-/* Auf schmalen Schirmen zählt der Titel; Eigenschaften rutschen darunter. */
+/* On narrow screens the title is what counts; properties slide below it. */
 @media (max-width: 768px) {
   .list-row {
     flex-wrap: wrap;
@@ -6011,8 +6009,9 @@ a,
   }
 }
 
-/* Das Logo ersetzt das frühere 🧂-Emoji. Es erbt die Textfarbe (siehe Logo.tsx),
-   deshalb braucht es hier nur Ausrichtung — im Dark Mode wird es von allein hell. */
+/* The logo replaces the earlier 🧂 emoji. It inherits the text colour (see
+   Logo.tsx), so all it needs here is alignment — in dark mode it turns light by
+   itself. */
 .login-logo svg,
 .app-loading svg,
 .empty-emoji svg {
@@ -6020,15 +6019,15 @@ a,
   margin: 0 auto;
 }
 
-/* Im Fließtext einer Überschrift sitzt das Zeichen sonst auf der Grundlinie. */
+/* Inside the run of a heading the mark would otherwise sit on the baseline. */
 .inline-logo {
   vertical-align: -0.15em;
 }
 
-/* ---- Design-Wahl: Hell / Automatisch / Dunkel ----------------------------
-   Segmentierte Dreier-Wahl statt eines Umschalters. Der aktive Zustand muss
-   ohne Beschriftung erkennbar sein — deshalb nicht nur Farbe, sondern eine
-   abgesetzte Fläche mit Rahmen. */
+/* ---- Theme choice: light / automatic / dark ------------------------------
+   A segmented three-way choice rather than a toggle. The active state has to be
+   recognisable without a label — hence not colour alone but a raised surface
+   with a border. */
 .theme-switch {
   display: inline-flex;
   align-items: center;
@@ -6062,8 +6061,8 @@ a,
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
 }
 
-/* Auf den Anmeldemasken gibt es keine Seitenleiste — der Schalter schwebt in
-   der Ecke, mit Abstand zur Safe-Area (Notch/Homeindikator). */
+/* The sign-in screens have no sidebar — the switch floats in the corner, kept
+   clear of the safe area (notch and home indicator). */
 .auth-theme-switch {
   position: fixed;
   top: max(14px, env(safe-area-inset-top));
@@ -6071,7 +6070,7 @@ a,
   z-index: 20;
 }
 
-/* Touch: dieselbe Fingerfläche wie überall sonst. */
+/* Touch: the same finger area as everywhere else. */
 @media (hover: none) {
   .theme-switch-opt {
     width: 34px;
@@ -6079,10 +6078,10 @@ a,
   }
 }
 
-/* ---- Eingebettete Datenbank ---------------------------------------------
-   Notions Modell: eine Datenbank ist ein Block, keine eigene Seitenart. Sie
-   darf mitten im Dokument stehen, mit Text darüber und darunter. Der Rahmen
-   grenzt sie sichtbar vom Fließtext ab, ohne wie ein Fremdkörper zu wirken. */
+/* ---- Embedded database ---------------------------------------------------
+   Notion's model: a database is a block, not a page type of its own. It may sit
+   in the middle of a document with text above and below. The border sets it
+   visibly apart from the running text without looking like a foreign body. */
 .bn-db-embed {
   margin: 12px 0;
   border: 1px solid var(--border);
@@ -6111,7 +6110,7 @@ a,
   background: var(--hover);
 }
 
-/* Der Sprung zur Vollseite ist eine Nebenaktion — erst bei Hover sichtbar. */
+/* Jumping to the full page is a secondary action — visible only on hover. */
 .bn-db-open {
   margin-left: auto;
   font-size: 12px;
@@ -6178,9 +6177,9 @@ a,
 
 /* ---------- Kanban: Dichte und Lesbarkeit (Trello-Vorbild) ---------- */
 
-/* Leere Auswahlfelder verschwinden und kommen beim Ueberfahren zurueck. Ohne
-   das steht unter jedem Titel eine Reihe Platzhalter. Auf Touch gibt es kein
-   Ueberfahren — dort oeffnet man die Karte, wie in Trello auch. */
+/* Empty select fields disappear and come back on hover. Without that, a row of
+   placeholders sits under every title. On touch there is no hover — there you
+   open the card, as in Trello. */
 .card-prop-edit.is-empty {
   display: none;
 }
@@ -6190,7 +6189,7 @@ a,
   opacity: 0.65;
 }
 
-/* Faelligkeit zeigt Dringlichkeit, statt nur ein Datum zu sein. */
+/* A due date shows urgency instead of merely being a date. */
 .prop-date.is-overdue {
   color: #c2410c;
   font-weight: 600;
@@ -6226,7 +6225,7 @@ a,
   text-decoration: underline;
 }
 
-/* Karten dichter: mehr Karten im Blick, ohne dass es gedraengt wirkt. */
+/* Denser cards: more of them in view without looking cramped. */
 .board-card {
   padding: 9px 11px;
 }
@@ -6245,10 +6244,10 @@ a,
 
 /* ---------- Kommentare: Abschnitt am Dokumentende (W92) ---------- */
 
-/* Keine Spalte mehr. Die Kommentare stehen unten im Dokument, in derselben
-   Spalte wie der Text — so wie Notion es macht. Eine Spalte daneben nahm
-   Breite weg und zeigte bei einer Seite ohne Kommentare nur eine leere
-   Meldung. */
+/* No column any more. The comments sit at the bottom of the document, in the
+   same column as the text — the way Notion does it. A column beside it took
+   width away and, on a page with no comments, showed nothing but an empty
+   message. */
 .comments-wrap {
   max-width: var(--doc-width);
   margin: 0 auto;
@@ -6366,12 +6365,12 @@ a,
   padding: 9px 12px;
 }
 .cp-compose textarea:focus { outline: none; border-color: var(--muted); }
-/* Der Knopf erscheint erst, wenn es etwas zu senden gibt. */
+/* The button appears only once there is something to send. */
 .cp-send { display: none; }
 .cp-send:not(:disabled) { display: block; }
 
-/* Zaehler am Kopfzeilen-Knopf. Bewusst als schlichte Zahl neben dem Symbol
-   statt als roter Punkt: es ist eine Auskunft, keine Warnung. */
+/* A counter on the header button. Deliberately a plain number beside the icon
+   rather than a red dot: it is information, not a warning. */
 .badge-count {
   font-size: 11px;
   font-weight: 600;
@@ -6380,7 +6379,7 @@ a,
 }
 .topbar-right .icon-btn.active-star .badge-count { color: inherit; }
 
-/* Wer sonst gerade hier ist — leicht ueberlappend wie in Notion. */
+/* Who else is here right now — slightly overlapping, as in Notion. */
 .presence {
   display: flex;
   align-items: center;
@@ -6406,8 +6405,8 @@ a,
 
 /* ---------- W96: Avatare als Bild, Profil-Dialog ---------- */
 
-/* Ein hochgeladenes Profilbild fuellt den Kreis — ueberall dieselbe Form,
-   damit eine Person in Menue, Praesenz und Kommentaren wiedererkennbar ist. */
+/* An uploaded profile picture fills the circle — the same shape everywhere, so
+   a person stays recognisable in the menu, in presence and in comments. */
 .avatar,
 .presence-dot,
 .cp-avatar {
@@ -6481,7 +6480,7 @@ a,
   border-color: #d44c47;
 }
 
-/* Nutzerverwaltung: eine Zeile pro Nutzer mit Workspace-Zugehoerigkeit. */
+/* User administration: one row per user with their workspace membership. */
 .user-row--rich {
   align-items: flex-start;
   gap: 10px;
@@ -6675,8 +6674,8 @@ a,
   .ws-role-btn { flex: 1; text-align: center; }
 }
 
-/* ---- W101: Notfallzugriffe (Break-Glass) ---------------------------------
-   Ein laufender Zugriff muss ins Auge fallen, ein abgelaufener nicht. */
+/* ---- W101: emergency access (break-glass) --------------------------------
+   A running access has to catch the eye; an expired one does not. */
 
 .bg-list {
   display: flex;
@@ -6721,17 +6720,17 @@ a,
   overflow-wrap: anywhere;
 }
 
-/* Gesperrte Rollen-Segmente: sichtbar vorhanden, aber erkennbar nicht nutzbar
-   — besser als sie zu verstecken, weil die Zeile sonst je nach Rechten
-   unterschiedlich aussieht und man das Raster nicht mehr lesen kann. */
+/* Locked role segments: visibly present but recognisably unusable — better
+   than hiding them, because otherwise the row looks different depending on
+   permissions and the grid becomes unreadable. */
 .ws-role-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* ---- W102: Kennzeichnung im Workspace-Umschalter ------------------------
-   "eigener Bereich" / "für alle" — leise, aber sichtbar: welcher Workspace
-   mir gehört und welcher jedem neuen Konto offensteht. */
+/* ---- W102: markings in the workspace switcher ----------------------------
+   "own area" / "open to everybody" — quiet but visible: which workspace
+   belongs to me and which one stands open to every new account. */
 
 .ws-tag {
   font-size: 10px;
@@ -6744,9 +6743,9 @@ a,
   flex: none;
 }
 
-/* ---- W105: Aufräum-Ansicht ---------------------------------------------
-   Der Hinweis "hat noch Mitglieder" ist ein Nebensatz, kein Hauptdarsteller:
-   ohne Begrenzung drängte er den Workspace-Namen in eine schmale Spalte. */
+/* ---- W105: the clean-up view --------------------------------------------
+   The note "still has members" is a subordinate clause, not the lead: without
+   a limit it squeezed the workspace name into a narrow column. */
 
 .bg-row .dialog-hint {
   max-width: 46%;
@@ -6761,52 +6760,50 @@ a,
 }
 
 /* ============================================================================
-   Der laufende Rand (W107)
+   The running border (W107)
 
-   Uebernommen aus dem Design-System der Website — und zwar die Technik, nicht
-   nur das Aussehen. Zwei Dinge daran sind nicht offensichtlich:
+   Taken from the design system of the website — the technique, not merely the
+   look. Two things about it are not obvious:
 
-   1. Der Verlauf ist NICHT das ganze Spektrum ueber den ganzen Rahmen. Er
-      traegt alle Farben in einem kurzen Bogen; der Rest der Umdrehung ist die
-      normale Haarlinie. Ein Rahmen, der alle sechs Toene gleichzeitig zeigt,
-      bleibt stehende Deko, egal wie schnell er dreht: das Auge hat nichts zum
-      Verfolgen. Ein heller Bogen auf ruhiger Kante hat Kopf und Schweif — das
-      liest sich als lebendig.
+   1. The gradient is NOT the whole spectrum around the whole frame. It carries
+      every colour in one short arc; the rest of the revolution is the ordinary
+      hairline. A frame showing all six tones at once stays static decoration
+      however fast it turns: the eye has nothing to follow. A bright arc on a
+      quiet edge has a head and a tail — that reads as alive.
 
-      Wichtig dabei: der ruhige Teil ist `var(--border)`, NICHT `transparent`.
-      Mit durchsichtig faellt der Rahmen dort schlicht weg, und die Karte sieht
-      an drei Seiten angeschnitten aus. Die Haarlinie IST der Rahmen, der Bogen
-      ist das Licht, das darueber laeuft.
+      Important with it: the quiet part is `var(--border)`, NOT `transparent`.
+      Made see-through, the border simply falls away there and the card looks
+      cut off on three sides. The hairline IS the border; the arc is the light
+      running over it.
 
-   2. Der Winkel muss DORT stehen, wo er verwendet wird. Mein erster Versuch
-      legte den Verlauf als `--rainbow-conic` auf :root und benutzte ihn in
-      `.dialog`. Das drehte sich nie, und der Grund ist eine Feinheit der
-      Kaskade: ein `var()` INNERHALB eines Custom Property wird schon dort
-      aufgeloest, wo dieses Property deklariert ist. `--ring-angle` stand damit
-      als 0deg fest in `--rainbow-conic`, bevor irgendeine Animation lief —
-      vererbt wurde ein eingefrorener Wert. Deshalb steht der conic-gradient
-      jetzt ausgeschrieben in jeder Regel.
+   2. The angle has to live WHERE it is used. My first attempt put the gradient
+      on :root as `--rainbow-conic` and used it in `.dialog`. That never turned,
+      and the reason is a subtlety of the cascade: a `var()` INSIDE a custom
+      property is resolved where that property is declared. `--ring-angle` was
+      therefore fixed at 0deg inside `--rainbow-conic` before any animation ran
+      — what was inherited was a frozen value. So the conic-gradient is now
+      written out in every rule.
 
-   Bedeutung, damit die Bewegung nicht Dekoration bleibt:
+   Meaning, so the movement does not stay decoration:
 
-       dreht sich   hier passiert gerade etwas, oder es wird etwas von dir
-                    verlangt (Anmeldung, Dialog)
+       it turns    something is happening here, or something is being asked of
+                   you (sign-in, dialog)
 
-   Und nur dort. Eingabefelder haben es zwischenzeitlich mitgemacht; das war
-   ein zweites wanderndes Licht innerhalb des ersten und zog den Blick genau
-   dorthin, wo man gerade tippt.
+   And only there. Input fields joined in for a while; that was a second
+   travelling light inside the first, and it pulled the eye to exactly where
+   you are typing.
 
-   Zur Bauform: die Website haengt ein maskiertes Pseudoelement ausserhalb der
-   Box (mask-composite). Hier geht das an Dialogen nicht — `.dialog` hat
-   `overflow-y: auto` und wuerde ein Kind bei `inset: -1px` abschneiden.
-   Stattdessen wird der Verlauf direkt in die Randflaeche gemalt: Fuellung bis
-   zur padding-box, Verlauf bis zur border-box. Kein Kind, nichts zu
-   beschneiden, Radius stimmt von selbst.
+   On the construction: the website hangs a masked pseudo-element outside the
+   box (mask-composite). That does not work on dialogs here — `.dialog` has
+   `overflow-y: auto` and would clip a child at `inset: -1px`. Instead the
+   gradient is painted straight into the border area: fill to the padding box,
+   gradient to the border box. No child, nothing to clip, and the radius comes
+   out right by itself.
    ========================================================================== */
 
-/* Ohne Registrierung als <angle> springt der Wert von 0 auf 360, statt zu
-   drehen: eine nicht typisierte Custom Property ist fuer den Browser ein
-   Zeichenketten-Token und damit nicht interpolierbar. */
+/* Without registering it as an <angle> the value jumps from 0 to 360 instead
+   of turning: to the browser an untyped custom property is a string token and
+   therefore not interpolable. */
 @property --ring-angle {
   syntax: '<angle>';
   initial-value: 0deg;
@@ -6819,8 +6816,8 @@ a,
   }
 }
 
-/* Der Schein unter dem Rand. Auf Weiss wirkt derselbe Wert wie auf Schwarz
-   schmutzig statt beleuchtet — im Hellen zurueckgenommen. */
+/* The glow beneath the border. On white the same value as on black looks
+   dirty rather than lit — pulled back in the light theme. */
 :root {
   --ring-bloom: 0.1;
 }
@@ -6829,9 +6826,9 @@ a,
   --ring-bloom: 0.22;
 }
 
-/* Anmeldekarte und Dialoge tragen den laufenden Bogen. Ein Dialog ist modal —
-   er IST der Bildschirm, solange er offen steht, und faellt damit unter die
-   Regel "ein farbiges Element pro Bildschirm". */
+/* The sign-in card and dialogs carry the running arc. A dialog is modal — it
+   IS the screen for as long as it is open, and so falls under the rule "one
+   coloured element per screen". */
 .ring,
 .dialog,
 .confirm-dialog {
@@ -6858,16 +6855,16 @@ a,
   animation: ring-rotate 9s linear infinite;
 }
 
-/* Schneller beim Hover — aber NICHT ueber animation-duration. Der Fortschritt
-   einer Animation ist verstrichene Zeit geteilt durch Dauer; die Dauer mitten
-   im Lauf zu aendern rechnet den Winkel neu, und das Licht springt sichtbar
-   zurueck. Das Tempo wird deshalb in ring.ts ueber updatePlaybackRate
-   hochgezogen, das die aktuelle Zeit festhaelt. */
+/* Faster on hover — but NOT through animation-duration. The progress of an
+   animation is elapsed time divided by duration; changing the duration mid-run
+   recomputes the angle and the light jumps visibly backwards. The speed is
+   therefore pulled up in ring.ts through updatePlaybackRate, which holds the
+   current time. */
 
-/* Stapeln sich zwei Dialoge — eine Rueckfrage ueber der Nutzerverwaltung —,
-   traegt nur der obere den Bogen. Zwei laufende Lichter nebeneinander sind
-   genau das, was die Regel "ein farbiges Element pro Bildschirm" verhindern
-   soll: das Auge weiss nicht mehr, welches gerade etwas will. */
+/* When two dialogs stack — a confirmation over user administration — only the
+   upper one carries the arc. Two running lights side by side are exactly what
+   the rule "one coloured element per screen" is meant to prevent: the eye no
+   longer knows which of them wants something. */
 body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   border: 1px solid var(--border);
   background: var(--card);
@@ -6875,13 +6872,13 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   animation: none;
 }
 
-/* Das fokussierte Feld bleibt, wie es war.
+/* The focused field stays as it was.
    ---------------------------------------------------------------------------
-   Es hatte zwischenzeitlich denselben laufenden Bogen wie die Karte, in einer
-   eigenen Tonlage je Feldart. Technisch sauber, in der Benutzung aber zu viel:
-   die Karte leuchtet bereits, und ein zweites wanderndes Licht direkt darin
-   zieht den Blick genau dorthin, wo man gerade tippt. Die Regel "ein farbiges
-   Element pro Bildschirm" gilt auch fuer die eigenen guten Ideen. */
+   For a while it had the same running arc as the card, in a key of its own per
+   field type. Technically clean, but too much in use: the card already glows,
+   and a second travelling light directly inside it pulls the eye to exactly
+   where you are typing. The rule "one coloured element per screen" applies to
+   one's own good ideas too. */
 
 /* ---- Rank ----------------------------------------------------------------
    The role buttons carry their level as a colour: the further someone's
@@ -6908,9 +6905,9 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
 [data-theme='dark'] .ws-role-btn[data-role='member'].active { background: #1d7a45; }
 [data-theme='dark'] .ws-role-btn[data-role='admin'].active { background: #a1560c; }
 
-/* Bewegungsempfindlichkeit: der Rand bleibt, er dreht sich nur nicht mehr.
-   Ihn ganz zu entfernen waere ein anderer Bildschirm — das ist nicht gemeint,
-   wenn jemand weniger Bewegung einstellt. */
+/* Motion sensitivity: the border stays, it simply stops turning. Removing it
+   altogether would be a different screen — that is not what somebody means when
+   they ask for less movement. */
 @media (prefers-reduced-motion: reduce) {
   .ring,
   .ring:hover,
@@ -6920,17 +6917,16 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   }
 }
 
-/* ---- Schriftwahl (W107) ---------------------------------------------------
-   Aus, bis jemand sie einschaltet. Die Dateien liegen im Programm (siehe
-   main.tsx) — der Browser laedt sie erst, wenn eine Regel sie verlangt.
+/* ---- Typeface choice (W107) -----------------------------------------------
+   Off until somebody switches it on. The files live in the program (see
+   main.tsx) — the browser loads them only once a rule asks for them.
 
-   Wichtig zu wissen, warum der Schalter zuerst "nichts" tat: BlockNote bringt
-   sein eigenes Inter mit (`@blocknote/core/fonts/inter.css`), und der
-   Standard-Stack der App beginnt seit jeher mit 'Inter'. Der Fliesstext WAR
-   also schon Inter — nur die variable Fassung fehlte. Sichtbar wird die
-   Umstellung durch das Zweite, was die Website ausmacht: Mono fuer alles, was
-   Beschriftung ist. Hierarchie kommt dort aus Laufweite und Schriftart, nicht
-   aus Schriftgroesse. */
+   Worth knowing why the switch at first appeared to do "nothing": BlockNote
+   brings its own Inter (`@blocknote/core/fonts/inter.css`), and the app's
+   default stack has always begun with 'Inter'. The body text WAS already Inter
+   — only the variable cut was missing. What makes the change visible is the
+   second thing that defines the website: mono for everything that is a label.
+   Hierarchy comes from letter spacing and typeface there, not from size. */
 
 [data-font='brand'] body,
 [data-font='brand'] input,
@@ -6948,13 +6944,12 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
     Menlo, Consolas, monospace;
 }
 
-/* Beschriftungen und Schaltflaechen in Mono — der Griff, an dem man die
-   Website erkennt. Bei kleinen Graden traegt die Laufweite die Lesbarkeit,
-   nicht die Groesse.
+/* Labels and buttons in mono — the handle by which the website is recognised.
+   At small sizes the letter spacing carries legibility, not the size.
 
-   Ausdruecklich NICHT dabei: `.dialog-hint`. Das sind ganze Saetze, und ein
-   Satz in Monospace liest sich muehsamer als derselbe Satz in einer
-   Proportionalschrift — Mono gehoert an Etiketten, nicht an Fliesstext. */
+   Explicitly NOT included: `.dialog-hint`. Those are whole sentences, and a
+   sentence in monospace reads harder than the same sentence in a proportional
+   face — mono belongs on labels, not on running text. */
 [data-font='brand'] .btn,
 [data-font='brand'] .btn-sm,
 [data-font='brand'] .users-section-title,
@@ -6979,14 +6974,14 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   letter-spacing: 0.07em;
 }
 
-/* ---- Die Wortmarke --------------------------------------------------------
-   Klein geschrieben, Mono, eng gestellt — dieselbe Marke wie auf der Website
-   und im Banner der Repo. Sie haengt NICHT am Schriftschalter: eine Marke ist
-   keine Geschmacksfrage, und die Mono-Schrift liegt ohnehin im Programm.
+/* ---- The wordmark ---------------------------------------------------------
+   Lower case, mono, tightly set — the same mark as on the website and in the
+   repository banner. It does NOT hang off the typeface switch: a brand is not a
+   matter of taste, and the mono face is in the program anyway.
 
-   Nur, wenn die Instanz keinen eigenen Namen traegt: hat eine Firma ihren
-   Namen eingetragen, ist das ihre Marke und nicht meine — die bleibt, wie sie
-   geschrieben wurde. */
+   Only when the instance carries no name of its own: if a company has entered
+   its name, that is their brand and not mine — it stays written the way they
+   wrote it. */
 .login-card h1.wordmark {
   font-family: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', SFMono-Regular,
     Menlo, Consolas, monospace;
@@ -6995,10 +6990,10 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   text-transform: lowercase;
 }
 
-/* Karte nach dem Halten, bevor sie bewegt wird (W108).
-   Auf dem iPhone gibt es kein navigator.vibrate — ohne dieses Anheben bliebe
-   der Moment, in dem die Karte am Finger haengt, unsichtbar, und das Ziehen
-   faenge fuer den Menschen unangekuendigt an. */
+/* The card after the hold, before it is moved (W108).
+   On the iPhone there is no navigator.vibrate — without this lift the moment
+   at which the card is on the finger would stay invisible, and the drag would
+   begin unannounced as far as the person is concerned. */
 .board-card.is-armed {
   transform: scale(1.03);
   box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
