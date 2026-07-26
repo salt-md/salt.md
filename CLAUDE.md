@@ -47,7 +47,7 @@ web/src/
   i18n.ts            t(), plural(), locale switching
   format.ts          THE ONLY place that formats dates, numbers, sorting
   serverErrors.ts    server error code → translated message
-  locales/de.json    German catalog (681 entries)
+  locales/de.json    German catalog (686 entries)
   scripts/           check-i18n.mjs, check-format.mjs, translate.mjs
 docs/search-and-ai.md  design paper: local semantic search, stages 0-2
 ```
@@ -77,9 +77,17 @@ colour palettes as functions called during render.
 from every label in the loop. Three of those got caught by the compiler; name
 loop variables anything else.
 
-**`npm run check` enforces all of it** and fails the build on a bare string, a
-stray `toLocale*` or a catalog that has drifted. A line may opt out with
-`// i18n-ok: <reason>` — the reason is mandatory.
+**`npm run check` enforces all of it** in three sections, and fails the build on
+a bare string, a stray `toLocale*`, a catalog that has drifted, or **German
+anywhere in `.ts`, `.tsx` or `.css`**. `locales/` is exempt — it IS the German.
+A line may opt out with `// i18n-ok: <reason>` — the reason is mandatory, and it
+has to sit on the line itself.
+
+`node scripts/check-i18n.mjs --german` lists the German by file, `--bare` the
+unwrapped strings. Section 3 exists because the JSX rule structurally cannot see
+everything: it tolerates one line break and no `{}` or `<>` inside the text, so
+a German paragraph over three lines with a `<code>` in it walked straight past
+— twice, and both were on screen.
 
 **`go test ./...` enforces the same on the server** (`server/language_test.go`),
 in two tests that catch different things:
@@ -152,7 +160,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.2-dev |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.3-dev |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -265,13 +273,15 @@ with English text, frontend and server report one version, no console errors,
 and the interface comes up in **German** from the catalog while the source is
 English — the whole point, proven on real data.
 
-**The source is English. All of it** — `go test` reports zero German lines and
-zero German strings, `docs/` is translated, and `pendingTranslation` is empty.
-Deployed on the test box as `1.4.2-dev` and checked against the shipped binary:
-the seven German strings gone, the seven English ones present, `tunnel:
-connected` in the log where it used to say `verbunden`.
+**The source is English — server, frontend and docs.** `go test` reports zero
+German lines and zero German strings; `npm run check` reports no German in
+`.ts`, `.tsx` or `.css`; `pendingTranslation` is empty. Deployed on the test box
+as `1.4.3-dev` and checked against what is actually served: the German strings
+gone from the binary, `tunnel: connected` in the log where it used to say
+`verbunden`, and the German catalog chunk still carrying the German — English
+source, German interface, proven end to end on a running instance.
 
-That took five passes, and **each one found what the last could not** — worth
+That took seven passes, and **each one found what the last could not** — worth
 knowing, because it says something about what a check can and cannot do:
 
 1–3. the interface, then the server messages, then the comments.
@@ -283,8 +293,13 @@ knowing, because it says something about what a check can and cannot do:
    German texts were still there — a SECOND German 404 page for anonymous
    visitors, the print bar of the HTML export, the admin test mail, four mail
    errors and one settings message. All below the two-word threshold.
+6. **The frontend had no language check at all.** With the server clean, a scan
+   of `web/src` found **425 German lines** — and two of them were user-visible
+   JSX the string rule could not reach: the index hint and the emergency-access
+   dialog. Section 3 of `check-i18n.mjs` closes that.
+7. **styles.css**, 238 lines, the last of it.
 
-And the check had exempted **itself**: `exemptFile`'s pattern matched its own
+And the Go check had exempted **itself**: `exemptFile`'s pattern matched its own
 source, so `language_test.go` was the one file nobody checked, with two German
 lines hiding behind it. The marker is assembled from a constant now. The first
 attempt at the comment explaining this re-created the bug by spelling the token
@@ -300,15 +315,15 @@ the interface now, where they used to be German. They carry no error code, so
 `serverErrors.ts` cannot translate them. Giving them codes is a small, separate
 job — not done, deliberately, because it changes API responses.
 
-Branch `public` is **8 commits ahead of `origin/main`** — the translation work
-after 1.4.0. Test box runs `1.4.2-dev`, production stays on `1.4.0`.
+Branch `public` is **10 commits ahead of `origin/main`** — the translation work
+after 1.4.0. Test box runs `1.4.3-dev`, production stays on `1.4.0`.
 
 **No `v1.4.0` tag has been pushed.** A `v*` tag fires both
 `.github/workflows/release.yml` and `docker.yml`, which publish platform
 binaries to a GitHub Release (where `install.sh` fetches from) and an image to
 GHCR. That is a separate decision from pushing code, so it waits for a word.
 
-Rollback: test server `/opt/salt/salt.bak-w113`, production the 1.0.2 image plus
+Rollback: test server `/opt/salt/salt.bak-w114`, production the 1.0.2 image plus
 `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
 migrated 1.0.2 → 1.4.0 in one jump and came up clean.
 
