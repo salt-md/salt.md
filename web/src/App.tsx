@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
+import { serverMessage } from './serverErrors';
 import type { Me, PageMeta, User, Workspace } from './types';
 import Sidebar from './components/Sidebar';
 import Editor from './components/Editor';
@@ -24,19 +25,35 @@ import { plural, t } from './i18n';
  *  mitgelieferten Inter- und JetBrains-Mono-Schriften ein. */
 export type FontPref = 'system' | 'brand';
 
-// Feedback aus dem Mail-OAuth-Consent-Redirect (/?mailOauth=ok|<fehler>).
+// Feedback from the mail OAuth consent redirect (/?mailOauth=ok|<code>).
+//
+// The server hands back a code plus its English sentence, never a finished
+// German one — otherwise this toast would be the one German string left in an
+// English interface. Provider text arrives separately in `detail`, because
+// nobody can translate what Google or Microsoft wrote.
 const mailOauthMsg = (() => {
   const qs = new URLSearchParams(window.location.search);
-  const v = qs.get('mailOauth');
-  if (v) {
-    qs.delete('mailOauth');
+  const code = qs.get('mailOauth');
+  const text = qs.get('mailOauthText');
+  const detail = qs.get('mailOauthDetail');
+  if (code) {
+    ['mailOauth', 'mailOauthText', 'mailOauthDetail'].forEach((k) => qs.delete(k));
     const rest = qs.toString();
     window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''));
   }
-  return v;
+  return code ? { code, text: text ?? code, detail } : null;
 })();
 if (mailOauthMsg) {
-  setTimeout(() => toast(mailOauthMsg === 'ok' ? t('Mail sending connected ✓') : t('Mail connection: {detail}', { detail: mailOauthMsg })), 400);
+  setTimeout(() => {
+    if (mailOauthMsg.code === 'ok') {
+      toast(t('Mail sending connected ✓'));
+      return;
+    }
+    const msg = serverMessage(mailOauthMsg.code, mailOauthMsg.text);
+    toast(t('Mail connection: {detail}', {
+      detail: mailOauthMsg.detail ? `${msg} (${mailOauthMsg.detail})` : msg,
+    }));
+  }, 400);
 }
 
 // Injected at build time from the same value the server is built with (see

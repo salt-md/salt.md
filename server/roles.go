@@ -196,7 +196,7 @@ func (s *Server) migrateOrg() error {
 func personalWorkspaceName(userName string) string {
 	userName = strings.TrimSpace(userName)
 	if userName == "" {
-		return "Persönlich"
+		return "Personal"
 	}
 	if len([]rune(userName)) > 60 {
 		userName = string([]rune(userName)[:60])
@@ -304,8 +304,8 @@ func (s *Server) sessionOnly(next http.HandlerFunc) http.HandlerFunc {
 		// TokenScope is empty for a cookie session and set for every token
 		// ("read" or "write").
 		if requestUser(r).TokenScope != "" {
-			httpError(w, http.StatusForbidden,
-				"Dieser Vorgang verlangt eine Anmeldung im Browser — ein API-Token reicht dafür nicht.")
+			httpErrorCode(w, http.StatusForbidden, "session_required",
+				"This action requires signing in through a browser — an API token is not enough.")
 			return
 		}
 		next(w, r)
@@ -316,7 +316,7 @@ func (s *Server) sessionOnly(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) ownerOnly(next http.HandlerFunc) http.HandlerFunc {
 	return s.auth(s.sessionOnly(func(w http.ResponseWriter, r *http.Request) {
 		if !s.isOwner(requestUser(r).ID) {
-			httpError(w, http.StatusForbidden, "Das kann nur der Owner dieser Instanz.")
+			httpErrorCode(w, http.StatusForbidden, "owner_only", "Only the owner of this instance can do that.")
 			return
 		}
 		next(w, r)
@@ -349,7 +349,7 @@ func (s *Server) handleTransferOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if target.ID == me.ID {
-		httpError(w, 400, "Du bist bereits der Owner.")
+		httpErrorCode(w, 400, "already_owner", "You are already the owner.")
 		return
 	}
 	if target.Disabled {
@@ -422,7 +422,8 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 	// No access without a reason on the record — that is the entire difference
 	// between emergency access and a quiet back door.
 	if len([]rune(reason)) < 10 {
-		httpError(w, 400, "Bitte einen nachvollziehbaren Grund angeben (mindestens 10 Zeichen) — er wird protokolliert und den Verantwortlichen des Workspace angezeigt.")
+		httpErrorCode(w, 400, "reason_too_short",
+			"Please give a reason somebody can follow (at least 10 characters) — it is logged and shown to the people in charge of this workspace.")
 		return
 	}
 	if len([]rune(reason)) > 500 {
@@ -482,10 +483,10 @@ func (s *Server) notifyWorkspaceAdmins(wsID, wsName, actor, reason string) {
 	}
 	rows.Close()
 	body := fmt.Sprintf(
-		"%s hat sich als Instanz-Owner befristeten Lesezugriff auf den Workspace %q verschafft.\n\nBegründung:\n%s\n\nDer Zugriff endet automatisch nach 2 Stunden und ist im Aktivitätsprotokoll festgehalten.",
+		"%s, the owner of this instance, has taken time-limited read access to the workspace %q.\n\nReason given:\n%s\n\nThe access ends automatically after 2 hours and is recorded in the activity log.",
 		actor, wsName, reason)
 	for _, to := range mails {
-		if err := s.sendMail(to, "Notfallzugriff auf "+wsName, body); err != nil {
+		if err := s.sendMail(to, "Emergency access to "+wsName, body); err != nil {
 			log.Printf("break-glass notice to %s: %v", to, err)
 		}
 	}

@@ -402,8 +402,11 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 	link := s.publicShareBase(r) + "/invite/" + token
 	emailed := false
 	if body.Email != "" {
-		if err := s.sendMail(body.Email, "Einladung zu Salt.md",
-			"Du wurdest zu einem Salt.md-Workspace eingeladen.\n\nÖffne diesen Link, um beizutreten:\n"+link+"\n\nDer Link ist 14 Tage gültig."); err == nil {
+		// English, like every other source string: an invitation goes to
+		// somebody who has no account yet, so the server has no way of knowing
+		// what language they read.
+		if err := s.sendMail(body.Email, "You have been invited to Salt.md",
+			"You have been invited to a Salt.md workspace.\n\nOpen this link to join:\n"+link+"\n\nThe link is valid for 14 days."); err == nil {
 			emailed = true
 		}
 	}
@@ -455,10 +458,10 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 	// A bound invite must still match the signed-in account's address.
 	if cur := s.currentUser(r); cur != nil {
 		// Auch hier: eine stillgelegte Sitzung tritt keinem Workspace mehr bei.
-		// Schwer erreichbar (Stilllegen löscht die Sitzungen), aber es ist die
-		// einzige mutierende currentUser-Stelle ohne diese Prüfung.
+		// Hard to reach (deactivating clears the sessions), but this is the one
+		// mutating currentUser site without that check.
 		if cur.Disabled {
-			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
+			httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated — talk to an admin.")
 			return
 		}
 		if email != "" && !strings.EqualFold(email, cur.Email) {

@@ -12,7 +12,7 @@ func TestIsStaticFileName(t *testing.T) {
 	}
 	for _, p := range static {
 		if !isStaticFileName(p) {
-			t.Errorf("%q sollte als Datei gelten (sonst kommt index.html statt 404)", p)
+			t.Errorf("%q should count as a file (otherwise index.html arrives instead of a 404)", p)
 		}
 	}
 	routes := []string{
@@ -21,7 +21,7 @@ func TestIsStaticFileName(t *testing.T) {
 	}
 	for _, p := range routes {
 		if isStaticFileName(p) {
-			t.Errorf("%q ist eine Client-Route und darf nicht 404 geben", p)
+			t.Errorf("%q is a client route and must not 404", p)
 		}
 	}
 }

@@ -3,6 +3,7 @@ import { api, ApiError } from '../api';
 import type { User } from '../types';
 import Logo from '../Logo';
 import { t } from '../i18n';
+import { serverMessage } from '../serverErrors';
 
 export default function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -27,12 +28,18 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
         setOauth({ google: p.oauthGoogle, microsoft: p.oauthMicrosoft });
       })
       .catch(() => {});
-    // Surface an error handed back by an aborted OAuth redirect.
+    // Surface an error handed back by an aborted OAuth redirect. The server
+    // sends a code plus its English sentence; the code is what gets
+    // translated, the sentence is the fallback. `detail` is the provider's own
+    // wording and stays as it came.
     const qs = new URLSearchParams(window.location.search);
-    const oe = qs.get('oauthError');
-    if (oe) {
-      setError(oe);
-      qs.delete('oauthError');
+    const code = qs.get('oauthError');
+    if (code) {
+      const text = qs.get('oauthErrorText') ?? code;
+      const detail = qs.get('oauthErrorDetail');
+      const msg = serverMessage(code, text);
+      setError(detail ? `${msg} (${detail})` : msg);
+      ['oauthError', 'oauthErrorText', 'oauthErrorDetail'].forEach((k) => qs.delete(k));
       const rest = qs.toString();
       window.history.replaceState({}, '', window.location.pathname + (rest ? '?' + rest : ''));
     }

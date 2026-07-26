@@ -52,6 +52,18 @@ export function serverMessage(code: string, fallback: string, data?: ErrorData):
       );
     case 'disabled_cannot_own':
       return t('A deactivated account cannot take over the instance.');
+    case 'owner_only':
+      return t('Only the owner of this instance can do that.');
+    case 'already_owner':
+      return t('You are already the owner.');
+    case 'session_required':
+      return t('This action requires signing in through a browser — an API token is not enough.');
+    case 'reason_too_short':
+      return t(
+        'Please give a reason somebody can follow (at least 10 characters) — it is logged and shown to the people in charge of this workspace.',
+      );
+    case 'no_self_disable':
+      return t('You cannot deactivate your own account.');
 
     // ---- personal spaces ----
     case 'personal_not_adoptable':
@@ -102,6 +114,54 @@ export function serverMessage(code: string, fallback: string, data?: ErrorData):
       return t('This person has {pages} here. They stay in the workspace and will only be visible to its admins afterwards.', {
         pages: plural(n, '{n} private page', '{n} private pages'),
       });
+
+    // ---- signing in with Google / Microsoft ----
+    // These do not arrive as JSON: the provider sends the browser back to a
+    // URL, so the code rides in the query string instead. Same bargain.
+    case 'oauth_not_configured':
+      return t('This sign-in method is not configured.');
+    case 'oauth_cancelled':
+      return t('Sign-in was cancelled.');
+    case 'oauth_expired':
+      return t('Sign-in expired — please try again.');
+    case 'oauth_bad_state':
+      return t('Sign-in could not be verified — please try again.');
+    case 'oauth_no_code':
+      return t('No authorization code received.');
+    case 'oauth_token_exchange':
+      return t('Token exchange failed.');
+    case 'oauth_failed':
+      return t('Sign-in failed.');
+    case 'oauth_no_email':
+      return t('The provider did not supply an email address.');
+    case 'oauth_email_unverified':
+      return t('This Google address is not verified.');
+    case 'oauth_email_squatter':
+      return t(
+        'This address belongs to an account that has not confirmed it. Please sign in with a password or contact your administrator.',
+      );
+    case 'oauth_signup_blocked':
+      return t('This address cannot create an account here.');
+    case 'oauth_session_failed':
+      return t('The session could not be created.');
+
+    // ---- connecting a mailbox for sending ----
+    case 'mail_oauth_cancelled':
+      return t('Cancelled.');
+    case 'mail_oauth_expired':
+      return t('Expired — please connect again.');
+    case 'mail_oauth_bad_state':
+      return t('Could not be verified — please connect again.');
+    case 'mail_oauth_no_code':
+      return t('No authorization code.');
+    case 'mail_oauth_token_exchange':
+      return t('Token exchange failed.');
+    case 'mail_oauth_provider':
+      return t('The provider refused the connection.');
+    case 'mail_oauth_no_refresh':
+      return t(
+        'No refresh token received — remove the access in your account settings and connect again.',
+      );
 
     // ---- other ----
     case 'impact_unavailable':

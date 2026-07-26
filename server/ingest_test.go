@@ -11,7 +11,7 @@ import (
 // aussen unerreichbar sind — Hypervisor, Router, Cloud-Metadatendienste.
 func TestBlockedIP(t *testing.T) {
 	if allowPrivateImport {
-		t.Skip("SALT_IMPORT_ALLOW_PRIVATE ist gesetzt")
+		t.Skip("SALT_IMPORT_ALLOW_PRIVATE is set")
 	}
 	blocked := []string{
 		"127.0.0.1", "::1", // Schleife
@@ -24,12 +24,12 @@ func TestBlockedIP(t *testing.T) {
 	}
 	for _, a := range blocked {
 		if !blockedIP(net.ParseIP(a)) {
-			t.Errorf("%s muss gesperrt sein — sonst ist der Import ein SSRF-Loch", a)
+			t.Errorf("%s must be blocked — otherwise the import is an SSRF hole", a)
 		}
 	}
 	for _, a := range []string{"1.1.1.1", "104.16.0.1", "2606:4700::1111"} {
 		if blockedIP(net.ParseIP(a)) {
-			t.Errorf("%s ist oeffentlich und muss erlaubt sein", a)
+			t.Errorf("%s is public and must be allowed", a)
 		}
 	}
 }
@@ -92,7 +92,7 @@ func TestMapItemsTrelloShape(t *testing.T) {
 		t.Errorf("Titel/Inhalt falsch: %q / %q", items[0].title, items[0].md)
 	}
 	if got := scalarString(items[0].props["Status"]); got != "Heiße Kontakte" {
-		t.Errorf("Status = %q, erwartet den aufgeloesten Listennamen statt der Id", got)
+		t.Errorf("Status = %q, expected the resolved list name instead of the id", got)
 	}
 	if got := scalarString(items[0].props["Labels"]); got != "Hot, B2B" {
 		t.Errorf("Labels = %q", got)
@@ -100,7 +100,7 @@ func TestMapItemsTrelloShape(t *testing.T) {
 	// Ein leerer Titel darf den Import nicht abbrechen — sonst scheitert eine
 	// Migration an einer einzigen unbenannten Karte.
 	if items[1].title != "Untitled 2" {
-		t.Errorf("leerer Titel = %q, erwartet einen Platzhalter", items[1].title)
+		t.Errorf("empty title = %q, expected a placeholder", items[1].title)
 	}
 }
 
@@ -108,7 +108,7 @@ func TestMapItemsRejectsBadPath(t *testing.T) {
 	var doc any
 	json.Unmarshal([]byte(`{"cards":[{"name":"A"}]}`), &doc)
 	if _, err := mapItems(doc, ingestSpec{Items: "karten", Title: "name"}); err == nil {
-		t.Error("ein falscher items-Pfad muss einen Fehler geben, nicht still 0 Eintraege")
+		t.Error("a wrong items path must fail, not quietly yield 0 entries")
 	}
 }
 

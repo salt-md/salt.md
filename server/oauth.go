@@ -92,8 +92,20 @@ func randB64(n int) string {
 
 // loginErrorRedirect sends the browser back to the login screen with a
 // human-readable message (the SPA shows it above the form).
-func loginErrorRedirect(w http.ResponseWriter, r *http.Request, msg string) {
-	http.Redirect(w, r, "/?oauthError="+url.QueryEscape(msg), http.StatusFound)
+// loginErrorRedirect sends the browser back to the login page with a machine
+// readable code plus its English sentence, the same bargain the JSON API makes
+// (see httpErrorCode). The browser renders the reader's own language from the
+// code and falls back to the English if it does not know it.
+//
+// `detail` carries text the PROVIDER produced — an OAuth error description, a
+// rejected signup reason. That cannot be translated by anybody, so it travels
+// beside the sentence instead of being baked into it.
+func loginErrorRedirect(w http.ResponseWriter, r *http.Request, code, msg string, detail ...string) {
+	q := url.Values{"oauthError": {code}, "oauthErrorText": {msg}}
+	if len(detail) > 0 && detail[0] != "" {
+		q.Set("oauthErrorDetail", detail[0])
+	}
+	http.Redirect(w, r, "/?"+q.Encode(), http.StatusFound)
 }
 
 func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
@@ -105,7 +117,7 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	clientID, clientSecret := s.oauthClient(pname)
 	if clientID == "" || clientSecret == "" {
-		loginErrorRedirect(w, r, "Dieser Login ist nicht konfiguriert.")
+		loginErrorRedirect(w, r, "oauth_not_configured", "This sign-in method is not configured.")
 		return
 	}
 
@@ -164,26 +176,26 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	defer http.SetCookie(w, &http.Cookie{Name: oauthCookie, Path: "/api/oauth/", MaxAge: -1})
 
 	if e := r.URL.Query().Get("error"); e != "" {
-		loginErrorRedirect(w, r, "Anmeldung abgebrochen ("+e+")")
+		loginErrorRedirect(w, r, "oauth_cancelled", "Sign-in was cancelled.", e)
 		return
 	}
 
 	c, err := r.Cookie(oauthCookie)
 	if err != nil {
-		loginErrorRedirect(w, r, "Anmeldung abgelaufen — bitte erneut versuchen.")
+		loginErrorRedirect(w, r, "oauth_expired", "Sign-in expired — please try again.")
 		return
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
 	var tx oauthTx
 	if err != nil || json.Unmarshal(raw, &tx) != nil || tx.Provider != pname ||
 		tx.Exp < time.Now().Unix() || tx.State == "" || tx.State != r.URL.Query().Get("state") {
-		loginErrorRedirect(w, r, "Anmeldung ungültig (State) — bitte erneut versuchen.")
+		loginErrorRedirect(w, r, "oauth_bad_state", "Sign-in could not be verified — please try again.")
 		return
 	}
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		loginErrorRedirect(w, r, "Kein Autorisierungscode erhalten.")
+		loginErrorRedirect(w, r, "oauth_no_code", "No authorization code received.")
 		return
 	}
 
@@ -199,7 +211,7 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.PostForm(prov.tokenURL, form)
 	if err != nil {
-		loginErrorRedirect(w, r, "Token-Austausch fehlgeschlagen.")
+		loginErrorRedirect(w, r, "oauth_token_exchange", "Token exchange failed.")
 		return
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -216,9 +228,9 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 			msg = tok.Error
 		}
 		if msg == "" {
-			msg = "Token-Antwort unlesbar"
+			msg = "token response unreadable"
 		}
-		loginErrorRedirect(w, r, "Anmeldung fehlgeschlagen: "+msg)
+		loginErrorRedirect(w, r, "oauth_failed", "Sign-in failed.", msg)
 		return
 	}
 
@@ -228,11 +240,11 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
 	if email == "" {
-		loginErrorRedirect(w, r, "Der Anbieter hat keine E-Mail-Adresse geliefert.")
+		loginErrorRedirect(w, r, "oauth_no_email", "The provider did not supply an email address.")
 		return
 	}
 	if pname == "google" && !verified {
-		loginErrorRedirect(w, r, "This Google address is not verified.")
+		loginErrorRedirect(w, r, "oauth_email_unverified", "This Google address is not verified.")
 		return
 	}
 
@@ -249,19 +261,19 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		var squat int
 		s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, email).Scan(&squat)
 		if squat > 0 {
-			loginErrorRedirect(w, r, "This address belongs to an account that has not confirmed it. Please sign in with a password or contact your administrator.")
+			loginErrorRedirect(w, r, "oauth_email_squatter", "This address belongs to an account that has not confirmed it. Please sign in with a password or contact your administrator.")
 			return
 		}
 		uid, err = s.oauthCreateUser(email, name)
 		if err != nil {
-			loginErrorRedirect(w, r, err.Error())
+			loginErrorRedirect(w, r, "oauth_signup_blocked", "This address cannot create an account here.", err.Error())
 			return
 		}
 	}
 
 	sessTok, err := s.createSession(uid)
 	if err != nil {
-		loginErrorRedirect(w, r, "Session konnte nicht erstellt werden.")
+		loginErrorRedirect(w, r, "oauth_session_failed", "The session could not be created.")
 		return
 	}
 	setSessionCookie(w, r, sessTok, s.sessionDays()*24*3600)

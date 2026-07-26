@@ -286,7 +286,7 @@ func (s *Server) handleSetUserDisabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if id == me.ID {
-		httpError(w, 400, "Du kannst dein eigenes Konto nicht stilllegen.")
+		httpErrorCode(w, 400, "no_self_disable", "You cannot deactivate your own account.")
 		return
 	}
 	// The same guard as for deletion: without an owner the instance is left with
@@ -354,7 +354,7 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 		// workspace any more and entries about vanished ones would otherwise
 		// expose their page titles.
 		s.audit("human", actorID, actorName, "delete_workspace", "", "",
-			fmt.Sprintf("%s (persönlicher Bereich von %s, %d Seiten)", ws.Name, impact.UserName, ws.Pages))
+			fmt.Sprintf("%s (personal space of %s, %d pages)", ws.Name, impact.UserName, ws.Pages))
 	}
 
 	// Personal spaces WITH guests: somebody else's work is in there. They become
@@ -384,7 +384,7 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 			s.db.Exec(`UPDATE workspaces SET owner_id = ? WHERE id = ?`, heir, ws.ID)
 		}
 		s.audit("human", actorID, actorName, "workspace_handover", "", ws.ID,
-			fmt.Sprintf("%s (war persönlicher Bereich von %s, hat weitere Mitglieder)", ws.Name, impact.UserName))
+			fmt.Sprintf("%s (was the personal space of %s, has other members)", ws.Name, impact.UserName))
 	}
 
 	// Shared ones with no admin left: the instance owner takes over. A workspace
@@ -400,7 +400,7 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 			ON CONFLICT(workspace_id, user_id) DO UPDATE SET role = 'admin'`, ws.ID, ownerID)
 		s.db.Exec(`UPDATE workspaces SET owner_id = ? WHERE id = ?`, ownerID, ws.ID)
 		s.audit("human", actorID, actorName, "workspace_handover", "", ws.ID,
-			fmt.Sprintf("%s übernommen (vorher %s)", ws.Name, impact.UserName))
+			fmt.Sprintf("%s taken over (previously %s)", ws.Name, impact.UserName))
 	}
 
 	// All the rest: the deleted account was the owner, but admins remain — the

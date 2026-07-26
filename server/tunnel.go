@@ -305,7 +305,7 @@ func (s *Server) StartTunnel(mode, token string) error {
 			if err != nil {
 				t.lastErr = "cloudflared beendet: " + err.Error()
 			} else {
-				t.lastErr = "cloudflared hat sich beendet"
+				t.lastErr = "cloudflared exited on its own"
 			}
 		}
 		mode := t.mode

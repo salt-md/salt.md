@@ -114,28 +114,34 @@ func (s *Server) handleMailOAuthCallback(w http.ResponseWriter, r *http.Request)
 	}
 	defer http.SetCookie(w, &http.Cookie{Name: mailOauthCookie, Path: "/api/admin/mail-oauth/", MaxAge: -1})
 
-	fail := func(msg string) {
-		http.Redirect(w, r, "/?mailOauth="+url.QueryEscape(msg), http.StatusFound)
+	// Same shape as loginErrorRedirect: a code the browser can translate, the
+	// English sentence as a fallback, and provider text kept separate.
+	fail := func(code, msg string, detail ...string) {
+		q := url.Values{"mailOauth": {code}, "mailOauthText": {msg}}
+		if len(detail) > 0 && detail[0] != "" {
+			q.Set("mailOauthDetail", detail[0])
+		}
+		http.Redirect(w, r, "/?"+q.Encode(), http.StatusFound)
 	}
 	if e := r.URL.Query().Get("error"); e != "" {
-		fail("Abgebrochen (" + e + ")")
+		fail("mail_oauth_cancelled", "Cancelled.", e)
 		return
 	}
 	c, err := r.Cookie(mailOauthCookie)
 	if err != nil {
-		fail("Abgelaufen — bitte erneut verbinden.")
+		fail("mail_oauth_expired", "Expired — please connect again.")
 		return
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(c.Value)
 	var tx oauthTx
 	if err != nil || json.Unmarshal(raw, &tx) != nil || tx.Provider != pname ||
 		tx.Exp < time.Now().Unix() || tx.State == "" || tx.State != r.URL.Query().Get("state") {
-		fail("Ungültiger State — bitte erneut verbinden.")
+		fail("mail_oauth_bad_state", "Could not be verified — please connect again.")
 		return
 	}
 	code := r.URL.Query().Get("code")
 	if code == "" {
-		fail("Kein Autorisierungscode.")
+		fail("mail_oauth_no_code", "No authorization code.")
 		return
 	}
 
@@ -151,7 +157,7 @@ func (s *Server) handleMailOAuthCallback(w http.ResponseWriter, r *http.Request)
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.PostForm(prov.tokenURL, form)
 	if err != nil {
-		fail("Token-Austausch fehlgeschlagen.")
+		fail("mail_oauth_token_exchange", "Token exchange failed.")
 		return
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -168,11 +174,11 @@ func (s *Server) handleMailOAuthCallback(w http.ResponseWriter, r *http.Request)
 		if msg == "" {
 			msg = "Token-Antwort unlesbar"
 		}
-		fail(msg)
+		fail("mail_oauth_provider", "The provider refused the connection.", msg)
 		return
 	}
 	if tok.RefreshToken == "" {
-		fail("Kein Refresh-Token erhalten — bitte Zugriff in den Kontoeinstellungen entfernen und erneut verbinden.")
+		fail("mail_oauth_no_refresh", "No refresh token received — remove the access in your account settings and connect again.")
 		return
 	}
 	email, _, _ := parseIDToken(tok.IDToken)

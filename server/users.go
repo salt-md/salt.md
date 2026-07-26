@@ -200,7 +200,7 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 		// Deactivated means deactivated — even if a session slipped through when
 		// the account was switched off, or a new one appeared via OAuth.
 		if u.Disabled {
-			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt.")
+			httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated.")
 			return
 		}
 		// A read-only API token may not perform mutating HTTP methods. Cookie
