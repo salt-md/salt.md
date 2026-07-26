@@ -177,8 +177,8 @@ export const api = {
     req<{ workspaces: { id: string; name: string }[]; memberships: { userId: string; workspaceId: string; role: string }[] }>('/api/admin/access'),
   setMembership: (userId: string, workspaceId: string, role: string) =>
     req<{ ok: boolean }>('/api/admin/membership', { method: 'PUT', body: JSON.stringify({ userId, workspaceId, role }) }),
-  // Notfallzugriff: befristete Einsicht in einen fremden Workspace. Anfordern
-  // darf nur der Owner; einsehen und beenden auch dessen Verantwortliche.
+  // Break-glass: a time-limited look into somebody else's workspace. Only the
+  // owner may request it; the people responsible may view and end it too.
   breakGlass: (workspaceId: string, reason: string) =>
     req<{ ok: boolean; expiresAt: string; workspace: string }>(`/api/workspaces/${workspaceId}/break-glass`, {
       method: 'POST',
@@ -272,8 +272,8 @@ export const api = {
       isTemplate: boolean;
       tags: string[];
       description: string;
-      // Umzug in einen anderen Workspace: nimmt den ganzen Unterbaum mit und
-      // legt die Seite dort auf oberster Ebene ab.
+      // Move to another workspace: takes the whole subtree along and puts the
+      // page at the top level there.
       workspaceId: string;
     }>,
     opts?: { materialize?: boolean },
@@ -364,8 +364,8 @@ export const api = {
     req<{ ok: boolean }>(`/api/pages/${pageId}/revisions/${revId}/restore`, { method: 'POST' }),
 
   listComments: (pageId: string) => req<import('./types').Comment[]>(`/api/pages/${pageId}/comments`),
-  // Offene Kommentare je Seite eines Workspace, in einem Rutsch — fuer die
-  // Zaehler auf Kanban-Karten. Bewusst nicht Teil der Seitenliste (siehe
+  // Open comments per page of a workspace, in one go — for the counters on
+  // kanban cards. Deliberately not part of the page list (see
   // handleCommentCounts).
   commentCounts: (workspaceId: string) =>
     req<Record<string, number>>(`/api/comment-counts?workspaceId=${encodeURIComponent(workspaceId)}`),

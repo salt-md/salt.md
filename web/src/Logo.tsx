@@ -1,9 +1,9 @@
-// Das Salt.md-Zeichen: ein Salzstreuer, dessen Löcher zwei „#" bilden — das
-// Markdown-Überschriftenzeichen im Deckel.
+// The Salt.md mark: a salt shaker whose holes form two "#" — the Markdown
+// heading character, in the lid.
 //
-// Inline als JSX statt <img src="/logo.svg">, damit es `currentColor` erbt.
-// Als Bild eingebunden wäre es im Dark Mode schwarz auf schwarz; so nimmt es
-// einfach die Textfarbe der Umgebung an.
+// Inline as JSX rather than <img src="/logo.svg">, so it inherits
+// `currentColor`. Pulled in as an image it would be black on black in dark
+// mode; this way it simply takes the text colour around it.
 export default function Logo({ size = 32, className }: { size?: number; className?: string }) {
   return (
     <svg

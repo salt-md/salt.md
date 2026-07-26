@@ -65,7 +65,7 @@ export default function InviteAccept({
     try {
       finish(await api.acceptInvite(token, name, email, password, code));
     } catch (err) {
-      // Wie beim Anmelden: am Grund aus der Antwort, nicht am Meldungstext.
+      // As with signing in: go by the reason in the answer, not the message text.
       const e = err as ApiError;
       if (e.code === '2fa_required') setNeedCode(true);
       setError(e.message || 'Beitritt fehlgeschlagen');

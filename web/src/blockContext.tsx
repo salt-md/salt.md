@@ -1,11 +1,11 @@
 import { createContext, useContext } from 'react';
 import type { PageMeta } from './types';
 
-// Eigene Blöcke rendern INNERHALB des Editors, haben aber keinen Zugriff auf
-// dessen Props. Der Datenbank-Block braucht genau das: die Seitenliste (um eine
-// Datenbank auszuwählen und ihren Titel zu zeigen), die Tag-Farben und die
-// Navigation. Ein Context ist dafür der saubere Weg — Modulzustand wäre
-// unsichtbar gekoppelt und würde bei zwei offenen Dokumenten kollidieren.
+// Custom blocks render INSIDE the editor but have no access to its props. The
+// database block needs exactly that: the page list (to pick a database and show
+// its title), the tag colours and navigation. A context is the clean way to do
+// it — module state would be coupled invisibly and would collide with two
+// documents open at once.
 
 export interface BlockCtx {
   pagesById: Map<string, PageMeta>;

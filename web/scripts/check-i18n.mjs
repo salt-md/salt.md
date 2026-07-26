@@ -244,6 +244,71 @@ for (const file of files) {
   }
 }
 
+// ---- Section 3: the source itself is English (enforced) ----
+//
+// Sections 1 and 2 watch what a USER reads. Nothing watched what a DEVELOPER
+// reads, and it showed: 269 German comment lines were sitting in .ts, .tsx and
+// .css while both sections reported clean. Comments carry the *why*, and unlike
+// the interface they will never get a translation layer — a German comment
+// stays German for good.
+//
+// It also catches what the JSX rule above cannot. That regex tolerates one line
+// break and no `{}` or `<>` inside the text, so a German paragraph running over
+// three lines with a `<code>` in the middle walked straight past it. Two did,
+// and both were on screen: the index hint and the emergency-access dialog.
+//
+// The rule is the same crude one the Go side uses (server/language_test.go): an
+// umlaut, or two words from a list with no English homographs. Plus the
+// ae/oe/ue spellings, because much of the German here was written that way.
+const GERMAN_WORDS =
+  /(?<![\w-])(und|nicht|wird|werden|sind|eine|einen|einem|einer|kann|muss|soll|sollen|beim|des|dem|der|das|den|für|fuer|aus|nach|über|ueber|ohne|damit|weil|wenn|dann|noch|nur|schon|sich|hier|aber|oder|bitte|kein|keine|wurde|wurden|diese|dieser|dieses|jeder|jede|mehr|sehr|immer|wieder|zwischen|während|waehrend|deshalb|sonst|bereits|jetzt|etwas|nichts|alles|ihre|seine|unser|gibt|geben|machen|macht|lassen|bleibt|steht|liegt|dabei|darauf|dafür|dafuer|dadurch|daher|sowie|zum|zur|vom|ist|sein|haben|hoehe|höhe|breite|farbe|zeile|zeilen|spalte|spalten)(?![\w-])/giu;
+const UMLAUT = /[äöüßÄÖÜ]/;
+
+function readsGerman(line) {
+  if (/i18n-ok:\s*\S/.test(line)) return false;
+  if (UMLAUT.test(line)) return true;
+  return (line.match(GERMAN_WORDS) ?? []).length >= 2;
+}
+
+const germanLines = [];
+{
+  const stack = [src];
+  while (stack.length) {
+    const d = stack.pop();
+    for (const name of readdirSync(d)) {
+      const p = join(d, name);
+      if (statSync(p).isDirectory()) {
+        // locales/ IS the German — that is the entire point of it.
+        if (name !== 'locales') stack.push(p);
+      } else if (/\.(tsx?|css)$/.test(p) && !SKIP.has(name)) {
+        const rel = relative(join(here, '..'), p);
+        readFileSync(p, 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            if (readsGerman(line)) germanLines.push(`${rel}:${i + 1}  ${line.trim().slice(0, 72)}`);
+          });
+      }
+    }
+  }
+}
+
+// `--german` lists them grouped by file, so the sweep can be worked through one
+// file at a time — the same shape as `--bare`.
+if (process.argv.includes('--german')) {
+  const byFile = new Map();
+  for (const s of germanLines) {
+    const f = s.slice(0, s.indexOf(':'));
+    if (!byFile.has(f)) byFile.set(f, []);
+    byFile.get(f).push(s);
+  }
+  for (const [f, list] of [...byFile.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`\n${f}  (${list.length})`);
+    for (const s of list) console.log('  ' + s);
+  }
+  console.log(`\n${germanLines.length} total`);
+  process.exit(0);
+}
+
 // Catalogs: an entry nobody asks for any more is an orphan (usually the source
 // text was edited); a source string with no entry is simply untranslated.
 const localeDir = join(src, 'locales');
@@ -312,15 +377,27 @@ for (const r of report) {
 }
 
 console.log();
+console.log('  Source language');
+if (germanLines.length === 0) console.log('    ok   no German in .ts, .tsx or .css');
+else {
+  console.log(`    ${germanLines.length} line(s) read as German`);
+  for (const s of germanLines.slice(0, 8)) console.log(`      ${s}`);
+  if (germanLines.length > 8) console.log(`      … and ${germanLines.length - 8} more`);
+}
+
+console.log();
 const stale = report.filter((r) => r.missing > 0 || r.orphans.length > 0);
-if (errors.length || unwrapped > 0 || stale.length) {
+if (errors.length || unwrapped > 0 || stale.length || germanLines.length) {
   if (errors.length) console.log(`  FAILED — ${errors.length} formatting violation(s)`);
   if (unwrapped > 0)
     console.log(`  FAILED — ${unwrapped} user-visible string(s) not wrapped in t()`);
   for (const r of stale)
     console.log(`  FAILED — ${r.name}: ${r.missing} untranslated, ${r.orphans.length} orphaned`);
+  if (germanLines.length)
+    console.log(`  FAILED — ${germanLines.length} German line(s) in the source`);
   console.log('\n  Fix, or justify the line with `i18n-ok: <reason>`.');
   console.log('  For a catalog: node scripts/check-i18n.mjs --missing <locale>');
+  console.log('  For the German list: node scripts/check-i18n.mjs --german');
   process.exit(1);
 }
-console.log('  ok — every string wrapped, every catalog current');
+console.log('  ok — every string wrapped, every catalog current, source is English');

@@ -198,13 +198,13 @@ export default function App() {
     localStorage.setItem('salt-theme', themePref);
   }, [theme, themePref]);
 
-  // Schriftart: dieselbe Mechanik wie das Design — die Wahl liegt lokal, das
-  // Ergebnis als Attribut an <html>, damit CSS allein entscheidet. Aus, bis
-  // jemand sie einschaltet: die mitgelieferten Schriftdateien laedt der
-  // Browser erst, wenn sie tatsaechlich verwendet werden.
-  // Voreinstellung 'brand'. Wer ausdruecklich 'system' gewaehlt hat, behaelt
-  // es — nur das Fehlen des Schluessels bedeutet "not decided yet" und
-  // faellt damit auf die mitgelieferten Schriften.
+  // Typeface: the same mechanism as the theme — the choice is kept locally,
+  // the result goes onto <html> as an attribute so CSS alone decides. Off
+  // until somebody switches it on: the browser loads the bundled font files
+  // only once they are actually used.
+  // Defaults to 'brand'. Anybody who explicitly chose 'system' keeps it —
+  // only a MISSING key means "not decided yet" and therefore falls to the
+  // bundled fonts.
   const [fontPref, setFontPref] = useState<FontPref>(() =>
     localStorage.getItem('salt-font') === 'system' ? 'system' : 'brand',
   );

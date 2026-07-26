@@ -171,10 +171,10 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
   const [viewId, setViewId] = useState<string>('');
   const [schemaOpen, setSchemaOpen] = useState(false);
 
-  // Offene Kommentare je Zeile. Trello zeigt an jeder Karte, ob dort etwas
-  // besprochen wurde — bei einem Vertriebsboard steckt der Gespraechsverlauf
-  // genau dort und nicht in der Beschreibung. In EINER Abfrage fuer den ganzen
-  // Workspace, nicht pro Karte (siehe handleCommentCounts).
+  // Open comments per row. Trello shows on every card whether anything was
+  // discussed there — on a sales board the course of the conversation sits
+  // exactly there and not in the description. In ONE query for the whole
+  // workspace, not per card (see handleCommentCounts).
   const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
   const workspaceId = pages.get(collectionId)?.workspaceId ?? '';
   useEffect(() => {
@@ -187,9 +187,8 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     return () => {
       alive = false;
     };
-    // Absichtlich nur an workspaceId haengen: `pages` bekommt bei jeder
-    // Aenderung eine neue Identitaet und wuerde hier eine Endlosschleife
-    // ausloesen.
+    // Deliberately hangs off workspaceId alone: `pages` gets a new identity on
+    // every change and would set off an endless loop here.
   }, [workspaceId]);
 
   const loadConfig = useCallback(() => {
@@ -228,13 +227,12 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
   const serverSort = view0?.sort ?? null;
   const fsKey = JSON.stringify([serverFilters, serverSort]);
 
-  // Laedt ALLE Zeilen, in 200er-Schritten nacheinander. Vorher blieb es bei
-  // der ersten Seite plus einem "Load more"-Knopf — mit der Folge, dass ein
-  // Board mit 656 Karten "Verloren / Erstattet 0" zeigte, obwohl dort 395
-  // lagen: die Spalte war nicht leer, sie war blind. Die Schritte schuetzen
-  // weiterhin den Server (und zeichnen frueh etwas auf den Schirm); die
-  // Epoche verwirft veraltete Antworten, wenn waehrenddessen Filter oder
-  // Datenbank wechseln.
+  // Loads ALL rows, in steps of 200 one after another. It used to stop at the
+  // first page plus a "Load more" button — with the result that a board of 656
+  // cards showed "Lost / Refunded 0" while 395 sat there: the column was not
+  // empty, it was blind. The steps still protect the server (and draw something
+  // on screen early); the epoch discards stale answers if the filter or the
+  // database changes meanwhile.
   const epochRef = useRef(0);
   const loadRows = useCallback(async () => {
     const epoch = ++epochRef.current;
@@ -264,11 +262,11 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionId, fsKey]);
 
-  // Laedt ALLE Zeilen — aber NICHT bei jeder Aenderung irgendwo im Workspace.
-  // Frueher hing dieser Effekt an `pages`, und `pages` bekommt bei jedem
-  // SSE-Ereignis eine neue Identitaet: eine Datenbank mit 50k Zeilen crawlte
-  // sich dann nach jeder fremden Umbenennung komplett neu. Jetzt nur bei
-  // Wechsel der Datenbank oder von Filter/Sortierung.
+  // Loads ALL rows — but NOT on every change anywhere in the workspace. This
+  // effect used to hang off `pages`, and `pages` gets a new identity on every
+  // SSE event: a database with 50k rows then crawled itself completely again
+  // after somebody else renamed anything. Now only when the database, the
+  // filter or the sorting changes.
   useEffect(() => {
     void loadRows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1119,13 +1117,13 @@ function BoardView({
           data-col={col.id}
           className={
             'board-col' +
-            // Zielspalte hervorheben, aber nicht die Herkunftsspalte — dorthin
-            // zurueckzulegen ist keine Aenderung.
+            // Highlight the target column but not the source column — putting it
+            // back there is not a change.
             (drag && drag.over === col.id && drag.fromCol !== col.id ? ' drag-over' : '')
           }
-          // Die Spalte traegt die Farbe IHRER Option (waehlbar im
-          // Properties-Dialog seit W94) — vorher kam die Toenung aus einem
-          // positionsbasierten Regenbogen, den niemand beeinflussen konnte.
+          // The column carries the colour of ITS option (choosable in the
+          // properties dialog since W94) — the tint used to come from a
+          // position-based rainbow nobody could influence.
           style={col.id !== UNSET ? ({ '--col-c': col.color } as React.CSSProperties) : undefined}
         >
           <div className="board-col-head">
@@ -1145,8 +1143,8 @@ function BoardView({
                 }
                 onPointerDown={(e) => startDrag(e, r.id, col.id, r.title || 'Untitled')}
                 onClick={() => {
-                  // Nach einem Ziehen NICHT oeffnen — sonst springt jede
-                  // Verschiebung direkt in die Karte.
+                  // Do NOT open after a drag — otherwise every move jumps
+                  // straight into the card.
                   if (consumeClick()) return;
                   onNavigate(r.id);
                 }}
@@ -1212,13 +1210,13 @@ function BoardView({
                       if (!editable && (v === undefined || v === '' || (Array.isArray(v) && v.length === 0)))
                         return null;
                       if (editable) {
-                        // Ein leeres Auswahlfeld hinterliess auf JEDER Karte
-                        // einen Platzhalter — bei drei Feldern also „— — —"
-                        // unter jedem Titel. Das ist der Hauptgrund, warum das
-                        // Board neben Trello unruhig wirkte. Leere Felder
-                        // verschwinden deshalb und kommen beim Ueberfahren der
-                        // Karte zurueck, damit man sie weiter direkt setzen
-                        // kann, ohne die Karte zu oeffnen.
+                        // An empty select field left a placeholder on EVERY
+                        // card — with three fields that is "— — —" under every
+                        // title. That is the main reason the board looked
+                        // restless next to Trello. Empty fields therefore
+                        // disappear and come back when the card is hovered, so
+                        // they can still be set directly without opening the
+                        // card.
                         const empty =
                           v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
                         return (
@@ -1242,7 +1240,7 @@ function BoardView({
               </div>
             ))}
           </div>
-          {/* Ausserhalb von .board-cards: der Knopf bleibt am Spaltenende
+          {/* Outside .board-cards: the button stays at the end of the column
               stehen, statt mit den Karten wegzuscrollen — bei 100 Karten
               waere er sonst unerreichbar weit unten. */}
           <button className="board-add" onClick={() => onAddInColumn(groupBy, col.id)}>
@@ -1252,8 +1250,8 @@ function BoardView({
       ))}
 
       {/* Die schwebende Karte folgt dem Zeiger. Als letztes Kind mit
-          position:fixed, damit sie ueber allem liegt; pointer-events:none,
-          damit sie die Trefferpruefung darunter nicht stoert. */}
+          position:fixed so it sits above everything; pointer-events:none so it
+          does not disturb hit testing underneath. */}
       {drag && drag.title && (
         <div
           className="board-drag-ghost"

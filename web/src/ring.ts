@@ -1,20 +1,19 @@
 /**
- * Tempo des laufenden Randes beim Hover — ohne Sprung.
+ * Speed of the running border on hover — without a jump.
  *
- * Der naheliegende Weg ist CSS: `animation-duration` beim Hover verkürzen. Das
- * springt sichtbar, und zwar zwangsläufig. Der Fortschritt einer Animation
- * ergibt sich aus verstrichener Zeit GETEILT durch Dauer. Läuft der Bogen seit
- * 4s bei 9s Umlauf, steht er bei 160°. Wird die Dauer im selben Moment auf
- * 3,5s gesetzt, gilt (4 mod 3,5) / 3,5 — also 51°. Das Licht setzt zurück,
- * statt zu beschleunigen.
+ * The obvious route is CSS: shorten `animation-duration` on hover. That jumps
+ * visibly, and it cannot do otherwise. The progress of an animation is elapsed
+ * time DIVIDED BY duration. If the arc has been running 4s on a 9s lap it sits
+ * at 160°. Set the duration to 3.5s at that same moment and it becomes
+ * (4 mod 3.5) / 3.5 — that is 51°. The light jumps backwards instead of
+ * speeding up.
  *
- * `updatePlaybackRate` ist genau dafür gemacht: es hält die aktuelle Zeit fest
- * und ändert nur das Tempo. Und weil ein harter Sprung von 1 auf 2,6 sich
- * anfühlt wie ein Ruck, wird die Rate über eine knappe halbe Sekunde
- * hochgezogen.
+ * `updatePlaybackRate` is made for exactly this: it holds the current time and
+ * changes only the rate. And because a hard jump from 1 to 2.6 feels like a
+ * lurch, the rate is pulled up over just under half a second.
  *
- * Delegiert am document, nicht pro Element: Dialoge entstehen erst beim
- * Öffnen, ein Listener beim Einhängen würde sie nie erreichen.
+ * Delegated on the document, not per element: dialogs come into existence only
+ * when opened, so a listener attached at mount would never reach them.
  */
 
 const SELECTOR = '.ring, .dialog, .confirm-dialog';
@@ -50,14 +49,14 @@ function rampTo(el: Element, target: number) {
 }
 
 export function installRingHover() {
-  // Ein bewegungsempfindlicher Mensch hat die Drehung ohnehin abgeschaltet
-  // (siehe styles.css) — dann gibt es hier nichts zu beschleunigen.
+  // Somebody sensitive to motion has switched the rotation off anyway
+  // (see styles.css) — then there is nothing here to speed up.
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
   document.addEventListener('pointerover', (e) => {
     const el = (e.target as Element | null)?.closest?.(SELECTOR);
     if (!el) return;
-    // Von einem Kind zum anderen zu fahren ist kein neues Betreten.
+    // Moving from one child to another is not a fresh entry.
     const from = (e as PointerEvent).relatedTarget as Element | null;
     if (from && el.contains(from)) return;
     rampTo(el, FAST);

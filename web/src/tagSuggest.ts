@@ -1,16 +1,16 @@
 import type { PageMeta } from './types';
 import { compare } from './format';
 
-// Tag-Vorschläge. Ohne sie tippt man denselben Tag zum zehnten Mal leicht
-// anders und der Workspace zerfasert in „projekt", „Projekte", „projekt-a".
-// Der Server dedupliziert Tags nur INNERHALB einer Seite und nur nach
-// Kleinschreibung — quer über den Workspace verhindert ihn nichts. Genau diese
-// Lücke schließt die Vorschlagsliste.
+// Tag suggestions. Without them you type the same tag for the tenth time
+// slightly differently and the workspace frays into "project", "Projects",
+// "project-a". The server de-duplicates tags only INSIDE one page and only by
+// lower case — across the workspace nothing stops it. That is exactly the gap
+// the suggestion list closes.
 
-/** Alle im Workspace vergebenen Tags mit ihrer Häufigkeit, häufigste zuerst. */
+/** Every tag used in the workspace with its frequency, most frequent first. */
 export function collectTags(pages: Iterable<PageMeta>): { tag: string; count: number }[] {
-  // Nach Kleinschreibung gruppieren, aber die häufigste Schreibweise anzeigen —
-  // sonst schlägt man „Projekt" vor, obwohl 12 Seiten „projekt" tragen.
+  // Group by lower case but show the most frequent spelling — otherwise it
+  // suggests "Project" while 12 pages carry "project".
   const byKey = new Map<string, Map<string, number>>();
   for (const p of pages) {
     if (p.trashed) continue;
@@ -38,7 +38,7 @@ export function collectTags(pages: Iterable<PageMeta>): { tag: string; count: nu
   return out.sort((a, b) => b.count - a.count || compare(a.tag, b.tag));
 }
 
-/** Levenshtein-Distanz, abgebrochen sobald sie `max` übersteigt. */
+/** Levenshtein distance, abandoned as soon as it goes past `max`. */
 function editDistance(a: string, b: string, max: number): number {
   if (Math.abs(a.length - b.length) > max) return max + 1;
   let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
@@ -50,7 +50,7 @@ function editDistance(a: string, b: string, max: number): number {
       cur[j] = Math.min(cur[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost);
       if (cur[j] < rowMin) rowMin = cur[j];
     }
-    if (rowMin > max) return max + 1; // ganze Zeile schon zu weit weg
+    if (rowMin > max) return max + 1; // the whole row is already too far away
     prev = cur;
   }
   return prev[b.length];
@@ -64,9 +64,9 @@ export interface TagSuggestion {
 }
 
 /**
- * Vorschläge zu einer Eingabe, in der Reihenfolge: Präfix-Treffer, dann
- * Teilstring-Treffer, dann Ähnliches (Tippfehler). Ohne Eingabe kommen die
- * häufigsten Tags — so sieht man beim ersten Klick, was es überhaupt gibt.
+ * Suggestions for an input, in this order: prefix hits, then substring hits,
+ * then near misses (typos). With no input the most frequent tags come back —
+ * so the first click already shows what exists at all.
  */
 export function suggestTags(
   all: { tag: string; count: number }[],
@@ -76,19 +76,19 @@ export function suggestTags(
 ): TagSuggestion[] {
   const used = new Set(already.map((t) => t.toLowerCase()));
   const pool = all.filter((t) => !used.has(t.tag.toLowerCase()));
-  // Wie der Server normalisiert, damit „mein tag" auch „mein-tag" findet.
+  // Normalise the way the server does, so "my tag" also finds "my-tag".
   const q = draft.trim().replace(/^#/, '').replace(/\s+/g, '-').toLowerCase();
   if (!q) return pool.slice(0, limit);
 
   const prefix: TagSuggestion[] = [];
   const infix: TagSuggestion[] = [];
   const similar: TagSuggestion[] = [];
-  // Kurze Eingaben nicht „korrigieren" — bei 2 Zeichen ist alles ähnlich.
+  // Do not "correct" short inputs — at 2 characters everything is similar.
   const maxDist = q.length >= 5 ? 2 : q.length >= 3 ? 1 : 0;
 
   for (const t of pool) {
     const k = t.tag.toLowerCase();
-    if (k === q) continue; // exakt getippt — dafür braucht es keinen Vorschlag
+    if (k === q) continue; // typed exactly — no suggestion needed for that
     if (k.startsWith(q)) prefix.push(t);
     else if (k.includes(q)) infix.push(t);
     else if (maxDist > 0 && editDistance(q, k, maxDist) <= maxDist)

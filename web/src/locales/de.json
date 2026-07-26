@@ -691,5 +691,10 @@
   "⧉ Duplicate": "⧉ Duplizieren",
   "＋ Link": "＋ Link",
   "📑 Index — every page": "📑 Index — alle Seiten",
-  "🗑 Move to trash": "🗑 In den Papierkorb"
+  "🗑 Move to trash": "🗑 In den Papierkorb",
+  "This is how an agent reads the structure of your workspace, the same way": "So liest ein Agent die Struktur deines Workspace — genauso, wie",
+  "does over MCP.": "es über MCP tut.",
+  "Every row carries a stable Markdown link — copy": "Jede Zeile trägt einen stabilen Markdown-Link — kopiere",
+  "and it stays searchable Markdown, wherever it lives.": "und alles bleibt durchsuchbares Markdown, egal wo es liegt.",
+  "A look inside “{name}” by the instance owner. Emergency access allows reading only, expires after two hours, and can be ended early at any time.": "Einsicht in „{name}“ durch den Instanz-Owner. Notfallzugriff erlaubt nur Lesen, läuft nach zwei Stunden ab und lässt sich jederzeit vorzeitig beenden."
 }

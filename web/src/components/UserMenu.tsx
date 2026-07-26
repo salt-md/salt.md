@@ -12,9 +12,9 @@ import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSetting
 import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type } from 'lucide-react';
 
 export function Avatar({ user, size = 22 }: { user: User; size?: number }) {
-  // Mit hochgeladenem Bild zeigt der Kreis das Bild, sonst Initiale auf der
-  // Nutzerfarbe — dieselbe Logik ueberall, damit eine Person wiedererkennbar
-  // bleibt.
+  // With an uploaded picture the circle shows the picture, otherwise the
+  // initial on the user colour — the same logic everywhere, so a person stays
+  // recognisable.
   return (
     <span
       className="avatar"
@@ -35,16 +35,17 @@ export function Avatar({ user, size = 22 }: { user: User; size?: number }) {
   );
 }
 
-// Die zehn Farben, die der Server beim Anlegen vergibt — dieselbe Palette
-// zum Selbst-Waehlen.
+// The ten colours the server hands out on creation — the same palette to
+// choose from yourself.
 const USER_COLORS = [
   '#2f7d4f', '#c4554d', '#3b6fb5', '#b58a3b', '#7d4fb0',
   '#3ba0a8', '#b5527e', '#6b8f3b', '#8a6650', '#5560c4',
 ];
 
-// Profil-Dialog: Name, E-Mail, Farbe, Bild, Passwort. Das Backend konnte
-// Name/Farbe/Passwort laengst aendern (PATCH /api/users/{id}) — es gab nur
-// nirgends eine Oberflaeche dafuer. E-Mail-Aenderung ist neu (W96).
+// Profile dialog: name, email, colour, picture, password. The backend has
+// long been able to change name, colour and password (PATCH /api/users/{id})
+// — there was simply no interface for it anywhere. Changing the email is new
+// (W96).
 function ProfileModal({
   user,
   onClose,
@@ -307,8 +308,8 @@ export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, 
           user={user}
           onClose={() => setModal(null)}
           onChanged={(u) => onUserChanged?.(u)}
-          // 2FA an STELLE des Profils oeffnen, nicht verschachtelt — beide
-          // nutzen useExclusiveModal und wuerden sich sonst um Esc streiten.
+          // Open 2FA IN PLACE OF the profile, not nested — both use
+          // useExclusiveModal and would otherwise fight over Esc.
           onOpen2FA={() => setModal('twofa')}
         />
       )}
@@ -786,8 +787,8 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
   );
 }
 
-// Einladen mit Workspace-Zuweisung: Name/E-Mail/Passwort, Instanz-Admin, und
-// je Workspace eine Rolle (Standard: Kein Zugriff, damit man bewusst zuweist).
+// Inviting with a workspace assignment: name, email, password, instance admin,
+// and a role per workspace (default: no access, so assigning is deliberate).
 function InvitePanel({
   workspaces,
   onCancel,

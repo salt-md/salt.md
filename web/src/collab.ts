@@ -51,11 +51,11 @@ export class SaltProvider {
     this.awareness.on(
       'update',
       ({ added, updated, removed }: { added: number[]; updated: number[]; removed: number[] }) => {
-        // Nur den EIGENEN Client announcen. 'update' feuert auch für
-        // angewendete REMOTE-Einträge (z. B. die ~15s-Renewals der anderen);
-        // ohne Filter würden fremde clientIDs zurück an den Server geechot,
-        // der sie dieser Verbindung zuschriebe — und beim Trennen die
-        // Presence LEBENDER Nutzer wegräumen würde.
+        // Announce only our OWN client. 'update' also fires for applied
+        // REMOTE entries (the other peers' ~15s renewals, for one); without
+        // this filter, foreign clientIDs would be echoed back to the server,
+        // which would attribute them to this connection — and on disconnect
+        // would clear away the presence of LIVE users.
         const me = this.doc.clientID;
         const ids = added.concat(updated, removed).filter((id) => id === me);
         if (ids.length === 0) return;
@@ -75,10 +75,10 @@ export class SaltProvider {
     this.connect();
   }
 
-  // Gibt einen für tot befundenen Socket sofort auf. Nur ws.close() reicht
-  // nicht: Der Close-Handshake gegen einen halbtoten Peer läuft je nach
-  // Browser 20–60s, bevor onclose feuert — so lange wäre der Nutzer weiter
-  // offline. Deshalb: Handler abklemmen, schließen, direkt neu verbinden.
+  // Gives up on a socket judged dead, immediately. ws.close() alone is not
+  // enough: against a half-dead peer the close handshake runs 20–60s depending
+  // on the browser before onclose fires — and the user would stay offline that
+  // whole time. So: detach the handlers, close, reconnect straight away.
   private dropConnection(ws: WebSocket) {
     ws.onclose = null;
     ws.onmessage = null;
@@ -86,7 +86,7 @@ export class SaltProvider {
     try {
       ws.close();
     } catch {
-      /* nichts — der Socket ist ohnehin verloren */
+      /* nothing — the socket is lost anyway */
     }
     this.handleClosed(null);
   }
@@ -124,12 +124,12 @@ export class SaltProvider {
           const first = !this.everSynced;
           this.everSynced = true;
           if (first) this.onSynced(this.isNew);
-          // Re-announce presence after (re)connects. Der Server hat beim Tod
-          // der alten Verbindung unser Removal mit clock+1 broadcastet — ein
-          // schlichtes Re-Announce (gleiche Clock) würde von allen Peers als
-          // veraltet verworfen und wir blieben bis zu 30s unsichtbar. Zweimal
-          // setLocalState bumpt die Clock sicher am Removal vorbei; jeder Set
-          // feuert den update-Listener, der das Announce sendet.
+          // Re-announce presence after (re)connects. When the old connection
+          // died the server broadcast our removal with clock+1 — a plain
+          // re-announce (same clock) would be discarded as stale by every peer
+          // and we would stay invisible for up to 30s. Calling setLocalState
+          // twice bumps the clock safely past the removal; each set fires the
+          // update listener, which sends the announce.
           const st = this.awareness.getLocalState();
           if (st !== null) {
             this.awareness.setLocalState(st);
@@ -163,7 +163,7 @@ export class SaltProvider {
     ws.onclose = (e: CloseEvent) => this.handleClosed(e);
   }
 
-  // Gemeinsamer Abgang für onclose und den Watchdog-Kill (dort ohne Event).
+  // Shared exit for onclose and for the watchdog kill (which has no event).
   private handleClosed(e: CloseEvent | null) {
     this.synced = false;
     // Peers from the dead connection are unknowable now; drop them locally

@@ -2,11 +2,11 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
-// Schriften liegen im Binary, nicht bei einem CDN: eine selbstgehostete
-// Instanz soll ohne Netzzugang nach draussen vollstaendig aussehen, und ein
-// Abruf bei Google verraet jede Seitenansicht an einen Dritten. Der Browser
-// laedt eine Schriftdatei erst, wenn sie tatsaechlich verwendet wird — die
-// Einbindung kostet also nichts, solange niemand sie eingeschaltet hat.
+// The fonts live in the binary, not at a CDN: a self-hosted instance should
+// look complete with no outward network access, and a fetch from Google gives
+// away every page view to a third party. The browser loads a font file only
+// once it is actually used — so including them costs nothing as long as nobody
+// has switched them on.
 import '@fontsource-variable/inter';
 import '@fontsource-variable/jetbrains-mono';
 import './styles.css';

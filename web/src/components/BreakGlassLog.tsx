@@ -63,8 +63,10 @@ export default function BreakGlassLog({
         <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Emergency access log')}>
           <h2>{t('Emergency access log')}</h2>
           <p className="dialog-hint">
-            Einsicht in „{workspaceName}" durch den Instanz-Owner. Notfallzugriff erlaubt nur Lesen,
-            läuft nach zwei Stunden ab und lässt sich jederzeit vorzeitig beenden.
+            {t(
+              'A look inside “{name}” by the instance owner. Emergency access allows reading only, expires after two hours, and can be ended early at any time.',
+              { name: workspaceName },
+            )}
           </p>
           {error && <div className="login-error">{error}</div>}
           {grants === null && <div className="dialog-hint">{t('Loading…')}</div>}

@@ -523,10 +523,10 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
         />
       );
     case 'url': {
-      // Ohne eigenen Fall landete eine URL im text-Zweig und stand als volle
-      // Zeile Rohtext auf der Karte („https://trello.com/c/yksGXxLh") — auf
-      // einem Board ist das reines Rauschen. Angezeigt wird der Gastgeber,
-      // angeklickt wird die volle Adresse.
+      // Without a case of its own a URL landed in the text branch and sat on
+      // the card as a full line of raw text ("https://trello.com/c/yksGXxLh")
+      // — on a board that is pure noise. The host is what is shown, the full
+      // address is what is opened.
       const href = String(value ?? '').trim();
       if (!href) return compact ? null : <span className="prop-empty">—</span>;
       let label = href;
@@ -534,7 +534,7 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
         const u = new URL(href.includes('://') ? href : 'https://' + href);
         label = u.hostname.replace(/^www\./, '');
       } catch {
-        /* keine gueltige URL — dann eben ungekuerzt */
+        /* not a valid URL — then leave it unshortened */
       }
       return (
         <a

@@ -132,9 +132,9 @@ const COVER_GRADIENTS = [
   'gradient:linear-gradient(120deg,#b07de0,#7d4fb0)',
   'gradient:linear-gradient(120deg,#e0846a,#c4554d)',
   'gradient:linear-gradient(120deg,#6ad0d0,#3ba0a8)',
-  // W96: mehr Auswahl — weiche Zwei- und Dreiklaenge (Aurora/Sonnenuntergang/
-  // Meer), weiterhin hell nach dunkel, damit das Seiten-Emoji links lesbar
-  // andockt. Serverseitig laesst validCover jeden reinen Gradient durch.
+  // W96: more choice — soft two- and three-tone blends (aurora, sunset, sea),
+  // still light to dark so the page emoji on the left docks legibly. On the
+  // server side validCover lets any pure gradient through.
   'gradient:linear-gradient(120deg,#ffd3a5,#fd6585)',
   'gradient:linear-gradient(120deg,#a8edea,#5b86e5)',
   'gradient:linear-gradient(120deg,#f6d365,#fda085)',
@@ -365,8 +365,8 @@ function PageHeader({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openComments, setOpenComments] = useState(0);
   const peers = usePeers(pageId);
-  // Der Zaehler in der Kopfzeile soll stimmen, bevor man nach unten gescrollt
-  // hat — man soll SEHEN, dass es Kommentare gibt, ohne danach zu suchen.
+  // The counter in the header should be right before anybody has scrolled
+  // down — you should SEE that comments exist without going to look.
   useEffect(() => {
     let alive = true;
     api
@@ -395,15 +395,15 @@ function PageHeader({
       el.style.height = el.scrollHeight + 'px';
     };
     fit();
-    // scrollHeight haengt an der BREITE. Wird die Spalte schmaler — Fenster
-    // verkleinern, Seitenleiste einklappen —, bricht der Titel auf mehr Zeilen
-    // um, ohne dass sich der Text aendert. Ohne Nachmessen blieb die alte Hoehe
-    // stehen und die letzte Zeile verschwand hinter den Knoepfen darunter.
+    // scrollHeight depends on the WIDTH. When the column gets narrower — the
+    // window shrinks, the sidebar collapses — the title wraps onto more lines
+    // without the text changing at all. Without measuring again the old height
+    // stayed and the last line disappeared behind the buttons below it.
     //
-    // Beobachtet wird der ELTERNTEIL, nicht das Feld selbst: fit() aendert die
-    // Hoehe des Feldes, und wer ein Element in dessen eigener Rueckmeldung
-    // veraendert, erzeugt eine Schleife — die der Browser still abschaltet.
-    // Genau daran ist die erste Fassung gescheitert.
+    // What is observed is the PARENT, not the field itself: fit() changes the
+    // height of the field, and changing an element inside its own callback
+    // creates a loop — which the browser quietly switches off. That is exactly
+    // what the first version failed on.
     const box = el.parentElement;
     if (!box) return;
     const ro = new ResizeObserver(fit);
@@ -617,7 +617,7 @@ function PageHeader({
           ))}
         </nav>
         <div className="topbar-right">
-          {/* Wer sonst gerade auf der Seite ist. Die Praesenz wurde bisher zwar
+          {/* Who else is on the page right now. Presence used to be
               gesendet (awareness), aber NIRGENDS angezeigt — man arbeitete zu
               zweit im selben Dokument, ohne es zu merken. */}
           {peers.length > 0 && (
@@ -989,8 +989,8 @@ function PageHeader({
                       const d = e.key === 'ArrowDown' ? 1 : -1;
                       setTagSel((i) => (i + d + tagHits.length) % tagHits.length);
                     } else if (e.key === 'Enter' || e.key === ',' || e.key === 'Tab') {
-                      // Ein hervorgehobener Vorschlag gewinnt gegen den Rohtext —
-                      // sonst legt Enter doch wieder eine Dublette an.
+                      // A highlighted suggestion beats the raw text — otherwise
+                      // Enter creates a duplicate after all.
                       const pick = tagSuggestOpen ? tagHits[tagSel] : undefined;
                       if (!pick && !tagDraft.trim()) return; // Tab darf normal weiterspringen
                       e.preventDefault();
@@ -1002,7 +1002,7 @@ function PageHeader({
                     }
                   }}
                   onBlur={() => {
-                    // Klicks auf einen Vorschlag feuern erst nach dem Blur.
+                    // Clicks on a suggestion only fire after the blur.
                     setTimeout(() => {
                       setTagSuggestOpen(false);
                       addTag();
@@ -1040,8 +1040,8 @@ function PageHeader({
         )}
       </div>
       {children}
-      {/* Kommentare gehoeren ans Ende des Dokuments, nicht in eine Spalte
-          daneben — siehe CommentsSection. Nur bei Dokumenten und Zeilen; eine
+      {/* Comments belong at the end of the document, not in a column
+          beside it — see CommentsSection. Only for documents and rows; a
           Datenbank-Seite hat unten ihre Tabelle, darunter waere es verloren. */}
       {page.type !== 'collection' && (
         <div className="comments-wrap">
@@ -1149,8 +1149,8 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
     };
     applyPresence(); // deckt auch den nie fokussierten Hintergrund-Tab ab (startet hidden)
 
-    // Die Awareness kannte die anderen laengst — nur sah man sie nie. Hier
-    // werden sie in den Praesenz-Speicher geschrieben, den die Kopfzeile liest.
+    // Awareness has long known about the others — you just never saw them.
+    // Here they are written into the presence store the header reads.
     const pushPeers = () => {
       const mine = p.awareness.clientID;
       const out: { name: string; color: string; avatar?: string }[] = [];
@@ -1393,8 +1393,8 @@ function BlockContent({
   return (
     <div className="editor-scroll">
       <div className="editor-inner">
-        {/* Der Datenbank-Block rendert innerhalb des Editors und kommt sonst
-            nicht an Seitenliste, Tag-Farben und Navigation heran. */}
+        {/* The database block renders inside the editor and would otherwise
+            not reach the page list, the tag colours or navigation. */}
         <BlockContext.Provider value={{ pagesById, tagColors, onNavigate, onPagesChanged }}>
         <BlockNoteView editor={editor} theme={theme} editable={canEdit} slashMenu={false}>
           <SuggestionMenuController triggerCharacter="/" getItems={getSlashItems} />

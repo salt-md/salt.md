@@ -193,9 +193,10 @@ export default function IndexView({
       ) : (
         <div className="idx-tree-wrap">
           <p className="dialog-hint idx-tree-hint">
-            So liest ein Agent die Struktur deines Workspace (wie <code>list_pages</code> über MCP). Jede
-            Zeile hat einen stabilen Markdown-Link (<code>md</code> kopieren) — alles bleibt durchsuchbares
-            Markdown, egal wo es liegt.
+            {t('This is how an agent reads the structure of your workspace, the same way')}{' '}
+            <code>list_pages</code> {t('does over MCP.')}{' '}
+            {t('Every row carries a stable Markdown link — copy')} <code>md</code>{' '}
+            {t('and it stays searchable Markdown, wherever it lives.')}
           </p>
           <div className="idx-tree">
             {treeRows.length ? treeRows : <div className="db-empty">{t('No pages.')}</div>}

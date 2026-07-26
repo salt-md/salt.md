@@ -6,7 +6,7 @@ import { Check, Trash2 } from 'lucide-react';
 import { formatRelative } from '../format';
 import { t } from '../i18n';
 
-// Kommentare als Abschnitt am Ende des Dokuments — so wie Notion es macht.
+// Comments as a section at the end of the document — the way Notion does it.
 //
 // Two earlier versions got it wrong. First a dialog (three levels deep, laid
 // over the text). Then a docked column that claimed width and, on a page with
@@ -17,7 +17,7 @@ import { t } from '../i18n';
 
 const when = (iso: string) => formatRelative(iso);
 
-// Farbe aus dem Namen ableiten, damit dieselbe Person immer dieselbe bekommt.
+// Derive the colour from the name, so the same person always gets the same one.
 export function nameColor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
@@ -64,10 +64,10 @@ export default function CommentsSection({
     try {
       await api.createComment(pageId, text);
       load();
-      // Der eigene Beitrag soll sichtbar sein, nicht unterhalb des Randes.
+      // Your own contribution should be visible, not below the fold.
       requestAnimationFrame(() => listRef.current?.scrollTo({ top: 1e6, behavior: 'smooth' }));
     } catch (err) {
-      setBody(text); // nichts verschlucken, wenn das Senden scheitert
+      setBody(text); // swallow nothing if sending fails
       toast((err as Error).message || t('Could not post the comment'));
     }
   };
@@ -110,7 +110,7 @@ export default function CommentsSection({
             <article key={c.id} className={'cp-item' + (c.resolvedAt ? ' is-resolved' : '')}>
               <div className="cp-item-head">
                 {/* Echte Nutzerfarbe/-bild vom Server (JOIN in pageComments) —
-                    die gewuerfelte nameColor bleibt nur als Rueckfall fuer
+                    the diced nameColor remains only as a fallback for
                     Kommentare geloeschter Konten. */}
                 <span
                   className="cp-avatar"
@@ -139,8 +139,8 @@ export default function CommentsSection({
             </article>
           );
         })}
-        {/* Kein „Noch keine Kommentare" mehr: das Eingabefeld darunter sagt
-            das Gleiche, ohne eine leere Meldung zu sein. */}
+        {/* No more "No comments yet": the input below says the same thing
+            without being an empty message. */}
       </div>
 
       <form className="cp-compose" onSubmit={add}>
@@ -150,8 +150,8 @@ export default function CommentsSection({
           placeholder={t('Write a comment…')}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
-            // ⌘/Strg+Enter sendet — Enter selbst macht einen Absatz, weil
-            // Kommentare oft mehrzeilig sind.
+            // ⌘/Ctrl+Enter sends — Enter itself makes a paragraph, because
+            // comments are often more than one line.
             if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void add(e);
           }}
         />

@@ -25,9 +25,9 @@ export interface Workspace {
   role: 'admin' | 'member' | 'viewer';
   icon: string;
   image: string;
-  /** Der eigene Bereich dieses Kontos — gehört ihm, nicht der Instanz. */
+  /** This account's own area — it belongs to the account, not the instance. */
   personal?: boolean;
-  /** Jedes neu angelegte Konto wird automatisch Mitglied (nur Owner setzt das). */
+  /** Every newly created account joins automatically (only the owner sets this). */
   autoJoin?: boolean;
 }
 
@@ -68,7 +68,7 @@ export interface User {
   isAdmin: boolean;
   /** Instanzrolle: owner betreibt die Instanz, admin verwaltet Menschen. */
   orgRole?: 'owner' | 'admin' | 'member';
-  /** Stillgelegt: keine Anmeldung, aber alles bleibt zurechenbar. */
+  /** Deactivated: no sign-in, but everything stays attributable. */
   disabled?: boolean;
 }
 

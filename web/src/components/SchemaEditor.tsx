@@ -14,8 +14,8 @@ const TYPES: { value: PropType; label: string }[] = [
   { value: 'multiselect', label: 'Multi-select' },
   { value: 'date', label: 'Date' },
   { value: 'checkbox', label: 'Checkbox' },
-  // Der Server kannte url laengst (validPropTypes) und MCP bewirbt ihn — nur
-  // die Oberflaeche bot ihn nie an und behandelte ihn still als Text.
+  // The server has long known url (validPropTypes) and MCP advertises it —
+  // only the interface never offered it and quietly treated it as text.
   { value: 'url', label: 'URL' },
   { value: 'person', label: 'Person' },
   { value: 'relation', label: 'Relation' },
@@ -33,10 +33,10 @@ const AGGS: { value: NonNullable<PropDef['rollupAgg']>; label: string }[] = [
 
 const OPTION_COLORS = OPTION_HEXES;
 
-// Auslauffarbe fuer Optionen ohne eigene: vor W89 hat der Import keine Farbe
-// vergeben, und ein Chip mit `background: undefined + '2e'` ist unsichtbar —
-// genau das liess den Schema-Editor kaputt aussehen. Aus dem Namen abgeleitet,
-// damit dieselbe Option immer denselben Ton bekommt.
+// Fallback colour for options that have none: before W89 the import handed
+// out no colour, and a chip with `background: undefined + '2e'` is invisible —
+// which is exactly what made the schema editor look broken. Derived from the
+// name, so the same option always gets the same shade.
 function autoOptionColor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
@@ -147,10 +147,10 @@ export default function SchemaEditor({
   const removeProp = (id: string) => setSchema((prev) => prev.filter((p) => p.id !== id));
 
   const save = async () => {
-    // Jede Option OHNE Farbe bekommt beim Speichern die Auslauffarbe fest
-    // eingetragen. Sonst zeigt der Editor eine Farbe (Rueckfall), das Board
-    // aber Grau — weil dort nur die gespeicherte Farbe zaehlt. Nach dem
-    // Speichern stimmt beides ueberein, und auch Export/MCP sehen echte Farben.
+    // Every option WITHOUT a colour gets the fallback written in on save.
+    // Otherwise the editor shows a colour (the fallback) while the board shows
+    // grey — because only the stored colour counts there. After saving the two
+    // agree, and export and MCP see real colours too.
     const colored = schema.map((p) =>
       p.type === 'select' || p.type === 'multiselect'
         ? { ...p, options: (p.options ?? []).map((o) => (o.color ? o : { ...o, color: autoOptionColor(o.name) })) }
@@ -373,7 +373,7 @@ export default function SchemaEditor({
                       const key = `${p.id}:${o.id}`;
                       return (
                         <span key={o.id} className="opt-chip-wrap">
-                          {/* Der Chip ist jetzt ein Knopf: Klick oeffnet die
+                          {/* The chip is a button now: a click opens the
                               Farbauswahl — so bestimmt man die Spaltenfarben des
                               Boards direkt hier. */}
                           <button

@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 
-// Wer ist sonst noch auf dieser Seite.
+// Who else is on this page.
 //
-// Die Angabe entsteht im CollabEditor (Yjs-Awareness), angezeigt wird sie eine
-// Ebene darüber in der Kopfzeile. Statt sie durch mehrere Komponenten zu
-// reichen, liegt sie in diesem kleinen Speicher — dieselbe Rolle wie
-// blockContext für den Datenbank-Block, nur ohne Context, weil hier niemand
-// dazwischen etwas davon wissen muss.
+// The information arises in CollabEditor (Yjs awareness) and is shown one level
+// above it in the header. Rather than passing it through several components it
+// lives in this small store — the same role blockContext plays for the database
+// block, only without a context, because nobody in between needs to know about
+// it.
 //
-// Bis W90 wurde die Präsenz zwar gesendet, aber NIRGENDS angezeigt: man konnte
-// zu zweit im selben Dokument tippen, ohne es zu bemerken.
+// Until W90 presence was sent but displayed NOWHERE: two people could type in
+// the same document without noticing each other.
 
 export interface Peer {
   name: string;
@@ -22,8 +22,8 @@ const listeners = new Set<() => void>();
 
 export function setPeers(pageId: string, peers: Peer[]) {
   const prev = peersByPage.get(pageId);
-  // Awareness feuert bei jeder Cursorbewegung. Ohne diesen Vergleich würde die
-  // Kopfzeile bei jedem Tastendruck der anderen neu zeichnen.
+  // Awareness fires on every cursor movement. Without this comparison the
+  // header would repaint on every keystroke of everybody else.
   if (
     prev &&
     prev.length === peers.length &&

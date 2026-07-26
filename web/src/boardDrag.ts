@@ -1,51 +1,50 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Zeiger-basiertes Ziehen fuers Kanban-Board.
+// Pointer-based dragging for the kanban board.
 //
-// Vorher lag der native HTML5-Drag darunter (`draggable`), und der fuehlt sich
-// aus mehreren Gruenden schlecht an: der Browser malt eine blasse Geisterkopie,
-// es gibt keine Anzeige, WO die Karte landet, kein Auto-Scroll, und auf Touch
-// funktioniert er gar nicht — dafuer gab es extra ein ⋯-Menue.
+// Underneath this used to be the native HTML5 drag (`draggable`), and that
+// feels bad for several reasons: the browser paints a pale ghost copy, there is
+// no indication of WHERE the card will land, no auto-scroll, and on touch it
+// does not work at all — which is why there was a separate ⋯ menu.
 //
-// Diese Fassung nutzt Pointer-Events (Maus und Finger in einem): eine echte
-// schwebende Karte folgt dem Zeiger, die Zielspalte hebt sich hervor, und beim
-// Loslassen wird verschoben. Die Trefferpruefung laeuft ueber `data-col` am
-// Spalten-Element statt ueber durchgereichte Refs — das haelt den Aufrufer
-// schlank.
+// This version uses pointer events (mouse and finger in one): a real floating
+// card follows the pointer, the target column highlights, and on release the
+// card moves. Hit testing goes through `data-col` on the column element rather
+// than refs passed down — which keeps the caller lean.
 
 export interface DragState {
   rowId: string;
   fromCol: string;
   title: string;
   width: number;
-  // aktuelle Zeigerposition und Griffversatz (wo in der Karte angefasst wurde)
+  // current pointer position and grab offset (where the card was taken hold of)
   x: number;
   y: number;
   dx: number;
   dy: number;
-  over: string | null; // Spalte unter dem Zeiger
+  over: string | null; // column under the pointer
 }
 
-const START_THRESHOLD = 5; // px, bevor aus einem Klick ein Ziehen wird
+const START_THRESHOLD = 5; // px before a click becomes a drag
 
-// Auf dem Finger gilt etwas anderes. Fuenf Pixel sind beim Scrollen sofort
-// ueberschritten — die Karte blieb am Finger haengen, statt dass das Board
-// scrollte. Deshalb: erst halten, dann ziehen. Wer vorher wischt, scrollt.
+// On a finger the rule is different. Five pixels are crossed instantly while
+// scrolling — the card stuck to the finger instead of the board scrolling. So:
+// hold first, then drag. Anybody who swipes before that scrolls.
 const TOUCH_HOLD_MS = 320;
-// Wieviel Wackeln waehrend des Haltens noch als "Halten" durchgeht. Darueber
-// war es eine Wischbewegung, und der Zug wird gar nicht erst scharf gestellt.
+// How much wobble during the hold still counts as "holding". Above that it was
+// a swipe, and the drag is never armed in the first place.
 const TOUCH_HOLD_SLOP = 10;
 
 export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
   const [drag, setDrag] = useState<DragState | null>(null);
-  // Welche Karte nach dem Halten "scharf" ist, aber noch nicht bewegt wurde.
-  // Auf dem iPhone gibt es kein navigator.vibrate — ohne ein sichtbares
-  // Signal passiert nach dem Halten bis zur ersten Bewegung gar nichts, und
-  // niemand weiss, ob die Karte jetzt am Finger haengt.
+  // Which card is armed after the hold but has not moved yet. On the iPhone
+  // there is no navigator.vibrate — without a visible signal nothing at all
+  // happens between the hold and the first movement, and nobody knows whether
+  // the card is on the finger now.
   const [armedRow, setArmedRow] = useState<string | null>(null);
 
-  // Lebende Daten fuer die Fenster-Listener, damit die nicht bei jedem
-  // Positions-Update neu gebunden werden muessen.
+  // Live data for the window listeners, so they do not have to be rebound on
+  // every position update.
   const live = useRef<{
     rowId: string;
     fromCol: string;
@@ -58,13 +57,13 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
     started: boolean;
     over: string | null;
     touch: boolean;
-    // armed: beim Finger erst nach TOUCH_HOLD_MS true. Vorher gehoert jede
-    // Bewegung dem Scrollen.
+    // armed: on a finger only true after TOUCH_HOLD_MS. Before that every
+    // movement belongs to scrolling.
     armed: boolean;
     holdTimer: number | null;
   } | null>(null);
-  // Ob gerade wirklich gezogen wurde — unterscheidet Klick (navigieren) von
-  // Ziehen (verschieben). Als Ref, weil der pointerup-Handler es sofort braucht.
+  // Whether a drag really happened — this tells a click (navigate) from a drag
+  // (move). A ref, because the pointerup handler needs it straight away.
   const draggedRef = useRef(false);
 
   const colUnder = (x: number, y: number): string | null => {
@@ -82,8 +81,8 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
       const moved = Math.hypot(e.clientX - l.startX, e.clientY - l.startY);
       if (!l.started) {
         if (l.touch && !l.armed) {
-          // Noch im Haltefenster: wer wischt, will scrollen. Den Zug ganz
-          // aufgeben, sonst schnappt die Karte spaeter mitten im Scrollen zu.
+          // Still inside the hold window: whoever swipes wants to scroll. Give
+          // the drag up entirely, or the card snaps shut mid-scroll later.
           if (moved > TOUCH_HOLD_SLOP) {
             if (l.holdTimer) clearTimeout(l.holdTimer);
             live.current = null;
@@ -108,8 +107,8 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
         over: l.over,
       });
 
-      // Am oberen/unteren Rand einer Spalte mitscrollen, damit man Karten auch
-      // in lange Listen ziehen kann, ohne loszulassen.
+      // Scroll along at the top and bottom edge of a column, so cards can be
+      // dragged into long lists without letting go.
       const cards = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement)?.closest?.(
         '.board-cards',
       ) as HTMLElement | null;
@@ -129,14 +128,14 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
       if (l && l.started && l.over && l.over !== l.fromCol) {
         onMove(l.rowId, l.over);
       }
-      // draggedRef bleibt bis zum naechsten click stehen, damit der
-      // Klick-Handler der Karte die Navigation unterdruecken kann.
+      // draggedRef stays set until the next click, so the card's click
+      // handler can suppress navigation.
     };
 
-    // Sobald wirklich gezogen wird, darf die Seite nicht mitscrollen. Ueber
-    // `touch-action` geht das nicht: der Wert wird beim Beginn der Geste
-    // ausgewertet, spaeteres Aendern wirkt auf die laufende Geste nicht mehr.
-    // Also der harte Weg — passive: false, damit preventDefault erlaubt ist.
+    // The moment a real drag starts, the page must not scroll along. That
+    // cannot be done through `touch-action`: the value is read when the gesture
+    // begins, and changing it later has no effect on the running gesture. So the
+    // hard way — passive: false, so preventDefault is allowed.
     const onTouchMove = (e: TouchEvent) => {
       if (live.current?.started) e.preventDefault();
     };
@@ -155,8 +154,8 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
 
   const startDrag = useCallback(
     (e: React.PointerEvent, rowId: string, fromCol: string, title: string) => {
-      // Nur linke Maustaste / Finger, und nicht auf einem Bedienelement der
-      // Karte (⋯-Menue, Auswahl-Chip) — dort will man klicken, nicht ziehen.
+      // Left mouse button or finger only, and not on a control of the card
+      // (the ⋯ menu, a select chip) — there you want to click, not drag.
       if (e.button !== 0) return;
       if ((e.target as Element).closest?.('.card-move, .card-prop-edit, a, button')) return;
       const card = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -174,7 +173,7 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
         started: false,
         over: fromCol,
         touch,
-        armed: !touch, // Maus: sofort scharf. Finger: erst nach dem Halten.
+        armed: !touch, // mouse: armed at once. Finger: only after the hold.
         holdTimer: null,
       };
       if (touch) {
@@ -190,7 +189,7 @@ export function useBoardDrag(onMove: (rowId: string, toCol: string) => void) {
     [],
   );
 
-  // Der Karten-Klick fragt das ab: wurde gerade gezogen, NICHT navigieren.
+  // The card click asks this: if a drag just happened, do NOT navigate.
   const consumeClick = useCallback(() => {
     if (draggedRef.current) {
       draggedRef.current = false;

@@ -58,7 +58,7 @@ interface Props {
   // Raw user setting (independent of viewport) + toggle, shown in the UserMenu.
   notesModeSetting?: boolean;
   onToggleNotesMode?: () => void;
-  // Schriftwahl: liegt beim Menschen, nicht bei der Instanz.
+  // Choice of typeface: it belongs to the person, not to the instance.
   fontPref?: FontPref;
   onSetFont?: (f: FontPref) => void;
   // Desktop collapse state: when collapsed, the sidebar appears as a hover
@@ -596,8 +596,8 @@ export default function Sidebar({
     onToggleFavorite,
     workspaces,
     onMoveToWorkspace: (pageId, wsId, wsName) => {
-      // Der Umzug nimmt den ganzen Unterbaum mit und legt die Seite im Ziel
-      // at the top level — the previous parent stays behind.
+      // The move takes the whole subtree along and puts the page at the top
+      // level in the target — the previous parent stays behind.
       void api
         .updatePage(pageId, { workspaceId: wsId })
         .then(() => {
