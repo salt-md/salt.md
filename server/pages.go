@@ -663,8 +663,8 @@ func (s *Server) reindexPage(id string) error {
 	// Keep the outgoing-links index in sync with the current content.
 	s.updateLinks(id, content, trashedAt.Valid)
 	if trashedAt.Valid {
-		// Im Papierkorb: Abschnitte raeumen, sonst taucht die Seite in der
-		// abschnittsbasierten Suche weiter auf.
+		// In the trash: clear the passages, or the page keeps turning up in
+		// the passage-based search.
 		s.reindexChunks(id, "", "", nil, true)
 		return nil
 	}
@@ -966,7 +966,7 @@ func (s *Server) searchChunks(userID, match string, ws []string, want int) []sea
 	return out
 }
 
-// searchPagesFallback ist die alte, seitenweise Suche.
+// searchPagesFallback is the old, page-by-page search.
 func (s *Server) searchPagesFallback(userID, match string, ws []string, want int) []searchResult {
 	out := []searchResult{}
 	args := make([]any, 0, len(ws)+1)

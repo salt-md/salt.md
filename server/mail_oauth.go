@@ -54,10 +54,10 @@ func (s *Server) handleMailOAuthStart(w http.ResponseWriter, r *http.Request) {
 	}
 	clientID, clientSecret := s.oauthClient(pname)
 	if clientID == "" || clientSecret == "" {
-		httpError(w, 400, "Zuerst Client-ID/-Secret im Zugang-Tab hinterlegen.")
+		httpError(w, 400, "enter the client ID and secret in the Access tab first")
 		return
 	}
-	// Gleicher Kanonisierungs-Hop wie beim Login (Cookie ist host-scoped).
+	// The same canonicalisation hop as the login (the cookie is host-scoped).
 	if base := s.setting("public_base_url", ""); base != "" {
 		if u, err := url.Parse(base); err == nil && u.Host != "" && u.Host != r.Host {
 			http.Redirect(w, r, strings.TrimRight(base, "/")+"/api/admin/mail-oauth/"+pname+"/start", http.StatusFound)
@@ -100,8 +100,8 @@ func (s *Server) handleMailOAuthStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMailOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	// Session-Cookie kommt bei Top-Level-Redirects mit (SameSite=Lax) — der
-	// Callback bleibt also admin-gebunden.
+	// The session cookie travels with top-level redirects (SameSite=Lax), so the
+	// callback stays bound to the admin.
 	if !requestUser(r).IsAdmin {
 		httpError(w, 403, "admin only")
 		return
@@ -227,7 +227,7 @@ func (s *Server) refreshedAccessToken(provider string) (string, error) {
 	clientID, clientSecret := s.oauthClient(provider)
 	refresh := s.setting("mail_oauth_refresh", "")
 	if clientID == "" || refresh == "" {
-		return "", fmt.Errorf("Mail-Provider nicht verbunden")
+		return "", fmt.Errorf("mail provider not connected")
 	}
 	form := url.Values{}
 	form.Set("grant_type", "refresh_token")
@@ -257,9 +257,9 @@ func (s *Server) refreshedAccessToken(provider string) (string, error) {
 		if msg == "" {
 			msg = tok.Error
 		}
-		return "", fmt.Errorf("Token-Refresh fehlgeschlagen: %s — ggf. neu verbinden", msg)
+		return "", fmt.Errorf("token refresh failed: %s — reconnect if needed", msg)
 	}
-	// Microsoft rotiert Refresh-Tokens — das neue behalten.
+	// Microsoft rotates refresh tokens — keep the new one.
 	if tok.RefreshToken != "" && tok.RefreshToken != refresh {
 		s.setSetting("mail_oauth_refresh", tok.RefreshToken)
 	}
@@ -286,8 +286,8 @@ func (s *Server) sendViaGoogle(to, subject, body string) error {
 	if err != nil {
 		return err
 	}
-	// Optionaler Absender-Alias (muss in Gmail unter „Send mail as" verifiziert
-	// sein), sonst das verbundene Postfach.
+	// Optional sender alias (has to be verified in Gmail under "Send mail as"),
+	// otherwise the connected mailbox.
 	from := s.setting("mail_from_override", "")
 	if from == "" {
 		from = s.setting("mail_oauth_address", "me")
@@ -306,7 +306,7 @@ func (s *Server) sendViaGoogle(to, subject, body string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("Gmail-Versand fehlgeschlagen (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
+		return fmt.Errorf("Gmail send failed (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
 	}
 	return nil
 }
@@ -323,7 +323,7 @@ func (s *Server) sendViaMicrosoft(to, subject, body string) error {
 			{"emailAddress": map[string]string{"address": to}},
 		},
 	}
-	// Optionaler Absender-Alias (braucht Send-As-Recht auf der Adresse).
+	// Optional sender alias (needs send-as permission on the address).
 	if from := s.setting("mail_from_override", ""); from != "" {
 		message["from"] = map[string]any{"emailAddress": map[string]string{"address": from}}
 	}
@@ -342,7 +342,7 @@ func (s *Server) sendViaMicrosoft(to, subject, body string) error {
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("Microsoft-Versand fehlgeschlagen (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
+		return fmt.Errorf("Microsoft send failed (HTTP %d): %s", resp.StatusCode, truncate(string(b), 200))
 	}
 	return nil
 }

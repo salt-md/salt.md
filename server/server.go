@@ -52,7 +52,7 @@ func (s *Server) Close() error {
 	return s.db.Close()
 }
 
-// DBFile ist der Name der SQLite-Datei.
+// DBFile is the name of the SQLite file.
 const DBFile = "salt.db"
 
 func New(dataDir string, dist fs.FS) (*Server, error) {
@@ -122,8 +122,8 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("GET /api/settings", s.auth(s.handleGetSettings))
 	m.HandleFunc("PUT /api/settings", s.auth(s.sessionOnly(s.handlePutSettings)))
 	m.HandleFunc("GET /api/admin/info", s.auth(s.handleAdminInfo))
-	// Die Instanz-Sicherung enthaelt JEDEN Workspace samt Passwort-Hashes. Als
-	// GET kam frueher sogar ein NUR-LESE-Token durch — Lesen war ja erlaubt.
+	// The instance backup holds EVERY workspace including password hashes. As a
+	// GET, even a READ-ONLY token used to get through — reading was allowed.
 	m.HandleFunc("GET /api/admin/backup", s.auth(s.sessionOnly(s.handleAdminBackup)))
 	m.HandleFunc("GET /api/admin/public-access", s.auth(s.handlePublicAccess))
 	m.HandleFunc("GET /api/public-base", s.auth(s.handlePublicBase))
@@ -132,7 +132,7 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("GET /api/admin/mail-oauth/{provider}/callback", s.auth(s.handleMailOAuthCallback))
 	m.HandleFunc("POST /api/admin/mail-oauth/disconnect", s.auth(s.sessionOnly(s.handleMailOAuthDisconnect)))
 	m.HandleFunc("POST /api/admin/mail-test", s.auth(s.sessionOnly(s.handleMailTest)))
-	// Einladen ist Kontenverwaltung, nicht Inhalt.
+	// Inviting is account administration, not content.
 	m.HandleFunc("POST /api/invites", s.auth(s.sessionOnly(s.handleCreateInvite)))
 	m.HandleFunc("GET /api/invites/{token}", s.handleInviteInfo)
 	m.HandleFunc("POST /api/invites/{token}/accept", s.handleAcceptInvite)

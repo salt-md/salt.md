@@ -205,7 +205,7 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
-	// Dieselbe Regel wie beim Anlegen eines Workspace.
+	// The same rule as when creating a workspace.
 	if !u.IsAdmin && !s.loadSettings().AllowUserWorkspaces {
 		httpError(w, 403, "creating workspaces is disabled on this instance — ask an admin")
 		return
@@ -429,7 +429,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.audit("human", u.ID, u.Name, "import_workspace", "", wsID,
-		fmt.Sprintf("%s (%d Seiten, %d Dateien)", wsName, len(pages), filesWritten))
+		fmt.Sprintf("%s (%d pages, %d files)", wsName, len(pages), filesWritten))
 	writeJSON(w, map[string]any{"workspaceId": wsID, "name": wsName, "pages": len(pages), "files": filesWritten})
 }
 

@@ -24,33 +24,37 @@ import (
 // from a list that has no English homographs. Crude is fine — the goal is to
 // catch a paragraph somebody wrote in German, not to identify a language.
 
-var germanWords = regexp.MustCompile(`(?i)\b(und|nicht|wird|werden|sind|eine|einen|einem|einer|kann|muss|müssen|soll|sollen|beim|des|für|aus|nach|über|ohne|damit|weil|wenn|dann|noch|nur|schon|sich|hier|aber|oder|bitte|kein|keine|wurde|wurden|diese|dieser|dieses|jeder|jede|mehr|sehr|immer|wieder|zwischen|während|deshalb|sonst|bereits|jetzt|etwas|nichts|alles|ihre|seine|unser|gibt|geben|machen|macht|lassen|bleibt|steht|liegt|dabei|darauf|dafür|dadurch|daher|sowie|zum|zur|vom|beim)\b`)
+var germanWords = regexp.MustCompile(`(?i)\b(und|nicht|wird|werden|sind|eine|einen|einem|einer|kann|muss|müssen|soll|sollen|beim|des|für|aus|nach|über|ohne|damit|weil|wenn|dann|noch|nur|schon|sich|hier|aber|oder|bitte|kein|keine|wurde|wurden|diese|dieser|dieses|jeder|jede|mehr|sehr|immer|wieder|zwischen|während|deshalb|sonst|bereits|jetzt|etwas|nichts|alles|ihre|seine|unser|gibt|geben|machen|macht|lassen|bleibt|steht|liegt|dabei|darauf|dafür|dadurch|daher|sowie|zum|zur|vom|beim)\b`) // i18n-ok: this list IS the detector
 
-var umlauts = regexp.MustCompile(`[äöüßÄÖÜ]`)
+var umlauts = regexp.MustCompile(`[äöüßÄÖÜ]`) // i18n-ok: the letters are the subject
+
+// The marker is assembled from a constant instead of being written out in one
+// piece. Spelled whole — marker, hyphen, "file", colon — it would match its OWN
+// definition, and this file, the one that enforces the rule, would be the
+// single file nobody checks. That is the shape a rule dies in.
+//
+// The same trap caught this very comment: an earlier draft spelled the token
+// out to explain the problem, and re-created it. Do not name the token here.
+const okMarker = "i18n-ok"
 
 // exemptLine is the per-line escape hatch, same spelling as the frontend
 // check. The reason is mandatory: a bare marker is how a rule quietly dies.
-var exemptLine = regexp.MustCompile(`i18n-ok:\s*\S`)
+var exemptLine = regexp.MustCompile(okMarker + `:\s*\S`)
 
-// exemptFile exempts a whole file, for the ones whose German IS the subject —
-// the search-folding fixtures test that "Verträge" finds "Vertrag", and
-// translating them would delete the test.
-var exemptFile = regexp.MustCompile(`i18n-ok-file:\s*\S`)
+// exemptFile exempts a whole file, for the ones whose German IS the subject.
+// Fixtures check that "Verträge" finds "Vertrag" — i18n-ok: that is the point.
+// Translating them would delete the test.
+var exemptFile = regexp.MustCompile(okMarker + `-file:\s*\S`)
 
 // pendingTranslation lists the files whose comments have not been converted
-// yet. It exists so the check can be switched on before the sweep is finished,
-// and it is a debt list, not a config option: it must shrink to nothing.
+// yet. It existed so the check could be switched on before the sweep was
+// finished, and it was a debt list, not a config option.
 //
-// A file that is already clean may not stay on the list — see the second half
-// of the test. Otherwise this turns into the usual allowlist that outlives the
-// problem and quietly re-opens the door.
-var pendingTranslation = map[string]bool{
-	"server/ingest.go":        true,
-	"server/mcp.go":           true,
-	"server/mcp_pages.go":     true,
-	"server/mcp_schema.go":    true,
-	"server/mcp_workspace.go": true,
-}
+// It is EMPTY, and that is the finished state: the sweep is done, every .go
+// file in this tree reads as English. Putting a name back in here means taking
+// on debt on purpose — and TestNoStalePendingTranslation will delete the entry
+// again the moment the file is clean, so it cannot quietly become an allowlist.
+var pendingTranslation = map[string]bool{}
 
 func goSources(t *testing.T) []string {
 	t.Helper()
@@ -124,6 +128,55 @@ func TestNoStalePendingTranslation(t *testing.T) {
 		}
 		if len(germanLines(t, rel)) == 0 {
 			t.Errorf("%s is already English — remove it from pendingTranslation", rel)
+		}
+	}
+}
+
+// The rule above catches PROSE. It cannot catch a SHORT string, and short is
+// exactly the shape user-facing text has: "Nicht gefunden" is one German word
+// and carries no umlaut, so it stays under the two-word threshold for ever.
+//
+// That is not theory. After the comment sweep read clean, seven German strings
+// were still sitting in the source — a SECOND German 404 page served to
+// anonymous visitors, the print bar of the HTML export, the admin test mail,
+// and four mail errors. Every one of them was below the threshold.
+//
+// So string literals get their own, stricter rule: ONE unambiguous German word
+// is enough. The list deliberately holds no English homographs — no "die",
+// "war", "hat", "mit", "den", "in", "aus" — because a check that cries wolf is
+// a check somebody switches off.
+var germanInString = regexp.MustCompile(`(?i)\b(nicht|nichts|wird|werden|wurde|wurden|sind|eine|einen|einem|einer|kein|keine|muss|müssen|kann|darf|soll|sollen|bitte|danke|gefunden|verbunden|getrennt|gespeichert|gelöscht|geändert|angelegt|ungültig|fehlgeschlagen|erfolgreich|fehler|hinweis|achtung|passwort|benutzer|einstellungen|seiten|dateien|anmelden|abmelden|drucken|erforderlich|verfügbar|vorhanden|zugriff|berechtigung|speichern|abbrechen|weiter|zurück)\b`) // i18n-ok: this list IS the detector
+
+// goString finds a Go string literal — interpreted or raw. Written in two
+// pieces because the pattern itself contains a backtick.
+var goString = regexp.MustCompile(`"(?:[^"\\\n]|\\.)*"` + "|`[^`]*`")
+
+func TestUserFacingStringsAreEnglish(t *testing.T) {
+	for _, rel := range goSources(t) {
+		raw, err := os.ReadFile(filepath.Join("..", rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		text := string(raw)
+		if exemptFile.MatchString(text) {
+			continue
+		}
+		for i, line := range strings.Split(text, "\n") {
+			if exemptLine.MatchString(line) || strings.HasPrefix(strings.TrimSpace(line), "//") {
+				continue
+			}
+			for _, lit := range goString.FindAllString(line, -1) {
+				if len([]rune(lit)) < 8 { // the two quotes plus six characters
+					continue
+				}
+				if umlauts.MatchString(lit) || germanInString.MatchString(lit) {
+					t.Errorf("%s:%d: string reads as German: %s\n"+
+						"    Text a person reads is English at the source; the browser\n"+
+						"    translates it from an error code (see serverErrors.ts).\n"+
+						"    German on purpose says why: // %s: <reason>", rel, i+1, lit, okMarker)
+					break
+				}
+			}
 		}
 	}
 }

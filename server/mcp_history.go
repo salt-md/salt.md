@@ -47,7 +47,7 @@ func (s *Server) mcpPageHistory(pageID string, limit int) (string, error) {
 		}
 		list = append(list, raw{r, authorID})
 	}
-	rows.Close() // erst leeren — eine einzige DB-Verbindung
+	rows.Close() // drain first — a single DB connection
 
 	for _, it := range list {
 		r := it.r

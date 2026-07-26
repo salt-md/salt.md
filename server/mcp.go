@@ -525,9 +525,9 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		httpError(w, http.StatusUnauthorized, "missing or invalid API token")
 		return
 	}
-	// Dieser Einstieg haengt NICHT an s.auth, die Stilllegung muss hier also
-	// eigens geprueft werden. Sonst blieben einem stillgelegten Konto saemtliche
-	// MCP-Werkzeuge offen, waehrend REST es abweist.
+	// This entry point does NOT hang off s.auth, so deactivation has to be checked
+	// here in its own right. Otherwise every MCP tool would stay open to a
+	// deactivated account while REST turns it away.
 	if u.Disabled {
 		httpError(w, http.StatusForbidden, "this account has been deactivated")
 		return
@@ -561,13 +561,13 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		if version == "" {
 			version = "2025-06-18"
 		}
-		// icons ist seit Spec-Revision 2025-11-25 (SEP-973) Teil von serverInfo
-		// und lässt einen Client das Logo statt eines Platzhalters zeigen.
-		// Claude.ai wertet es Stand heute NICHT aus (anthropics/claude-ai-mcp#152,
-		// offen) — andere Clients tun es, und sobald Claude nachzieht, steht es
-		// ohne weiteres Zutun da. Zwei Einträge, weil beide Wege vorkommen:
-		// das eingebettete SVG (immer da, auch bei strenger CSP) und ein
-		// absoluter Verweis auf das PNG für Clients, die kein SVG mögen.
+		// icons has been part of serverInfo since spec revision 2025-11-25 (SEP-973)
+		// and lets a client show the logo instead of a placeholder. Claude.ai does NOT
+		// read it as of today (anthropics/claude-ai-mcp#152, open) — other clients do,
+		// and the moment Claude follows it will be there with nothing further to do.
+		// Two entries, because both routes occur: the embedded SVG (always present,
+		// even under a strict CSP) and an absolute link to the PNG for clients that
+		// dislike SVG.
 		info := map[string]any{"name": "Salt.md", "version": Version}
 		icons := []map[string]any{}
 		if s.mcpIcon != "" {
@@ -621,9 +621,9 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// publicBase ist die von außen erreichbare Basis-URL (eingerichtete Domain,
-// Cloudflare-Tunnel oder Anfrage-Host) — nötig, damit share_page einen Link
-// zurückgibt, der auch wirklich funktioniert.
+// publicBase is the base URL reachable from outside (configured domain,
+// Cloudflare tunnel or request host) — needed so that share_page hands back a
+// link that actually works.
 func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBase string) (string, error) {
 	userID := u.ID
 	var args struct {
@@ -645,14 +645,14 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Schema     json.RawMessage                        `json:"schema"`
 		Body       string                                 `json:"body"`
 		BlockID    string                                 `json:"block_id"`
-		// Agent-Parität A1.
+		// Agent parity A1.
 		Cover       string    `json:"cover"`
 		Description string    `json:"description"`
 		Visibility  string    `json:"visibility"`
 		Tags        *[]string `json:"tags"`
 		Recursive   bool      `json:"recursive"`
 		Favorite    *bool     `json:"favorite"`
-		// Agent-Parität A2.
+		// Agent parity A2.
 		RemoveProperties []string        `json:"remove_properties"`
 		PropertyID       string          `json:"property_id"`
 		Name             string          `json:"name"`
@@ -664,11 +664,11 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		ViewID           string          `json:"view_id"`
 		Rows             json.RawMessage `json:"rows"`
 		Updates          json.RawMessage `json:"updates"`
-		// Agent-Parität A3.
+		// Agent parity A3.
 		RevisionID string `json:"revision_id"`
 		CommentID  string `json:"comment_id"`
 		Resolved   *bool  `json:"resolved"`
-		// Agent-Parität A4.
+		// Agent parity A4.
 		WorkspaceID   string `json:"workspace_id"`
 		DatabaseID    string `json:"database_id"`
 		Tag           string `json:"tag"`
@@ -688,8 +688,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		name == "trash_page" || name == "upload_file" ||
 		name == "set_properties" || name == "create_database" || name == "move_page" ||
 		name == "add_comment" || name == "duplicate_page" ||
-		// Agent-Parität A1 — jedes neue schreibende Tool MUSS hier stehen,
-		// sonst darf ein Read-Only-Token damit schreiben.
+		// Agent parity A1 — every new writing tool MUST be listed here, or a
+		// read-only token may write with it.
 		name == "replace_content" || name == "prepend_markdown" ||
 		name == "restore_page" || name == "set_favorite" ||
 		// A2
@@ -728,9 +728,9 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			"replace_content", "prepend_markdown", "set_favorite", "restore_page", "embed_database",
 			"update_schema", "add_select_option", "create_view", "delete_view", "create_rows",
 			"restore_revision", "share_page", "unshare_page":
-			// restore_page darf hier mit: canWrite prüft nur Workspace und
-			// Rolle, nicht den Papierkorb — eine getrashte Seite bleibt also
-			// prüfbar, sonst käme man nie an sie heran.
+			// restore_page comes along here: canWrite checks only workspace and
+			// role, not the trash — so a trashed page stays checkable, or nobody
+			// could ever reach it.
 			if !s.canWrite(userID, args.PageID) {
 				return "", fmt.Errorf("page %q not found", args.PageID)
 			}
@@ -818,9 +818,9 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 				id, parent, args.Title, args.Icon, content, pos, ts, ts, workspaceID, userID); err != nil {
 				return "", err
 			}
-			// Eigenschaften gleich mitsetzen: eine Datenbankzeile ist sonst erst
-			// nach einem zweiten Aufruf vollständig, und zwischen beiden steht eine
-			// halbfertige Zeile in der Datenbank.
+			// Set the properties in the same call: otherwise a database row is
+			// only complete after a second call, and between the two a half-finished
+			// row sits in the database.
 			if len(args.Properties) > 0 {
 				if _, err := s.mcpSetProperties(id, args.Properties); err != nil {
 					return "", fmt.Errorf("page created (%s) but properties failed: %w", id, err)
@@ -866,9 +866,9 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "restore_revision":
 			return s.mcpRestoreRevision(u, args.PageID, args.RevisionID)
 		case "resolve_comment", "delete_comment":
-			// Kommentar-Tools nennen keine page_id — die zentrale Prüfung greift
-			// also nicht. Ohne diese Auflösung könnte ein Agent über eine
-			// geratene Kommentar-Id in einen fremden Workspace schreiben.
+			// Comment tools name no page_id, so the central check does not bite.
+			// Without resolving it here, an agent could write into somebody else's
+			// workspace through a guessed comment id.
 			pid, ok := s.commentPage(args.CommentID)
 			if !ok || !s.canWrite(userID, pid) {
 				return "", fmt.Errorf("comment %q not found", args.CommentID)
@@ -920,7 +920,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "get_import_status":
 			j, ok := s.ingest.get(args.JobID)
 			if ok && j.OwnerID != "" && j.OwnerID != u.ID {
-				ok = false // fremder Auftrag: wie nicht vorhanden behandeln
+				ok = false // somebody else's job: treat it as not present
 			}
 			if !ok {
 				return "", fmt.Errorf("import job %q not found — job status is kept in memory, so it is lost if the server restarts (pages already created are not)", args.JobID)
@@ -952,8 +952,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "create_rows":
 			return s.mcpCreateRows(userID, args.PageID, args.Rows)
 		case "batch_set_properties":
-			// Ohne page_id greift die zentrale Prüfung nicht — die Rechte ALLER
-			// Zeilen werden deshalb in der Funktion selbst vorab geprüft.
+			// With no page_id the central check does not bite — so the permissions
+			// of EVERY row are checked up front inside the function itself.
 			return s.mcpBatchSetProperties(userID, args.Updates)
 		case "export_markdown":
 			out, err := s.mcpExportMarkdown(userID, args.PageID, args.Recursive)
@@ -1037,17 +1037,17 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			if args.ParentID != "" && !s.canWrite(userID, args.ParentID) {
 				return "", fmt.Errorf("parent page %q not found", args.ParentID)
 			}
-			// `schema` ist der dokumentierte Name, `properties` der von
-			// update_schema. Wer den anderen nimmt, bekam bisher STILLSCHWEIGEND
-			// das Standardschema und merkte den Verlust erst in der Oberfläche.
+			// `schema` is the documented name, `properties` the one update_schema
+			// uses. Whoever picked the other one used to get the default schema
+			// SILENTLY, and only noticed the loss in the interface.
 			sch := args.Schema
 			if len(sch) == 0 {
 				sch = args.Properties
 			}
 			return s.mcpCreateDatabase(u, args.Title, args.ParentID, args.WorkspaceID, sch)
 		case "move_page":
-			// Ein Ziel-Workspace hat Vorrang: das ist ein Umzug des ganzen
-			// Unterbaums, kein Umhängen innerhalb desselben Workspace.
+			// A target workspace takes precedence: that is a move of the whole
+			// subtree, not a re-parenting inside the same workspace.
 			if args.WorkspaceID != "" {
 				return s.mcpMoveToWorkspace(u, args.PageID, args.WorkspaceID)
 			}
@@ -1109,10 +1109,10 @@ func (s *Server) mcpSearch(u *user, q string) (string, error) {
 	if len(ws) == 0 {
 		return "No results.", nil
 	}
-	// Gesucht wird ueber die ABSCHNITTE (siehe chunks.go). Fuer einen Agenten
-	// ist das der eigentliche Unterschied: er bekommt den Absatz, der passt,
-	// samt Ueberschriften-Pfad — statt "in dieser 4000-Wort-Seite steht etwas"
-	// und der Notwendigkeit, sie ganz zu laden.
+	// The search runs over the PASSAGES (see chunks.go). For an agent that is the
+	// real difference: it gets the paragraph that matches together with its heading
+	// path — instead of "something is in this 4000-word page" plus having to load
+	// the whole thing.
 	hits := s.searchChunks(userID, ftsMatch(q), ws, 20)
 	if len(hits) == 0 {
 		hits = s.searchPagesFallback(userID, ftsMatch(q), ws, 20)

@@ -8,21 +8,21 @@ import (
 	"time"
 )
 
-// Agent-Parität, Teil 4: Selbstauskunft, Workspaces, Freigabe.
+// Agent parity, part 4: self-description, workspaces, sharing.
 //
-// Sicherheitsgrenze — bewusst NICHT über MCP erreichbar, auch wenn ein Mensch
-// es in der Oberfläche kann:
-//   • Zwei-Faktor-Einrichtung und -Abschaltung
-//   • API-Tokens anlegen oder löschen (ein Agent könnte sich sonst selbst
-//     dauerhafte Zugänge mit weiteren Rechten ausstellen)
-//   • Benutzerkonten anlegen/löschen, Passwörter setzen
-//   • Backup, Restore, Tunnel, SMTP, Instanzeinstellungen
-// Das sind Rechte über die Instanz, nicht über Inhalte. Ein kompromittierter
-// oder fehlgeleiteter Agent soll Inhalte anfassen können — nicht die Zugänge.
+// The security boundary — deliberately NOT reachable over MCP, even where a
+// human can do it in the interface:
+//   • setting up and switching off two-factor authentication
+//   • creating or deleting API tokens (an agent could otherwise issue itself
+//     permanent access carrying wider permissions)
+//   • creating or deleting user accounts, setting passwords
+//   • backup, restore, tunnel, SMTP, instance settings
+// Those are permissions over the instance, not over content. A compromised or
+// misdirected agent should be able to touch content — not the way in.
 
-// mcpWhoami: „Ein Agent muss wissen, wer er ist und was er darf."
-// Ohne diese Auskunft rät ein Agent, ob ein Fehlschlag an fehlenden Rechten
-// oder an einer falschen Id lag.
+// mcpWhoami: "an agent has to know who it is and what it may do." Without this
+// answer an agent is left guessing whether a failure was missing permissions or
+// a wrong id.
 func (s *Server) mcpWhoami(u *user) (string, error) {
 	scope := u.TokenScope
 	if scope == "" {
@@ -34,12 +34,11 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 		"email":       u.Email,
 		"token_scope": scope,
 		"can_write":   scope != "read",
-		// Was diesem Zugang bewusst verwehrt ist — damit ein Agent es gar nicht
-		// erst versucht und den Fehlschlag richtig deutet.
-		// Was dieser Zugang NICHT kann. Hier stand frueher "user accounts",
-		// obwohl list_users existiert — und "backup/restore", obwohl dasselbe
-		// Token die Sicherung ueber die REST-Schnittstelle erreichte. Beides
-		// stimmt jetzt: Verwaltung verlangt eine Anmeldung im Browser.
+		// What this access deliberately cannot do — so an agent does not even try
+		// and reads a failure correctly. This list used to say "user accounts"
+		// although list_users exists, and "backup/restore" although the same token
+		// reached the backup through the REST interface. Both are accurate now:
+		// administration requires a sign-in in the browser.
 		"not_available_via_mcp": []string{
 			"two-factor settings", "API tokens", "creating or deleting accounts",
 			"backup/restore", "tunnel and instance settings",
@@ -60,8 +59,8 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 	return string(b), nil
 }
 
-// mcpListWorkspaces: welche Workspaces sieht dieses Token, und mit welcher
-// Rolle. Bisher hing der Workspace implizit am Token und war unsichtbar.
+// mcpListWorkspaces: which workspaces this token sees, and in which role. The
+// workspace used to hang off the token implicitly and was invisible.
 func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 	rows, err := s.db.Query(`SELECT w.id, w.name, m.role FROM workspaces w
 		JOIN workspace_members m ON m.workspace_id = w.id
@@ -93,8 +92,8 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 	return string(b), nil
 }
 
-// mcpGetWorkspace liefert Kontext und Mitglieder — nötig, um Person-Felder zu
-// füllen oder Arbeit zuzuordnen.
+// mcpGetWorkspace returns context and members — needed to fill person fields
+// or to assign work.
 func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, error) {
 	if wsID == "" {
 		wsID = s.userDefaultWorkspace(u.ID)
@@ -141,8 +140,8 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, error) {
 	return string(b), nil
 }
 
-// mcpGetPermissions beantwortet vorab, was auf einer Seite erlaubt ist —
-// „vorher prüfen statt blind zu schreiben und zu scheitern".
+// mcpGetPermissions answers up front what is allowed on a page — "check
+// first rather than write blind and fail".
 func (s *Server) mcpGetPermissions(u *user, pageID string) (string, error) {
 	var ws string
 	var trashed any
@@ -151,7 +150,7 @@ func (s *Server) mcpGetPermissions(u *user, pageID string) (string, error) {
 	}
 	canRead := s.canRead(u.ID, pageID) && u.tokenCanReach(ws)
 	if !canRead {
-		// Nicht verraten, dass es die Seite gibt.
+		// Do not give away that the page exists.
 		return "", fmt.Errorf("page %q not found", pageID)
 	}
 	role := s.workspaceRole(u.ID, ws)
@@ -174,11 +173,11 @@ func (s *Server) mcpGetPermissions(u *user, pageID string) (string, error) {
 	return string(b), nil
 }
 
-// --- Öffentliche Freigabe ---------------------------------------------------
+// --- Public sharing ---------------------------------------------------------
 
-// mcpSharePage erzeugt einen öffentlichen Lese-Link. Bewusst identisch zur
-// Oberfläche: eine lebende Freigabe pro Seite, ein erneutes Teilen ersetzt den
-// alten Token (sonst bliebe ein vermeintlich widerrufener Link gültig).
+// mcpSharePage creates a public read link. Deliberately identical to the
+// interface: one live share per page, and sharing again replaces the old token
+// (otherwise a link believed revoked would stay valid).
 func (s *Server) mcpSharePage(r requestBase, pageID string, expiresInDays int, password string) (string, error) {
 	var expiresAt any
 	if expiresInDays > 0 {
@@ -210,7 +209,7 @@ func (s *Server) mcpSharePage(r requestBase, pageID string, expiresInDays int, p
 	return string(out), nil
 }
 
-// mcpUnsharePage widerruft den öffentlichen Link.
+// mcpUnsharePage revokes the public link.
 func (s *Server) mcpUnsharePage(pageID string) (string, error) {
 	res, err := s.db.Exec(`DELETE FROM share_links WHERE page_id = ? AND mode != 'form'`, pageID)
 	if err != nil {
@@ -222,8 +221,8 @@ func (s *Server) mcpUnsharePage(pageID string) (string, error) {
 	return fmt.Sprintf("Revoked the public link for page %s", pageID), nil
 }
 
-// requestBase trägt die öffentliche Basis-URL in die MCP-Schicht. Der Link muss
-// dieselbe Domain nennen, die auch die Oberfläche ausgibt (eingerichtete
-// Domain, Cloudflare-Tunnel oder Anfrage-Host) — sonst bekäme ein Agent einen
-// Link, der von außen nicht erreichbar ist.
+// requestBase carries the public base URL into the MCP layer. The link has to
+// name the same domain the interface hands out (configured domain, Cloudflare
+// tunnel or request host) — otherwise an agent would get a link that cannot be
+// reached from outside.
 type requestBase struct{ base string }

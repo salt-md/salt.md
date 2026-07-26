@@ -262,7 +262,7 @@ func pageHTML(p *page, printMode bool) string {
 	b.WriteString(html.EscapeString(title))
 	b.WriteString("</title><style>" + htmlDocStyle + "</style></head><body>")
 	if printMode {
-		b.WriteString(`<div class="print-bar"><button onclick="window.print()">Drucken / Als PDF</button><span>Am Handy: Teilen&nbsp;→&nbsp;Drucken oder „In Dateien sichern".</span></div>`)
+		b.WriteString(`<div class="print-bar"><button onclick="window.print()">Print / Save as PDF</button><span>On a phone: Share&nbsp;→&nbsp;Print, or "Save to Files".</span></div>`)
 	}
 	b.WriteString("<h1>" + head + "</h1>")
 	if d := strings.TrimSpace(p.Description); d != "" {

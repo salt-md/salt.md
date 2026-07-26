@@ -116,7 +116,7 @@ func (s *Server) mcpCreateWorkspace(userID, name string) (string, error) {
 	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id) VALUES (?, ?, ?, ?)`, id, name, now(), userID); err != nil {
 		return "", err
 	}
-	// Wie der REST-Handler: workspace_members hat kein created_at.
+	// Like the REST handler: workspace_members has no created_at.
 	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')`,
 		id, userID); err != nil {
 		return "", err
@@ -124,7 +124,7 @@ func (s *Server) mcpCreateWorkspace(userID, name string) (string, error) {
 	return fmt.Sprintf("Created workspace %q with id %s — you are its admin. Use move_page with workspace_id to move existing pages into it.", name, id), nil
 }
 
-// mcpMoveToWorkspace ist die MCP-Fassade des Umzugs.
+// mcpMoveToWorkspace is the MCP facade of the move.
 func (s *Server) mcpMoveToWorkspace(u *user, pageID, targetWS string) (string, error) {
 	userID := u.ID
 	n, err := s.moveSubtreeToWorkspace(userID, pageID, targetWS, u.tokenCanReach)

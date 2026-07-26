@@ -386,8 +386,8 @@ func (h *collabHub) dropUser(userID string) int {
 		room.mu.Unlock()
 	}
 	h.mu.Unlock()
-	// Ausserhalb der Sperren: shutdown schliesst zwar asynchron, aber die
-	// Aufraeumarbeit laeuft ueber leave(), das hub.mu selbst nimmt.
+	// Outside the locks: shutdown does close asynchronously, but the clean-up
+	// runs through leave(), which takes hub.mu itself.
 	for _, c := range doomed {
 		c.shutdown(websocket.StatusPolicyViolation, "account disabled")
 	}

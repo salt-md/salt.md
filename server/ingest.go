@@ -14,29 +14,29 @@ import (
 	"time"
 )
 
-// Massenimport, ohne dass der Inhalt durch den Agenten läuft.
+// Bulk import, without the content passing through the agent.
 //
-// Das Problem, das hier gelöst wird: um 654 Trello-Karten anzulegen, musste ein
-// Agent bisher jedes Zeichen selbst schreiben — einmal beim Lesen der Quelle,
-// einmal beim Schreiben über create_page. Bei ~1,5 Mio. Zeichen Karteninhalt
-// bricht jeder Agent unterwegs ab, egal wie geschickt er ist. Das ist keine
-// Frage der Sorgfalt, sondern eine harte Grenze seines Kontextfensters.
+// The problem being solved here: to create 654 Trello cards, an agent used to
+// have to write every character itself — once reading the source, once writing
+// it through create_page. At ~1.5 million characters of card content every
+// agent breaks off along the way, however skilful it is. That is not a question
+// of care but a hard limit of its context window.
 //
-// Die Umkehrung: der Agent nennt nur noch QUELLE und ZUORDNUNG (ein paar
-// hundert Zeichen), Salt holt die Daten selbst und legt sie an. Damit ist der
-// Import unabhängig von der Größe der Quelle und gelingt auch einem schwachen
-// Agenten — er muss lediglich einen Auftrag starten und dessen Stand abfragen.
+// The reversal: the agent names only the SOURCE and the MAPPING (a few hundred
+// characters), Salt fetches the data itself and creates the pages. The import
+// is then independent of the size of the source and succeeds even for a weak
+// agent — all it has to do is start a job and ask how far along it is.
 //
-// Sicherheitsgrenze: ein Werkzeug, das den Server beliebige URLs abrufen lässt,
-// ist ein klassisches SSRF-Loch. Salt steht in einem privaten Netz und könnte
-// darüber Nachbarn erreichen, die von außen unerreichbar sind — Router,
-// Hypervisor, Cloud-Metadatendienste. Deshalb prüft safeDial JEDE aufgelöste
-// Adresse und wählt genau die geprüfte an (siehe dort).
+// The security boundary: a tool that lets the server fetch arbitrary URLs is a
+// classic SSRF hole. Salt sits in a private network and could reach neighbours
+// through it that are unreachable from outside — routers, hypervisors, cloud
+// metadata services. That is why safeDial checks EVERY resolved address and
+// dials exactly the one it checked (see there).
 
 const (
-	ingestMaxBytes = 64 << 20 // Obergrenze für die geholte Quelle
-	ingestMaxItems = 20000    // Reißleine gegen Endlos-Quellen
-	ingestKeepJobs = 20       // so viele abgeschlossene Aufträge bleiben abrufbar
+	ingestMaxBytes = 64 << 20 // upper limit for the fetched source
+	ingestMaxItems = 20000    // ripcord against endless sources
+	ingestKeepJobs = 20       // this many finished jobs stay retrievable
 )
 
 // --- Auftragsverwaltung ------------------------------------------------------
@@ -52,9 +52,9 @@ type ingestJob struct {
 	Target   string   `json:"target"`
 	Started  string   `json:"started_at"`
 	Finished string   `json:"finished_at,omitempty"`
-	// OwnerID: die Registry ist prozessweit und die Auftraege enthalten
-	// Zielangaben und Zeilentitel. Ohne Eigentuemer konnte jeder mit einer
-	// Auftrags-Id den Stand eines fremden Imports lesen.
+	// OwnerID: the registry is process wide and the jobs carry target details
+	// and row titles. Without an owner, anybody holding a job id could read the
+	// progress of somebody else's import.
 	OwnerID string `json:"-"`
 }
 
@@ -73,9 +73,8 @@ func (reg *ingestRegistry) add(j *ingestJob) {
 	defer reg.mu.Unlock()
 	reg.jobs[j.ID] = j
 	reg.order = append(reg.order, j.ID)
-	// Nur die letzten N behalten — die Aufträge liegen im Speicher, nicht in der
-	// Datenbank. Ein Neustart verliert den STATUS, nicht die Arbeit: bereits
-	// angelegte Seiten sind gespeichert.
+	// Keep only the last N — the jobs live in memory, not in the database. A
+	// restart loses the STATUS, not the work: pages already created are saved.
 	for len(reg.order) > ingestKeepJobs {
 		delete(reg.jobs, reg.order[0])
 		reg.order = reg.order[1:]
@@ -89,7 +88,7 @@ func (reg *ingestRegistry) get(id string) (ingestJob, bool) {
 	if !ok {
 		return ingestJob{}, false
 	}
-	return *j, true // Kopie: der Aufrufer soll nicht in den laufenden Auftrag greifen
+	return *j, true // a copy: the caller must not reach into the running job
 }
 
 func (reg *ingestRegistry) update(id string, fn func(*ingestJob)) {
@@ -100,19 +99,19 @@ func (reg *ingestRegistry) update(id string, fn func(*ingestJob)) {
 	}
 }
 
-// --- Abholen der Quelle ------------------------------------------------------
+// --- Fetching the source -----------------------------------------------------
 
-// blockedIP entscheidet, ob eine Adresse für den Server tabu ist. Alles, was
-// nicht öffentlich routbar ist, wird abgelehnt: Schleife, private Netze,
-// Link-Local (dort liegt 169.254.169.254, der Metadatendienst vieler Anbieter),
-// Multicast und die Nulladresse.
-// allowPrivateImport oeffnet Importe aus privaten Netzen. Bewusst NUR ueber
-// eine Umgebungsvariable beim Start (SALT_IMPORT_ALLOW_PRIVATE=1), nicht ueber
-// die API und erst recht nicht ueber MCP: wer den Dienst startet, trifft diese
-// Entscheidung — ein Agent kann sie nicht treffen. Gedacht fuer selbst
-// gehostete Quellen im eigenen Netz (eigenes Jira, eigenes Wiki).
+// allowPrivateImport opens imports up to private networks. Deliberately ONLY
+// through an environment variable at startup (SALT_IMPORT_ALLOW_PRIVATE=1), not
+// through the API and certainly not through MCP: whoever starts the service
+// makes that decision — an agent cannot. Meant for self-hosted sources on your
+// own network (your own Jira, your own wiki).
 var allowPrivateImport = os.Getenv("SALT_IMPORT_ALLOW_PRIVATE") == "1"
 
+// blockedIP decides whether an address is off limits for the server. Everything
+// that is not publicly routable is refused: loopback, private networks,
+// link-local (which is where 169.254.169.254 lives, the metadata service of
+// many providers), multicast and the unspecified address.
 func blockedIP(ip net.IP) bool {
 	if allowPrivateImport {
 		return false
@@ -122,14 +121,14 @@ func blockedIP(ip net.IP) bool {
 		ip.IsMulticast() || ip.IsUnspecified()
 }
 
-// safeDial löst den Namen auf, prüft JEDE Adresse und verbindet sich dann mit
-// genau der geprüften Adresse.
+// safeDial resolves the name, checks EVERY address and then connects to
+// exactly the address it checked.
 //
-// Der zweite Teil ist der wichtige: würde man nach der Prüfung erneut über den
-// Namen verbinden, könnte ein Angreifer zwischen Prüfung und Verbindung eine
-// andere Adresse ausliefern (DNS-Rebinding) und die Prüfung wäre wertlos. Weil
-// der Dialer bei JEDER Weiterleitung erneut greift, deckt das auch Umleitungen
-// auf interne Ziele ab.
+// The second half is the important one: connecting through the name again after
+// the check would let an attacker serve a different address between check and
+// connection (DNS rebinding), and the check would be worthless. Because the
+// dialer runs again on EVERY redirect, this covers redirects to internal
+// targets as well.
 func safeDial(ctx context.Context, network, addr string) (net.Conn, error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -173,9 +172,9 @@ func ingestHTTPClient() *http.Client {
 	}
 }
 
-// fetchSource holt die Quelle. headers erlaubt Authentifizierung (Bearer-Token,
-// API-Key), ohne dass Salt die Zugangsdaten speichert — sie gelten nur für
-// diesen einen Abruf.
+// fetchSource fetches the source. headers allows authentication (bearer token,
+// API key) without Salt storing the credentials — they hold for this one fetch
+// only.
 func fetchSource(rawURL string, headers map[string]string) ([]byte, error) {
 	if !strings.HasPrefix(rawURL, "http://") && !strings.HasPrefix(rawURL, "https://") {
 		return nil, fmt.Errorf("url must start with http:// or https://")
@@ -213,10 +212,10 @@ func fetchSource(rawURL string, headers map[string]string) ([]byte, error) {
 
 // --- Feldzuordnung -----------------------------------------------------------
 
-// jsonPath liest einen Wert über einen Pfad wie "name", "card.due" oder
-// "labels[].name" (letzteres pflückt das Feld aus jedem Element einer Liste).
-// Bewusst klein gehalten: das deckt die Form ab, die REST-Antworten fast immer
-// haben, ohne eine ganze Abfragesprache mitzuschleppen.
+// jsonPath reads a value through a path like "name", "card.due" or
+// "labels[].name" (the last one picks the field out of every element of a
+// list). Deliberately kept small: that covers the shape REST answers almost
+// always have, without dragging a whole query language along.
 func jsonPath(v any, path string) any {
 	if path == "" || v == nil {
 		return v
@@ -254,7 +253,7 @@ func jsonPath(v any, path string) any {
 	return jsonPath(cur, rest)
 }
 
-// scalarString macht aus einem JSON-Wert Text für Titel und Textfelder.
+// scalarString turns a JSON value into text for titles and text fields.
 func scalarString(v any) string {
 	switch t := v.(type) {
 	case nil:
@@ -283,14 +282,14 @@ func scalarString(v any) string {
 	return ""
 }
 
-// ingestResolve beschreibt eine Verknüpfung innerhalb derselben Antwort: ein
-// Element trägt eine Fremd-Id, der Klartext steht in einer anderen Liste.
-// Genau die Form haben Trello (Karte → idList → lists[].name), Jira, Airtable
-// und Asana. Ohne das stünde in der Spalte eine nichtssagende Id.
+// ingestResolve describes a link inside the same answer: an element carries a
+// foreign id while the plain text sits in another list. That is exactly the
+// shape of Trello (card → idList → lists[].name), Jira, Airtable and Asana.
+// Without it the column would hold a meaningless id.
 type ingestResolve struct {
-	From  string `json:"from"`  // Pfad zur Nachschlageliste, z. B. "lists"
-	Match string `json:"match"` // Feld darin, das der Id entspricht, z. B. "id"
-	To    string `json:"to"`    // Feld, dessen Wert eingesetzt wird, z. B. "name"
+	From  string `json:"from"`  // path to the lookup list, e.g. "lists"
+	Match string `json:"match"` // field in it that matches the id, e.g. "id"
+	To    string `json:"to"`    // field whose value is put in, e.g. "name"
 }
 
 type ingestSpec struct {
@@ -307,7 +306,7 @@ type ingestSpec struct {
 	Limit      int                      `json:"limit"`
 }
 
-// buildResolvers baut aus den Nachschlagelisten Wörterbücher Id → Klartext.
+// buildResolvers builds dictionaries id → plain text from the lookup lists.
 func buildResolvers(doc any, spec ingestSpec) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for field, r := range spec.Resolve {
@@ -348,7 +347,7 @@ func applyResolve(v any, table map[string]string) any {
 	return v
 }
 
-// --- Durchführung ------------------------------------------------------------
+// --- Carrying it out ---------------------------------------------------------
 
 type ingestItem struct {
 	title string
@@ -356,9 +355,9 @@ type ingestItem struct {
 	props map[string]any
 }
 
-// planIngest holt die Quelle und formt sie in Einträge um — ohne etwas zu
-// schreiben. Damit scheitert ein falsch zugeordneter Import, BEVOR halb
-// angelegte Seiten herumliegen.
+// planIngest fetches the source and shapes it into entries — without writing
+// anything. A wrongly mapped import therefore fails BEFORE half-created pages
+// are lying around.
 func planIngest(spec ingestSpec) ([]ingestItem, error) {
 	body, err := fetchSource(spec.URL, spec.Headers)
 	if err != nil {
@@ -371,9 +370,9 @@ func planIngest(spec ingestSpec) ([]ingestItem, error) {
 	return mapItems(doc, spec)
 }
 
-// mapItems formt ein geholtes Dokument in Eintraege um. Getrennt von planIngest,
-// damit die Zuordnung ohne Netzzugriff pruefbar ist — sie ist der Teil, in dem
-// die Fehler stecken.
+// mapItems shapes a fetched document into entries. Separate from planIngest so
+// the mapping is testable without network access — it is the part the mistakes
+// live in.
 func mapItems(doc any, spec ingestSpec) ([]ingestItem, error) {
 	raw := doc
 	if spec.Items != "" {
@@ -410,8 +409,8 @@ func mapItems(doc any, spec ingestSpec) ([]ingestItem, error) {
 		}
 		for prop, path := range spec.Properties {
 			v := jsonPath(e, path)
-			// Die Zuordnung nennt den QUELLPFAD; nachgeschlagen wird über dessen
-			// letzten Abschnitt, damit "idList" und "card.idList" gleich wirken.
+			// The mapping names the SOURCE PATH; the lookup goes through its last
+			// segment, so that "idList" and "card.idList" behave the same.
 			key := path
 			if i := strings.LastIndexByte(key, '.'); i >= 0 {
 				key = key[i+1:]
@@ -426,19 +425,19 @@ func mapItems(doc any, spec ingestSpec) ([]ingestItem, error) {
 	return items, nil
 }
 
-// ensureIngestOptions legt fehlende Auswahloptionen an — EINMAL für den ganzen
-// Import, nicht pro Zeile.
+// ensureIngestOptions creates the missing select options — ONCE for the whole
+// import, not per row.
 //
-// Ohne das ist der Import für einen schwachen Agenten unbenutzbar: die 11
-// Trello-Listen sind im Salt-Schema erst einmal keine Optionen, jede Zeile
-// bekäme einen leeren Status, und der Agent müsste die Lücke selbst bemerken.
-// Der Import weiß es besser als er — also macht er es.
+// Without it the import is unusable for a weak agent: the 11 Trello lists are
+// not options in the Salt schema to begin with, every row would get an empty
+// status, and the agent would have to notice the gap itself. The import knows
+// better than it does — so the import does it.
 func (s *Server) ensureIngestOptions(dbID string, items []ingestItem, nameToID map[string]string) (int, error) {
 	schema, views, err := s.loadCollection(dbID)
 	if err != nil {
 		return 0, err
 	}
-	// Gewünschte Werte je Auswahl-Property einsammeln, Reihenfolge stabil halten.
+	// Collect the wanted values per select property, keeping the order stable.
 	want := map[string][]string{}
 	seen := map[string]bool{}
 	for _, it := range items {
@@ -479,11 +478,11 @@ func (s *Server) ensureIngestOptions(dbID string, items []ingestItem, nameToID m
 			if have[strings.ToLower(val)] {
 				continue
 			}
-			// Farbe gleich mitgeben: eine Option ohne Farbe erscheint im Board
-			// als farbloser Kopf, und ein Kanban lebt davon, dass man die
-			// Spalten am Farbton auseinanderhaelt. Reihum aus optionPalette
-			// (import_csv.go) — dieselbe Quelle wie beim CSV-Import, damit
-			// nicht zwei Wahrheiten entstehen.
+			// Give it a colour right away: an option without one shows in the
+			// board as a colourless header, and a kanban lives on telling the
+			// columns apart by hue. Taken in turn from optionPalette
+			// (import_csv.go) — the same source as the CSV import, so that no
+			// second truth appears.
 			opts = append(opts, map[string]any{
 				"id":    slugID(val, taken),
 				"name":  val,
@@ -502,7 +501,7 @@ func (s *Server) ensureIngestOptions(dbID string, items []ingestItem, nameToID m
 	return added, nil
 }
 
-// valueStrings zerlegt einen zugeordneten Wert in einzelne Auswahlwerte.
+// valueStrings breaks a mapped value into individual select values.
 func valueStrings(v any) []string {
 	if arr, ok := v.([]any); ok {
 		out := []string{}
@@ -519,9 +518,9 @@ func valueStrings(v any) []string {
 	return nil
 }
 
-// startIngest prüft Ziel und Zuordnung, holt die Quelle und startet den Auftrag
-// im Hintergrund. Der Aufrufer bekommt sofort eine Auftrags-Id zurück — ein
-// Import mit hunderten Einträgen liefe sonst in jede Zeitgrenze.
+// startIngest checks target and mapping, fetches the source and starts the job
+// in the background. The caller gets a job id back straight away — an import
+// with hundreds of entries would otherwise run into every timeout there is.
 func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 	if strings.TrimSpace(spec.URL) == "" {
 		return "", fmt.Errorf("url is required")
@@ -530,12 +529,12 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 		return "", fmt.Errorf("title is required — name the field each record's title comes from (for example \"name\")")
 	}
 
-	// Ziel bestimmen und Schreibrecht prüfen, BEVOR irgendetwas geholt wird.
+	// Work out the target and check write permission BEFORE anything is fetched.
 	var parentID, workspaceID, target string
 	var nameToID map[string]string
 	if spec.DatabaseID != "" {
-		// tokenCanReach zusaetzlich: canWrite kennt die Workspace-Grenze eines
-		// eingeschraenkten Tokens nicht, sonst schriebe es ausserhalb seines Bereichs.
+		// tokenCanReach on top: canWrite does not know the workspace boundary of a
+		// restricted token, which would otherwise write outside its own area.
 		if !s.canWrite(u.ID, spec.DatabaseID) || u.TokenScope == "read" || !u.tokenCanReach(s.pageWorkspace(spec.DatabaseID)) {
 			return "", fmt.Errorf("database %q not found", spec.DatabaseID)
 		}
@@ -560,7 +559,7 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 				nameToID[strings.ToLower(name)] = id
 			}
 		}
-		// Eine falsch geschriebene Spalte darf nicht still ins Leere laufen.
+		// A misspelled column may not quietly run into nothing.
 		for prop := range spec.Properties {
 			if nameToID[strings.ToLower(prop)] == "" {
 				return "", fmt.Errorf("the database has no property %q — it has: %s (call get_schema, or add it with update_schema first)",
@@ -588,9 +587,9 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 		target = "top-level pages in workspace " + ws
 	}
 
-	// Holen und zuordnen passiert VOR dem Hintergrundauftrag: ein Tippfehler im
-	// Pfad oder eine unerreichbare Quelle soll sofort als Fehler zurückkommen,
-	// nicht erst beim Nachfragen.
+	// Fetching and mapping happen BEFORE the background job: a typo in the path or
+	// an unreachable source should come back as an error immediately, not only when
+	// somebody asks.
 	items, err := planIngest(spec)
 	if err != nil {
 		return "", err
@@ -616,8 +615,8 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 	return job.ID, nil
 }
 
-// runIngest legt die Einträge an. Läuft im Hintergrund und schreibt den Stand
-// fortlaufend in den Auftrag, damit ein Agent zusehen kann.
+// runIngest creates the entries. Runs in the background and keeps writing the
+// progress into the job, so an agent can watch.
 func (s *Server) runIngest(jobID, userID, parentID, workspaceID string, items []ingestItem, nameToID map[string]string) {
 	var pos float64
 	if parentID != "" {

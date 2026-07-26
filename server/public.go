@@ -52,7 +52,7 @@ func (s *Server) handlePublicView(w http.ResponseWriter, r *http.Request) {
 	p, err := s.getPage(pageID)
 	if err != nil || p.Trashed {
 		w.WriteHeader(404)
-		w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>Salt.md</title><style>` + htmlDocStyle + `</style></head><body><h1>Nicht gefunden</h1></body></html>`))
+		w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>Salt.md</title><style>` + htmlDocStyle + `</style></head><body><h1>Not found</h1></body></html>`))
 		return
 	}
 	if p.Type == "collection" {

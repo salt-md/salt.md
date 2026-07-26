@@ -7,25 +7,24 @@ import (
 	"strings"
 )
 
-// Agent-Parität, Teil 2: Datenbanken.
+// Agent parity, part 2: databases.
 //
-// Bisher konnte ein Agent eine Datenbank ANLEGEN, danach war ihre Struktur für
-// ihn eingefroren: keine Spalte ergänzen, keine Select-Option hinzufügen, keine
-// Ansicht erstellen. Ein Mensch kann das alles in der Oberfläche.
+// An agent could CREATE a database, and after that its structure was frozen as
+// far as the agent was concerned: no adding a column, no adding a select
+// option, no creating a view. A human can do all of that in the interface.
 //
-// Bewusste Entwurfsentscheidung: das Schema wird MISCHEND geändert, nicht als
-// Ganzes ersetzt (anders als PUT /api/collections/{id}). Ein Agent, der nur
-// eine Spalte ergänzen will, soll nicht versehentlich alle anderen löschen,
-// weil er sie nicht mitgeschickt hat.
+// A deliberate design decision: the schema is changed by MERGING, not replaced
+// wholesale (unlike PUT /api/collections/{id}). An agent that only wants to add
+// one column should not delete all the others by accident, merely because it
+// did not send them along.
 
-// Schema und Ansichten werden als generische Maps behandelt, NICHT durch einen
-// Go-Typ geschleust. Grund: der vorhandene propDef in derived.go kennt kein
-// `options`-Feld — ein Hin- und Rückwandeln würde beim Speichern sämtliche
-// Select-Optionen löschen. Mit Maps überlebt jedes Feld, auch solche, die
-// später dazukommen.
+// Schema and views are handled as generic maps and are NOT run through a Go
+// type. The reason: the existing propDef in derived.go has no `options` field —
+// a round trip through it would delete every select option on save. With maps
+// every field survives, including ones added later.
 
-// Die Typen, die die Oberfläche anbietet. Ein Agent, der einen erfindet, würde
-// sonst eine Spalte anlegen, die niemand rendern kann.
+// The types the interface offers. An agent that invents one would otherwise
+// create a column nobody can render.
 var validPropTypes = map[string]bool{
 	"text": true, "number": true, "select": true, "multiselect": true,
 	"date": true, "checkbox": true, "url": true, "person": true,
@@ -37,16 +36,15 @@ var validViewTypes = map[string]bool{
 	"calendar": true, "timeline": true, "form": true,
 }
 
-// normalizeSchema bringt eine von einem Agenten gelieferte Eigenschaftsliste in
-// die Form, die die Oberfläche erwartet — und ist der Grund, warum es diese
-// Funktion überhaupt gibt:
+// normalizeSchema brings a property list supplied by an agent into the shape
+// the interface expects — and is the whole reason this function exists:
 //
-// Ein Agent schreibt Auswahlmöglichkeiten naheliegenderweise als
-// `"options": ["Ideen", "Geplant"]`. Die Oberfläche erwartet aber Objekte
-// `{id, name, color}`. Wurden die rohen Zeichenketten gespeichert, stürzte die
-// GANZE Seite beim Öffnen ab (`o.name.toLowerCase()` auf einer Zeichenkette).
-// Genau das ist in echt passiert. Statt den Agenten zu tadeln, akzeptieren wir
-// beide Formen und wandeln um — die bequeme Schreibweise ist die richtige.
+// An agent naturally writes select options as `"options": ["Ideas", "Planned"]`.
+// The interface, though, expects objects `{id, name, color}`. When the raw
+// strings were stored, the WHOLE page crashed on opening
+// (`o.name.toLowerCase()` on a string). That happened for real. Rather than
+// scold the agent we accept both forms and convert — the convenient spelling is
+// the right one.
 func normalizeSchema(props []map[string]any) ([]map[string]any, error) {
 	str := func(m map[string]any, k string) string { v, _ := m[k].(string); return v }
 	taken := map[string]bool{}
@@ -115,7 +113,7 @@ func normalizeSchema(props []map[string]any) ([]map[string]any, error) {
 	return props, nil
 }
 
-// loadCollection liest Schema und Ansichten einer Datenbank.
+// loadCollection reads the schema and the views of a database.
 func (s *Server) loadCollection(pageID string) ([]map[string]any, []map[string]any, error) {
 	var schemaJSON, viewsJSON string
 	err := s.db.QueryRow(`SELECT schema, views FROM collections WHERE page_id = ?`, pageID).Scan(&schemaJSON, &viewsJSON)
@@ -156,22 +154,22 @@ func (s *Server) saveCollection(pageID string, schema []map[string]any, views []
 	return nil
 }
 
-// slugID macht aus einem Namen einen stabilen, lesbaren Bezeichner. Lesbare Ids
-// helfen dem Agenten: "faelligkeit" sagt mehr als "p7". Bei Kollision wird
-// durchnummeriert.
+// slugID turns a name into a stable, readable identifier. Readable ids help
+// the agent: "due-date" says more than "p7". On a collision it counts up. The
+// umlaut cases below spell German letters out, because an id carries none.
 func slugID(name string, taken map[string]bool) string {
 	var b strings.Builder
 	for _, r := range strings.ToLower(name) {
 		switch {
 		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
 			b.WriteRune(r)
-		case r == 'ä':
+		case r == 'ä': // i18n-ok: German letter, spelled out below
 			b.WriteString("ae")
-		case r == 'ö':
+		case r == 'ö': // i18n-ok: German letter, spelled out below
 			b.WriteString("oe")
-		case r == 'ü':
+		case r == 'ü': // i18n-ok: German letter, spelled out below
 			b.WriteString("ue")
-		case r == 'ß':
+		case r == 'ß': // i18n-ok: German letter, spelled out below
 			b.WriteString("ss")
 		case r == ' ' || r == '-' || r == '_':
 			b.WriteRune('-')
@@ -190,9 +188,9 @@ func slugID(name string, taken map[string]bool) string {
 
 // --- Schema ----------------------------------------------------------------
 
-// mcpGetCollection liefert Schema UND Ansichten. get_schema gibt nur das
-// Schema; ohne die Ansichten kann ein Agent kein Board und keinen Kalender
-// bearbeiten, weil er ihre Ids nicht kennt.
+// mcpGetCollection returns the schema AND the views. get_schema gives only the
+// schema; without the views an agent cannot edit a board or a calendar, because
+// it does not know their ids.
 func (s *Server) mcpGetCollection(pageID string) (string, error) {
 	schema, views, err := s.loadCollection(pageID)
 	if err != nil {
@@ -205,7 +203,7 @@ func (s *Server) mcpGetCollection(pageID string) (string, error) {
 	return string(b), nil
 }
 
-// mcpUpdateSchema ergänzt oder ändert Eigenschaften — mischend, nie ersetzend.
+// mcpUpdateSchema adds or changes properties — merging, never replacing.
 func (s *Server) mcpUpdateSchema(pageID string, props json.RawMessage, remove []string) (string, error) {
 	schema, views, err := s.loadCollection(pageID)
 	if err != nil {
@@ -236,8 +234,8 @@ func (s *Server) mcpUpdateSchema(pageID string, props json.RawMessage, remove []
 		if typ != "" && !validPropTypes[typ] {
 			return "", fmt.Errorf("unknown property type %q — use one of: text, number, select, multiselect, date, checkbox, url, person, relation, rollup, formula", typ)
 		}
-		// Vorhandene Eigenschaft? Dann Feld für Feld mischen — was der Agent
-		// nicht nennt, bleibt unangetastet.
+		// An existing property? Then merge field by field — whatever the agent
+		// does not name stays untouched.
 		idx := -1
 		if id != "" {
 			for i, p := range schema {
@@ -294,8 +292,8 @@ func (s *Server) mcpUpdateSchema(pageID string, props json.RawMessage, remove []
 	if err := s.saveCollection(pageID, schema, views); err != nil {
 		return "", err
 	}
-	// Die Werte gelöschter Spalten bleiben bewusst in den Zeilen stehen: so ist
-	// ein versehentliches Entfernen durch erneutes Anlegen der Spalte heilbar.
+	// The values of deleted columns deliberately stay in the rows: that way an
+	// accidental removal is curable by creating the column again.
 	parts := []string{}
 	if len(added) > 0 {
 		parts = append(parts, "added "+strings.Join(added, ", "))
@@ -309,8 +307,8 @@ func (s *Server) mcpUpdateSchema(pageID string, props json.RawMessage, remove []
 	return "Schema updated: " + strings.Join(parts, "; "), nil
 }
 
-// mcpAddSelectOption ergänzt eine Auswahlmöglichkeit. Ohne dieses Tool konnte
-// ein Agent set_properties auf einen Wert aufrufen, den es gar nicht gibt.
+// mcpAddSelectOption adds a select option. Without this tool an agent could
+// call set_properties with a value that does not exist at all.
 func (s *Server) mcpAddSelectOption(pageID, propID, name, color string) (string, error) {
 	schema, views, err := s.loadCollection(pageID)
 	if err != nil {
@@ -349,9 +347,8 @@ func (s *Server) mcpAddSelectOption(pageID, propID, name, color string) (string,
 
 // --- Ansichten -------------------------------------------------------------
 
-// mcpCreateView legt eine Ansicht an — Board, Kalender, Timeline, Galerie,
-// Liste, Formular oder Tabelle. „Views sind das, was eine Datenbank von einer
-// Tabelle unterscheidet."
+// mcpCreateView creates a view — board, calendar, timeline, gallery, list,
+// form or table. "Views are what makes a database different from a table."
 func (s *Server) mcpCreateView(pageID, name, viewType, groupBy, dateProp, endDateProp string) (string, error) {
 	if !validViewTypes[viewType] {
 		return "", fmt.Errorf("unknown view type %q — use table, board, gallery, calendar, timeline, list or form", viewType)
@@ -368,8 +365,8 @@ func (s *Server) mcpCreateView(pageID, name, viewType, groupBy, dateProp, endDat
 		}
 		return false
 	}
-	// Früh und deutlich scheitern: ein Board ohne Gruppierung oder ein Kalender
-	// ohne Datum rendert sonst leer, und der Agent sucht den Fehler woanders.
+	// Fail early and clearly: a board without a grouping, or a calendar without a
+	// date, otherwise renders empty and the agent hunts for the mistake elsewhere.
 	if viewType == "board" {
 		if groupBy == "" {
 			return "", fmt.Errorf("a board needs group_by (a select property id)")
@@ -415,8 +412,8 @@ func (s *Server) mcpCreateView(pageID, name, viewType, groupBy, dateProp, endDat
 	return fmt.Sprintf("Created %s view %q (id %s)", viewType, name, view["id"]), nil
 }
 
-// mcpDeleteView entfernt eine Ansicht; die letzte bleibt bestehen, sonst hätte
-// die Datenbank in der Oberfläche nichts mehr anzuzeigen.
+// mcpDeleteView removes a view; the last one stays, or the database would have
+// nothing left to show in the interface.
 func (s *Server) mcpDeleteView(pageID, viewID string) (string, error) {
 	schema, views, err := s.loadCollection(pageID)
 	if err != nil {
@@ -445,9 +442,9 @@ func (s *Server) mcpDeleteView(pageID, viewID string) (string, error) {
 
 // --- Massenoperationen ------------------------------------------------------
 
-// mcpCreateRows legt mehrere Zeilen in einem Aufruf an. „Bei 40 Zeilen sind das
-// 40 Calls" — und jeder einzelne kann fehlschlagen und einen halben Zustand
-// hinterlassen.
+// mcpCreateRows creates several rows in one call. "For 40 rows that is 40
+// calls" — and every single one of them can fail and leave half a state
+// behind.
 func (s *Server) mcpCreateRows(userID, pageID string, rows json.RawMessage) (string, error) {
 	var list []struct {
 		Title      string          `json:"title"`
@@ -495,7 +492,7 @@ func (s *Server) mcpCreateRows(userID, pageID string, rows json.RawMessage) (str
 	return string(b), nil
 }
 
-// mcpBatchSetProperties aktualisiert viele Zeilen in einem Aufruf.
+// mcpBatchSetProperties updates many rows in one call.
 func (s *Server) mcpBatchSetProperties(userID string, updates json.RawMessage) (string, error) {
 	var list []struct {
 		PageID     string          `json:"page_id"`
@@ -510,8 +507,8 @@ func (s *Server) mcpBatchSetProperties(userID string, updates json.RawMessage) (
 	if len(list) > 200 {
 		return "", fmt.Errorf("at most 200 updates per call (got %d)", len(list))
 	}
-	// Rechte VOR der ersten Änderung für ALLE prüfen — sonst bricht der Aufruf
-	// mittendrin ab und hinterlässt eine halb aktualisierte Datenbank.
+	// Check the permissions for ALL of them BEFORE the first change — otherwise
+	// the call breaks off halfway and leaves a half-updated database.
 	for _, u := range list {
 		if !s.canWrite(userID, u.PageID) {
 			return "", fmt.Errorf("page %q not found (nothing was changed)", u.PageID)
@@ -528,16 +525,16 @@ func (s *Server) mcpBatchSetProperties(userID string, updates json.RawMessage) (
 	return fmt.Sprintf("Updated properties on %d row(s)", done), nil
 }
 
-// resolveOptionValues übersetzt Auswahlwerte, die als NAME geschrieben wurden,
-// in die zugehörige Options-Id.
+// resolveOptionValues translates select values that were written as a NAME
+// into the matching option id.
 //
-// Der Anlass: ein Agent setzt naheliegenderweise `{"status": "Geplant"}` — den
-// Namen, den er selbst beim Anlegen vergeben hat. Gespeichert werden muss aber
-// die Id ("geplant"). Ungelöst landeten die Werte zwar in der Datenbank, aber
-// keine Board-Spalte und kein Filter fand sie wieder: 51 Werte lagen so als
-// stille Karteileichen herum. Die Zuordnung ist case-insensitiv; passt nichts,
-// bleibt der Wert unverändert (dann ist es kein Auswahlfeld oder ein neuer
-// Wert, den add_select_option ergänzen soll).
+// What prompted it: an agent naturally sets `{"status": "Planned"}` — the name
+// it handed out itself when creating the column. What has to be stored is the
+// id ("planned"). Left unresolved the values did land in the database, but no
+// board column and no filter found them again: 51 values were lying around as
+// quiet dead entries. The matching is case insensitive; if nothing matches the
+// value stays as it is (then it is not a select field, or it is a new value
+// that add_select_option is meant to add).
 func (s *Server) resolveOptionValues(pageID string, patch map[string]json.RawMessage) {
 	var parentID string
 	if err := s.db.QueryRow(`SELECT COALESCE(parent_id, '') FROM pages WHERE id = ?`, pageID).Scan(&parentID); err != nil || parentID == "" {
@@ -604,9 +601,9 @@ func (s *Server) resolveOptionValues(pageID string, patch map[string]json.RawMes
 	}
 }
 
-// resolveFilterValues bildet Filterwerte, die als Options-NAME geschrieben sind,
-// auf die Id ab — dieselbe Kulanz wie beim Schreiben. Ein Agent, der mit
-// "In Arbeit" schreibt, sucht auch mit "In Arbeit".
+// resolveFilterValues maps filter values written as an option NAME onto the id
+// — the same leniency as on writing. An agent that writes with "In progress"
+// searches with "In progress" too.
 func (s *Server) resolveFilterValues(collectionID string, filters []rowFilter) []rowFilter {
 	schema, _, err := s.loadCollection(collectionID)
 	if err != nil {

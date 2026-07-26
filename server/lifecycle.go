@@ -65,9 +65,9 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 	if err != nil {
 		return "", err
 	}
-	// Der Workspace der WURZEL zaehlt. Frueher gewann hier schlicht die zuletzt
-	// gescannte Zeile — bei einem ueber Workspace-Grenzen verbogenen Baum landete
-	// die ganze Kopie im falschen Workspace.
+	// The workspace of the ROOT is what counts. This used to be won by whichever
+	// row was scanned last — with a tree bent across workspace boundaries the
+	// whole copy landed in the wrong workspace.
 	wsByID := map[string]string{}
 	for rows.Next() {
 		var d dupRow

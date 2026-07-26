@@ -141,7 +141,7 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 			list = append(list, e)
 		}
 		if len(batch) < limit {
-			break // letzte Seite der Historie
+			break // last page of the history
 		}
 	}
 	writeJSON(w, list)

@@ -129,14 +129,14 @@ func isNumeric(s string) bool {
 func (s *Server) collectionRowsQuery(u *user, colID string, filters []rowFilter, sortParam string, limit, offset int) (list []map[string]any, total int, err error) {
 	where := []string{"parent_id = ?", "trashed_at IS NULL"}
 	args := []any{colID}
-	// Private Zeilen anderer ausblenden. Der Sichtbarkeits-Schalter im
-	// The page header applies to database rows too, but this query never
-	// honoured it: through the row list every workspace member read titles and
-	// properties of ALL rows, including the ones marked private.
+	// Hide other people's private rows. The visibility switch in the page header
+	// applies to database rows too, but this query never honoured it: through the
+	// row list every workspace member read titles and properties of ALL rows,
+	// including the ones marked private.
 	//
-	// The condition belongs in the SQL, not behind the LIMIT: filtering
-	// afterwards would falsify paging and the total count. Workspace admins
-	// sehen weiterhin alles — dieselbe Regel wie in forbiddenPrivateAncestor.
+	// The condition belongs in the SQL, not behind the LIMIT: filtering afterwards
+	// would falsify paging and the total count. Workspace admins still see
+	// everything — the same rule as in forbiddenPrivateAncestor.
 	wsAdmin := 0
 	if s.isWorkspaceAdmin(u.ID, s.pageWorkspace(colID)) {
 		wsAdmin = 1
