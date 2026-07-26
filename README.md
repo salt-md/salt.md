@@ -160,15 +160,32 @@ has drifted, so this cannot quietly rot.
 
 ## 📄 License
 
-Salt.md is released under the
-**[PolyForm Noncommercial License 1.0.0](LICENSE)**.
+Salt.md is free software under the
+**[GNU Affero General Public License v3.0](LICENSE)**.
 
-- ✅ **Free** for personal, hobby, research, educational and other
-  **non-commercial** use — run it, self-host it, modify it, share it.
-- 💼 **Commercial use requires a license.** Using Salt.md to make money —
-  internally at a for-profit company, as a paid/hosted service, or bundled
-  into a commercial product — needs a separate commercial license. Get in
-  touch.
+- ✅ **Use it, including at work.** Run it for yourself, for your team or for
+  your whole company. No fee, no separate licence, no conversation with us
+  required. Modify it, self-host it, hand it to a colleague.
+- 🔁 **If you change it and let others use it over a network, publish your
+  changes.** That is the one condition, and it is what the AGPL adds over the
+  GPL. Running an unmodified Salt.md for your own people asks nothing of you.
+- 🏷️ **The name is ours.** Redistribute it as Salt.md and you are welcome. If
+  you fork it into something of your own, please give that something its own
+  name — the licence covers the code, not the identity.
 
-The source is public and auditable, but this is **not** an OSI open-source
-license. See [`LICENSE`](LICENSE) for the exact terms.
+### Why this licence
+
+Two goals, and they are in tension. We want Salt.md in as many hands as
+possible, which rules out anything a company's legal review rejects on sight —
+the previous licence forbade all commercial use, including a company simply
+running it internally, which is exactly the wrong door to close.
+
+And we would rather not hand a competitor a finished product to close up and
+sell. The AGPL does not forbid that; it just means their version has to be as
+open as ours. That removes the incentive without shutting anybody out.
+
+Anything we later build *on top* — hosted convenience, assistant features —
+lives in its own repository under its own terms. The core stays this.
+
+Copyright © 2026 Jeremia Arslan. Salt.md comes with no warranty, to the extent
+permitted by law; see [`LICENSE`](LICENSE) for the terms that actually govern.
