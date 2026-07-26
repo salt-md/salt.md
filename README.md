@@ -129,6 +129,35 @@ The Yjs relay only replays opaque CRDT updates; it never interprets your data.
 
 **Design goals, in order: easy to run, easy to love, easy to extend.**
 
+## 🌍 Languages
+
+Salt.md is written in English and translated from there. English source text
+*is* the key, so a missing translation shows correct English rather than a
+broken identifier.
+
+Ships with English and German. Adding a language is one file:
+
+```bash
+cd web
+node scripts/translate.mjs --list     # what exists, how complete
+node scripts/translate.mjs fr         # write or top up src/locales/fr.json
+node scripts/translate.mjs fr --dry   # just print what is missing
+```
+
+No API key needed for the `--dry` path — it prints the untranslated keys and a
+ready-made prompt you can hand to a translator or paste into any chat. Set
+`ANTHROPIC_API_KEY` and it fills them in itself, recording which lines nobody
+has read yet in `<locale>.machine.json`. Re-running never overwrites a line a
+human corrected.
+
+Plural forms come from `Intl.PluralRules`, so Polish gets its three and Arabic
+its six without anyone hardcoding a rule. Dates, times, numbers and sorting all
+follow the reader's region — a British user reading English gets `18/07/2026`,
+not `07/18/2026`.
+
+`npm run build` fails if a user-visible string is not translatable or a catalog
+has drifted, so this cannot quietly rot.
+
 ## 📄 License
 
 Salt.md is released under the

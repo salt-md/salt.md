@@ -13,7 +13,7 @@
 // string was wrapped: from here on, a bare string or a stale catalog fails the
 // build, so rot is mechanically impossible rather than merely discouraged.
 
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -283,7 +283,9 @@ const missingFor = process.argv.indexOf('--missing');
 if (missingFor > 0) {
   const loc = process.argv[missingFor + 1];
   const path = join(localeDir, `${loc}.json`);
-  const cat = JSON.parse(readFileSync(path, 'utf8'));
+  // A locale that does not exist yet has nothing translated, so every key is
+  // missing. That is how translate.mjs asks for the full list.
+  const cat = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
   const todo = [...used].filter((k) => !(k in cat)).sort();
   console.log(JSON.stringify(Object.fromEntries(todo.map((k) => [k, ''])), null, 2));
   process.exit(0);
