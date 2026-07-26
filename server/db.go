@@ -324,39 +324,40 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "users", "totp_enabled", `totp_enabled INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate users.totp_enabled: %w", err)
 	}
-	// W96: Profilbild — ein hochgeladener /files/-Pfad, leer = Initiale+Farbe.
+	// W96: profile picture — an uploaded /files/ path, empty = initial+colour.
 	if err := ensureColumn(db, "users", "avatar", `avatar TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate users.avatar: %w", err)
 	}
-	// W96: ist die E-Mail dieses Kontos bestaetigt? Bestandskonten (per Setup,
-	// Einladung oder OAuth angelegt) gelten als bestaetigt (DEFAULT 1). Eine
-	// SELBST geaenderte E-Mail setzt das auf 0 — und OAuth meldet nur ueber
-	// bestaetigte E-Mails an, sonst koennte man sich per Selbstaenderung die
-	// kuenftige SSO-Identitaet eines Kollegen unter den Nagel reissen.
+	// W96: is this account's email confirmed? Existing accounts (created by
+	// setup, invitation or OAuth) count as confirmed (DEFAULT 1). An email
+	// changed BY THE ACCOUNT ITSELF sets this to 0 — and OAuth only signs in
+	// over confirmed addresses, or somebody could claim a colleague's future
+	// SSO identity by editing their own.
 	if err := ensureColumn(db, "users", "email_verified", `email_verified INTEGER NOT NULL DEFAULT 1`); err != nil {
 		return nil, fmt.Errorf("migrate users.email_verified: %w", err)
 	}
-	// W101: Ein Workspace hat einen Eigentümer, nicht nur Mitglieder mit Rollen
-	// — sonst gibt es keine Antwort auf "wem fällt er zu, wenn der Letzte geht"
-	// und er kann herrenlos zurückbleiben.
+	// W101: a workspace has an owner, not just members with roles — otherwise
+	// there is no answer to "who does it fall to when the last one leaves" and
+	// it can be left ownerless.
 	if err := ensureColumn(db, "workspaces", "owner_id", `owner_id TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.owner_id: %w", err)
 	}
-	// W102: Der persönliche Workspace eines Kontos — der Ort, an dem jemand
-	// arbeiten kann, ohne dass ihm jemand etwas freigeben muss. Getrennt von
-	// owner_id, weil auch ein geteilter Workspace einen Eigentümer hat.
+	// W102: an account's personal workspace — the place somebody can work
+	// without anyone having to grant them access. Kept apart from owner_id,
+	// because a shared workspace has an owner too.
 	if err := ensureColumn(db, "workspaces", "is_personal", `is_personal INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.is_personal: %w", err)
 	}
-	// W102: "bekommt jeder neue Nutzer". Bisher landete jeder Neuzugang still im
-	// ÄLTESTEN Workspace — eine Annahme, keine Entscheidung. Jetzt entscheidet
-	// der Owner, welche Workspaces (keiner, einer, mehrere) allen offenstehen.
+	// W102: "every new user gets this one". Until now every arrival landed
+	// quietly in the OLDEST workspace — an assumption, not a decision. Now the
+	// owner decides which workspaces (none, one, several) stand open to all.
 	if err := ensureColumn(db, "workspaces", "auto_join", `auto_join INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.auto_join: %w", err)
 	}
-	// W105: Konto stilllegen statt löschen. Beim Offboarding ist das der
-	// Normalfall — Anmeldung zu, Sitzungen beendet, aber alles bleibt
-	// zurechenbar und nichts verwaist. Löschen bleibt der bewusste Sonderfall.
+	// W105: deactivate an account instead of deleting it. For offboarding that
+	// is the normal case — sign-in closed, sessions ended, but everything stays
+	// attributable and nothing is orphaned. Deleting stays the deliberate
+	// exception.
 	if err := ensureColumn(db, "users", "disabled", `disabled INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate users.disabled: %w", err)
 	}

@@ -14,16 +14,16 @@ import (
 	"time"
 )
 
-// OAuth-Login (Welle 41): "Mit Google/Microsoft anmelden" als Produkt-Feature.
-// Klassischer OIDC Authorization-Code-Flow mit PKCE, ohne externe Library —
-// der Admin hinterlegt Client-ID/-Secret in den Instanz-Einstellungen, die
-// Login-Seite zeigt die Buttons automatisch.
+// OAuth login (wave 41): "sign in with Google/Microsoft" as a product
+// feature. A plain OIDC authorization-code flow with PKCE, no external
+// library — the admin stores client id/secret in the instance settings and the
+// login page shows the buttons automatically.
 //
-// Neue Konten folgen derselben Registrierungs-Policy wie das Passwort-Signup
-// (invite = nur bestehende Konten dürfen sich per OAuth anmelden, domain =
-// E-Mail-Allowlist, open = jeder). Die ID-Token-Claims stammen direkt vom
-// Token-Endpoint über TLS — deshalb ist das Parsen ohne eigene
-// Signaturprüfung hier in Ordnung.
+// New accounts follow the same registration policy as password signup (invite
+// = only existing accounts may sign in via OAuth, domain = email allowlist,
+// open = anybody). The ID-token claims come straight from the token endpoint
+// over TLS — which is why parsing them without verifying the signature
+// ourselves is acceptable here.
 
 type oauthProvider struct {
 	key         string
@@ -78,7 +78,7 @@ type oauthTx struct {
 
 func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
-// sha256Sum liefert die base64url-kodierte SHA-256-Summe (PKCE-Challenge).
+// sha256Sum returns the base64url-encoded SHA-256 sum (PKCE challenge).
 func sha256Sum(v string) string {
 	sum := sha256.Sum256([]byte(v))
 	return b64url(sum[:])
@@ -232,24 +232,24 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if pname == "google" && !verified {
-		loginErrorRedirect(w, r, "Diese Google-E-Mail ist nicht verifiziert.")
+		loginErrorRedirect(w, r, "This Google address is not verified.")
 		return
 	}
 
-	// Nur ueber eine BESTAETIGTE E-Mail anmelden. Eine per Selbstaenderung
-	// gesetzte (unbestaetigte) Adresse darf keine OAuth-Identitaet begruenden —
-	// sonst koennte man die kuenftige SSO-Anmeldung eines Kollegen kapern.
+	// Sign in only over a CONFIRMED email. An address set by the account
+	// itself (and therefore unconfirmed) must not establish an OAuth identity —
+	// otherwise somebody could hijack a colleague's future SSO sign-in.
 	var uid string
-	// disabled = 0: sonst besorgt sich ein stillgelegtes Konto ueber den
-	// SSO-Weg eine frische Sitzung, obwohl die alte beim Stilllegen endete.
+	// disabled = 0: otherwise a deactivated account would fetch itself a fresh
+	// session over the SSO route, although the old one ended on deactivation.
 	err = s.db.QueryRow(`SELECT id FROM users WHERE email = ? AND email_verified = 1 AND disabled = 0`, email).Scan(&uid)
 	if err != nil {
-		// Haelt ein UNbestaetigtes Konto diese Adresse, ist das ein Squatter:
-		// nicht anlegen (E-Mail ist UNIQUE) und nicht stillschweigend anmelden.
+		// If an UNconfirmed account holds this address, that is a squatter: do
+		// not create (email is UNIQUE) and do not quietly sign in.
 		var squat int
 		s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE email = ?`, email).Scan(&squat)
 		if squat > 0 {
-			loginErrorRedirect(w, r, "Diese E-Mail ist einem Konto zugeordnet, das sie nicht bestätigt hat. Bitte per Passwort anmelden oder den Administrator kontaktieren.")
+			loginErrorRedirect(w, r, "This address belongs to an account that has not confirmed it. Please sign in with a password or contact your administrator.")
 			return
 		}
 		uid, err = s.oauthCreateUser(email, name)

@@ -135,15 +135,15 @@ type commentJSON struct {
 	Body       string  `json:"body"`
 	CreatedAt  string  `json:"createdAt"`
 	ResolvedAt *string `json:"resolvedAt"`
-	// Farbe/Bild des Autors, damit dieselbe Person ueberall gleich aussieht —
-	// vorher hat die Kommentarspalte eine Farbe aus dem Namen gewuerfelt, die
-	// mit der echten Nutzerfarbe nichts zu tun hatte.
+	// The author's colour/picture, so the same person looks the same
+	// everywhere — the comment column used to roll a colour out of the name
+	// that had nothing to do with the real user colour.
 	AuthorColor  string `json:"authorColor"`
 	AuthorAvatar string `json:"authorAvatar"`
 }
 
 func (s *Server) pageComments(pageID string) ([]commentJSON, error) {
-	// LEFT JOIN: der Autor kann geloescht sein — der Kommentar bleibt.
+	// LEFT JOIN: the author may be deleted — the comment stays.
 	rows, err := s.db.Query(`SELECT c.id, c.block_id, c.author_id, c.author_name, c.body, c.created_at, c.resolved_at,
 		COALESCE(u.color, ''), COALESCE(u.avatar, '')
 		FROM comments c LEFT JOIN users u ON u.id = c.author_id
@@ -254,15 +254,15 @@ func (s *Server) handleDeleteComment(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]bool{"ok": true})
 }
 
-// handleCommentCounts liefert die Anzahl OFFENER Kommentare je Seite eines
-// Workspace, in einem Rutsch.
+// handleCommentCounts returns the number of OPEN comments per page of a
+// workspace, in one go.
 //
-// Warum ein eigener Endpunkt und nicht eine Spalte in pageMetaCols: die
-// Seitenliste ist der heisseste Pfad der ganzen Anwendung und wird bei jeder
-// Navigation geladen — ein JOIN ueber comments haengt dort dauerhaft dran,
-// obwohl die Zahl nur zwei Ansichten interessiert (Board und Seitenkopf).
-// Erledigte zaehlen nicht mit: ein abgehakter Faden ist keine offene Aufgabe
-// mehr, und ein Zaehler, der nie kleiner wird, wird ignoriert.
+// Why its own endpoint and not a column in pageMetaCols: the page list is the
+// hottest path in the whole application and is loaded on every navigation — a
+// JOIN over comments would hang off it permanently, even though the number
+// interests only two views (board and page header). Resolved ones do not
+// count: a ticked-off thread is no longer an open task, and a counter that
+// never goes down gets ignored.
 func (s *Server) handleCommentCounts(w http.ResponseWriter, r *http.Request) {
 	userID := requestUser(r).ID
 	ws := r.URL.Query().Get("workspaceId")
@@ -292,11 +292,11 @@ func (s *Server) handleCommentCounts(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, it)
 	}
-	rows.Close() // erst leeren — eine einzige DB-Verbindung
+	rows.Close() // drain first — a single DB connection
 
 	out := map[string]int{}
 	for _, it := range list {
-		// Private Seiten anderer duerfen sich nicht ueber einen Zaehler verraten.
+		// Other people's private pages must not give themselves away through a counter.
 		if s.canRead(userID, it.id) {
 			out[it.id] = it.n
 		}
