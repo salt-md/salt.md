@@ -199,9 +199,9 @@ look at it, not read about it: build, run the gate, roll out, then report.
 commits are fine. Name the address in the report either way — see the table
 above for why.
 
-Branch `i18n-groundwork` holds the English-first conversion. Frontend, server
-messages and the four permission files (`roles`, `lifecycle_account`, `users`,
-`workspaces`) are done.
+**1.4.0** is the English-first release: the frontend, the server messages and
+the four permission files (`roles`, `lifecycle_account`, `users`,
+`workspaces`). It is merged into `public` and pushed.
 
 Still German: ~740 comment lines in 31 Go files — largest are `ingest.go` (76),
 `mcp_pages.go` (59), `mcp_schema.go` (58), `searchindex.go` (50), `pages.go`

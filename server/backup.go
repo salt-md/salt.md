@@ -15,9 +15,12 @@ import (
 
 // Version is the app/API version. Bump on any client/server contract change so
 // a stale client can detect a mismatch (audit Q42).
-// Version wird beim Release-Build per -ldflags "-X salt/server.Version=..."
-// auf den Git-Tag gesetzt; lokal bleibt es der Standardwert.
-var Version = "1.3.1"
+// A release build sets it from the git tag via -ldflags
+// "-X salt/server.Version=..."; locally it stays at the default below.
+// The frontend is stamped from the same string (SALT_VERSION → vite define),
+// because two hand-kept numbers drift and the mismatch banner then fires
+// forever.
+var Version = "1.4.0"
 
 // Backup writes a consistent gzip'd tar of the workspace: the SQLite DB
 // (snapshotted with VACUUM INTO so WAL contents are included) plus all uploads.
