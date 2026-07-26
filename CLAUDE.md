@@ -184,16 +184,29 @@ picker.
 The test box answers on **port 80**, production on **8420** — a bare
 `10.10.20.20` in a command is a strong hint that something is aimed wrong.
 
-`10.10.20.20` is production and is **never hand-deployed to**. It is built by
-`git pull` on the box, on the owner's word, and by nobody else. It holds 659
-real pages. Everything below about it is what an accidental deploy taught us —
-it is documentation of the terrain, not an invitation.
+`10.10.20.20` is production and is **never hand-deployed to**, and **nothing is
+built on it**. The path is:
+
+```
+local  →  test server (172.16.0.115)  →  git push  →  GitHub Actions
+       →  ghcr.io/salt-md/salt.md:<version>  →  docker pull on production
+```
+
+Pushing a `v*` tag is what makes the package: `.github/workflows/docker.yml`
+builds it and pushes `ghcr.io/salt-md/salt.md:<ver>` **and** `:latest`. It takes
+about two minutes — check with `gh run list`. Production then pulls that exact
+image. It holds 659 real pages.
+
+**Do not run `docker build` there.** It was done once and it is the wrong shape:
+it makes the box a build host, it produces an image nobody else has, and the
+resulting tag is a claim rather than a published artefact. If you catch yourself
+copying source to production, stop — the answer is a tag.
 
 - Docker container `salt`, named volume `salt-data` → `/data`. Root SSH by key.
-- **No DNS, but routing works.** `docker pull`/`docker build` cannot reach a
-  registry and `cloudflared` (which lives in the volume at `/data/bin`, not in
-  the image) loop-fails — both because the nameserver answers nothing, not
-  because the box is offline. Build FROM a locally present image.
+- **DNS works** (nameserver `10.10.20.1`; `ghcr.io` resolves, `docker pull`
+  succeeds). It did not for a while, and this file claimed for longer that it
+  never does — which is what sent one instance down the build-on-production
+  road. Check, do not believe the note.
 - It is **not** the host behind `salt.sevensecure.de` — it cannot be, it has no
   internet. **The test box is**: LXC 115 logs `tunnel: verbunden (token)` on
   start, so anything deployed there is immediately public. "Test server" names
@@ -222,6 +235,29 @@ ssh root@10.10.20.20 'D=/var/lib/docker/volumes/salt-data/_data
 files stay readable by the `salt` user. A restore worked cleanly: proof is the
 **absence** of a `search index: neu aufgebaut` line at startup — the old binary
 recognising its own schema.
+
+The whole production deploy, once the tag's build has gone green:
+
+```bash
+ssh root@10.10.20.20 'docker pull ghcr.io/salt-md/salt.md:1.5.2'   # nothing else changes
+ssh root@10.10.20.20 'docker stop salt \
+  && tar czf /root/salt-backups/salt-data-$(date +%Y%m%d-%H%M%S)-vor-1.5.2.tar.gz \
+       -C /var/lib/docker/volumes/salt-data/_data . \
+  && docker rm salt \
+  && docker run -d --name salt --restart unless-stopped \
+       -p 8420:8420 -v salt-data:/data ghcr.io/salt-md/salt.md:1.5.2'
+```
+
+The pull is free — it changes nothing until the container is replaced, so it can
+always be done ahead of time. The stop is the only moment of downtime and it is
+also the only moment a clean volume backup is possible; do both in one command.
+**`docker stop` on that box is refused by the permission layer** — the owner
+runs that line. That is the design, not an obstacle to route around.
+
+**Verify by behaviour, never by the version string.** A mislabelled image reads
+exactly like a correct one. Pick something the new code has and the old does not
+— a route that answers `401` instead of the SPA fallback, a marker in the served
+bundle — and check that.
 
 **Migrations are one-way and run on start.** Booting a main-based build against
 the 1.0.2 database migrated it across three releases at once and rebuilt the
