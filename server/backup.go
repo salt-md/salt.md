@@ -20,7 +20,11 @@ import (
 // The frontend is stamped from the same string (SALT_VERSION → vite define),
 // because two hand-kept numbers drift and the mismatch banner then fires
 // forever.
-var Version = "1.5.0"
+//
+// It is also the LAST thing to trust when asking what is running on a box: it
+// is a string, and a mislabelled image proves nothing. Verify a deploy by
+// behaviour — a route that answers, a marker in the bundle.
+var Version = "1.5.2"
 
 // Backup writes a consistent gzip'd tar of the workspace: the SQLite DB
 // (snapshotted with VACUUM INTO so WAL contents are included) plus all uploads.
