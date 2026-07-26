@@ -7001,3 +7001,46 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
     transform 0.12s ease-out,
     box-shadow 0.12s ease-out;
 }
+
+/* ---- Language and time (W112) ---------------------------------------------
+   The preview is the point of the dialog, not decoration: a moment and a
+   calendar date side by side, so the difference between them is visible while
+   you are choosing. Whoever sets a timezone can see for themselves that the
+   deadline did not move. */
+.lt-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 14px 0 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-subtle, transparent);
+}
+.lt-preview > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.lt-preview strong {
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+.lt-preview-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.lt-preview .dialog-hint {
+  margin: 0;
+  font-size: 11px;
+}
+/* On a phone the two sit under each other — side by side they would each get
+   about 80px and wrap mid-date. */
+@media (max-width: 560px) {
+  .lt-preview {
+    grid-template-columns: 1fr;
+  }
+}

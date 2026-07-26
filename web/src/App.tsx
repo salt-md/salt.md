@@ -19,7 +19,7 @@ import { announceModal } from './modal';
 import { toast } from './toast';
 import Logo from './Logo';
 import ThemeSwitch, { type ThemePref } from './ThemeSwitch';
-import { plural, t } from './i18n';
+import { applyPrefs, plural, t } from './i18n';
 
 /** Schriftwahl: 'system' laesst alles wie bisher, 'brand' schaltet die
  *  mitgelieferten Inter- und JetBrains-Mono-Schriften ein. */
@@ -303,6 +303,11 @@ export default function App() {
       .me()
       .then((m) => {
         setMe(m);
+        // The account decides the language and time settings; initLocale only
+        // had the localStorage cache to go on, which is a copy and may be
+        // stale — somebody who changed the language on their phone gets it
+        // here too, one frame later (W112).
+        if (m.authenticated && m.prefs) void applyPrefs(m.prefs);
         if (m.version && m.version !== BUILD_VERSION) {
           toast(t('A new version is available — reload the page'));
         }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { setFormatLocale } from './format';
+import { setFormatLocale, setFormatPrefs } from './format';
 
 // Translation. The English source text IS the key:
 //
@@ -90,16 +90,70 @@ export function getLocale(): string {
 
 // ---- switching ----
 
-/** Pick a language: an explicit choice wins, then the browser's preference,
- *  then English. */
-function preferred(): string {
-  const saved = localStorage.getItem('salt-locale');
-  if (saved && saved in LOCALES) return saved;
+/** The account's language and time preferences (W112).
+ *
+ *  Every field is optional and empty means AUTOMATIC — follow the browser,
+ *  which is what happened before there was a setting. See server/prefs.go for
+ *  why the absence of a decision and the automatic mode are one state. */
+export type Prefs = {
+  language?: string;
+  region?: string;
+  timeZone?: string;
+  clock?: string;
+  weekStart?: string;
+};
+
+let prefs: Prefs = {};
+
+export function getPrefs(): Prefs {
+  return prefs;
+}
+
+/** The cache key. It holds a COPY of the account's settings, never the truth:
+ *  the account is the truth (see prefs.go). This exists so the first frame
+ *  after a reload is not briefly in the wrong language while /api/me is still
+ *  in flight — and so the login screen, where there is no account yet, comes up
+ *  the way this person last had it. */
+const CACHE = 'salt-prefs';
+
+function cached(): Prefs {
+  try {
+    const raw = localStorage.getItem(CACHE);
+    if (raw) return JSON.parse(raw) as Prefs;
+  } catch {
+    /* a hand-edited or truncated cache is not worth a broken app */
+  }
+  // Migration from the single key this replaces. Somebody who chose German
+  // before W112 keeps German instead of being silently reset to the browser.
+  const old = localStorage.getItem('salt-locale');
+  return old && old in LOCALES ? { language: old } : {};
+}
+
+/** Which language to translate into: the account's choice, else the browser's
+ *  preference, else English. */
+function preferred(p: Prefs): string {
+  if (p.language && p.language in LOCALES) return p.language;
   for (const tag of navigator.languages ?? [navigator.language]) {
     const base = tag.split('-')[0];
     if (base in LOCALES) return base;
   }
   return 'en';
+}
+
+/** Take the account's settings and show them. Called once /api/me has answered,
+ *  and again whenever the settings dialog saves.
+ *
+ *  Writes the cache as a side effect, so the next first paint already matches
+ *  and the change survives a reload even before /api/me returns. */
+export async function applyPrefs(next: Prefs): Promise<void> {
+  prefs = next ?? {};
+  try {
+    localStorage.setItem(CACHE, JSON.stringify(prefs));
+    localStorage.removeItem('salt-locale');
+  } catch {
+    /* private mode, quota — the account still has the settings */
+  }
+  await setLocale(preferred(prefs));
 }
 
 /** The tag to FORMAT with, which is not the same as the language to translate
@@ -124,7 +178,7 @@ function formattingTag(lang: string): string {
 
 /** Load a language and tell everyone. English needs no catalog — its keys are
  *  already the text. */
-export async function setLocale(next: string, remember = true): Promise<void> {
+export async function setLocale(next: string): Promise<void> {
   if (!(next in LOCALES)) next = 'en';
   const path = `./locales/${next}.json`;
   let loaded: Catalog = {};
@@ -139,8 +193,11 @@ export async function setLocale(next: string, remember = true): Promise<void> {
   }
   locale = next;
   catalog = loaded;
-  if (remember) localStorage.setItem('salt-locale', next);
-  setFormatLocale(formattingTag(next));
+  // Region beats language for FORMATTING: somebody may read English and still
+  // want 18.07.2026. Unset, the browser's own regional variant decides, which
+  // is what formattingTag has always done.
+  setFormatLocale(prefs.region || formattingTag(next));
+  setFormatPrefs(prefs);
   applyDocumentLanguage(next);
   listeners.forEach((fn) => fn());
 }
@@ -165,9 +222,14 @@ function applyDocumentLanguage(next: string) {
 }
 
 /** Called once before the first render, so a German user never sees a flash of
- *  English while the catalog is still in flight. */
+ *  English while the catalog is still in flight.
+ *
+ *  Runs off the CACHE, because at this point nobody has signed in yet and the
+ *  account's settings are still a request away. applyPrefs corrects it a moment
+ *  later if they differ. */
 export function initLocale(): Promise<void> {
-  return setLocale(preferred(), false);
+  prefs = cached();
+  return setLocale(preferred(prefs));
 }
 
 // ---- React ----

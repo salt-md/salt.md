@@ -110,6 +110,9 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m := s.mux
 	m.HandleFunc("GET /api/health", s.handleHealth)
 	m.HandleFunc("GET /api/me", s.handleMe)
+	// Language and time preferences. sessionOnly: an API token is a key to
+	// CONTENT, and this configures the account.
+	m.HandleFunc("PUT /api/me/prefs", s.auth(s.sessionOnly(s.handlePutPrefs)))
 	m.HandleFunc("POST /api/setup", s.handleSetup)
 	m.HandleFunc("POST /api/login", s.handleLogin)
 	m.HandleFunc("POST /api/logout", s.handleLogout)

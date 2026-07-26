@@ -9,7 +9,8 @@ import { useExclusiveModal } from '../modal';
 import { formatDay, formatMoment } from '../format';
 import { plural, t } from '../i18n';
 import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSettings';
-import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type } from 'lucide-react';
+import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type, Languages } from 'lucide-react';
+import { LanguageTimeModal } from './LanguageTime';
 
 export function Avatar({ user, size = 22 }: { user: User; size?: number }) {
   // With an uploaded picture the circle shows the picture, otherwise the
@@ -228,7 +229,7 @@ interface Props {
 
 export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, notesMode, onToggleNotesMode, fontPref = 'brand', onSetFont }: Props) {
   const [open, setOpen] = useState(false);
-  const [modal, setModal] = useState<'users' | 'tokens' | 'activity' | 'twofa' | 'settings' | 'calendar' | 'profile' | null>(null);
+  const [modal, setModal] = useState<'users' | 'tokens' | 'activity' | 'twofa' | 'settings' | 'calendar' | 'profile' | 'langtime' | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -268,6 +269,9 @@ export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, 
           </button>
           <button onClick={() => { setOpen(false); setModal('twofa'); }}>
             <ShieldCheck size={16} /> {t('Two-factor (2FA)')}
+          </button>
+          <button onClick={() => { setOpen(false); setModal('langtime'); }}>
+            <Languages size={16} /> {t('Language and time')}
           </button>
           {onToggleNotesMode && (
             <button onClick={onToggleNotesMode} title={t('Note list as a middle column (Bear style)')}>
@@ -318,6 +322,7 @@ export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, 
       {modal === 'activity' && <ActivityModal onClose={() => setModal(null)} />}
       {modal === 'twofa' && <TwoFAModal onClose={() => setModal(null)} />}
       {modal === 'calendar' && <CalendarSubModal onClose={() => setModal(null)} />}
+      {modal === 'langtime' && <LanguageTimeModal onClose={() => setModal(null)} />}
       {modal === 'settings' && <AdminSettingsModal onClose={() => setModal(null)} />}
     </div>
   );

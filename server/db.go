@@ -362,6 +362,21 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "users", "disabled", `disabled INTEGER NOT NULL DEFAULT 0`); err != nil {
 		return nil, fmt.Errorf("migrate users.disabled: %w", err)
 	}
+	// W112: language and time preferences, per account rather than per browser.
+	// Empty means AUTOMATIC — follow the browser, which is what happened before
+	// there was a setting and stays the default. prefs.go says why the absence
+	// of a decision and the automatic mode share one representation.
+	for _, c := range [][2]string{
+		{"pref_language", `pref_language TEXT NOT NULL DEFAULT ''`},
+		{"pref_region", `pref_region TEXT NOT NULL DEFAULT ''`},
+		{"pref_timezone", `pref_timezone TEXT NOT NULL DEFAULT ''`},
+		{"pref_clock", `pref_clock TEXT NOT NULL DEFAULT ''`},
+		{"pref_week_start", `pref_week_start TEXT NOT NULL DEFAULT ''`},
+	} {
+		if err := ensureColumn(db, "users", c[0], c[1]); err != nil {
+			return nil, fmt.Errorf("migrate users.%s: %w", c[0], err)
+		}
+	}
 	// Record the schema/app version so an operator (and future migrations) can
 	// see what a data dir was last written by. Additive, idempotent.
 	db.Exec(`INSERT INTO schema_meta (key, value) VALUES ('version', ?)

@@ -29,7 +29,7 @@ interface Props {
   onWorkspacesChanged: () => void;
   user: User;
   onUserChanged?: (u: User) => void;
-  // Instanz erlaubt Nicht-Admins das Anlegen von Workspaces? (W97)
+  // Does the instance let non-admins create workspaces? (W97)
   canCreateWorkspace?: boolean;
   currentId: string | null;
   open: boolean;

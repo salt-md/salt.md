@@ -266,10 +266,19 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u := s.currentUser(r)
+	// Preferences travel here and NOT on the user object: that object also goes
+	// out in member lists and over MCP, and somebody else's timezone is not the
+	// workspace's business. The zero value is automatic, so an unauthenticated
+	// answer needs no special case.
+	var prefs userPrefs
+	if u != nil {
+		prefs = s.loadPrefs(u.ID)
+	}
 	writeJSON(w, map[string]any{
 		"setupRequired":       n == 0,
 		"authenticated":       u != nil,
 		"user":                u,
+		"prefs":               prefs,
 		"version":             Version,
 		"allowUserWorkspaces": s.loadSettings().AllowUserWorkspaces,
 	})

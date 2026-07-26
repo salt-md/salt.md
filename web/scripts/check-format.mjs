@@ -98,6 +98,78 @@ if (process.env.SALT_FMT_BUNDLE) {
 
   fmt.setFormatLocale('en-GB');
 
+  // ---- Preferences (W112) ----
+  //
+  // The whole point of the timezone setting is that it moves MOMENTS. The whole
+  // point of this block is that it moves nothing else. A calendar day is not an
+  // instant, and a viewer who sets their zone to Auckland has not changed when
+  // a contract expires.
+  const FAR_EAST = 'Pacific/Kiritimati'; // UTC+14, the furthest ahead there is
+  const FAR_WEST = 'Pacific/Midway'; // UTC-11, the furthest behind
+
+  for (const z of [FAR_EAST, FAR_WEST]) {
+    fmt.setFormatPrefs({ timeZone: z });
+    // THE assertion this block exists for.
+    check(`formatDay ignores ${z}`, fmt.formatDay('2026-07-18', 'date'), '18/07/2026');
+    check(`formatDay year edge ignores ${z}`, fmt.formatDay('2026-01-01', 'date'), '01/01/2026');
+    check(`formatDay timed ignores ${z}`, fmt.formatDay('2026-07-18T14:30', 'date'), '18/07/2026, 14:30');
+    check(`formatMonth ignores ${z}`, fmt.formatMonth(2026, 6, 'short'), 'Jul 26');
+    // today() is the exception, and deliberately so: "what day is it now" is a
+    // question about an instant. Checked against an independent computation.
+    const want = new Intl.DateTimeFormat('en-CA', {
+      timeZone: z,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    check(`today() follows ${z}`, fmt.today(), want);
+    // And the two have to agree with each other, or "due today" lies.
+    check(`daysUntil(today) is 0 in ${z}`, String(fmt.daysUntil(fmt.today())), '0');
+  }
+
+  // A moment DOES move — that is the setting doing its job. Same instant, two
+  // zones, two clock faces.
+  fmt.setFormatPrefs({ timeZone: FAR_EAST });
+  const east = fmt.formatMoment('2026-07-18T12:00:00Z', 'time');
+  fmt.setFormatPrefs({ timeZone: FAR_WEST });
+  const west = fmt.formatMoment('2026-07-18T12:00:00Z', 'time');
+  check('a moment follows the zone setting', String(east !== west), 'true');
+
+  // A stored zone the browser does not know must degrade, not explode. The
+  // server checks only the SHAPE of it (no tzdata in the binary, see
+  // prefs.go), so this really can arrive.
+  fmt.setFormatPrefs({ timeZone: 'Mars/Olympus' });
+  check('unknown zone still formats', String(fmt.formatMoment('2026-07-18T12:00:00Z', 'time').length > 0), 'true');
+  check('unknown zone leaves days alone', fmt.formatDay('2026-07-18', 'date'), '18/07/2026');
+
+  // Clock: 12 or 24 hours, whatever the region would have said on its own.
+  fmt.setFormatLocale('en-GB'); // 24-hour by default
+  fmt.setFormatPrefs({ clock: '12' });
+  check('clock 12 overrides a 24-hour region', String(/[ap]m/i.test(fmt.formatMoment('2026-07-18T14:30:00Z', 'time'))), 'true');
+  fmt.setFormatLocale('en-US'); // 12-hour by default
+  fmt.setFormatPrefs({ clock: '24' });
+  check('clock 24 overrides a 12-hour region', String(/[ap]m/i.test(fmt.formatMoment('2026-07-18T14:30:00Z', 'time'))), 'false');
+
+  // Week start: the calendar grid reads firstWeekday(), so an override has to
+  // move the column headers with it or the whole month shifts by a day.
+  fmt.setFormatLocale('en-US'); // Sunday by default
+  fmt.setFormatPrefs({ weekStart: 'mon' });
+  check('weekStart mon overrides a Sunday region', String(fmt.firstWeekday()), '1');
+  check('weekStart moves the headers too', fmt.weekdayNames()[0], 'Mon');
+  fmt.setFormatPrefs({ weekStart: 'sat' });
+  check('weekStart sat', String(fmt.firstWeekday()), '6');
+  fmt.setFormatLocale('de-DE'); // Monday by default
+  fmt.setFormatPrefs({ weekStart: 'sun' });
+  check('weekStart sun overrides a Monday region', String(fmt.firstWeekday()), '0');
+
+  // Everything unset is automatic again — the same answers as before any of
+  // this ran, which is what makes "Automatic" a real state and not a label.
+  fmt.setFormatPrefs({});
+  fmt.setFormatLocale('en-GB');
+  check('automatic restores the region clock', String(/[ap]m/i.test(fmt.formatMoment('2026-07-18T14:30:00Z', 'time'))), 'false');
+  check('automatic restores the region week', String(fmt.firstWeekday()), '1');
+  check('automatic today() is the host day', fmt.today(), localToday);
+
   process.stdout.write(JSON.stringify({ out, legacy, moment }));
   process.exit(0);
 }

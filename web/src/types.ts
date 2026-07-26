@@ -1,3 +1,5 @@
+import type { Prefs } from './i18n';
+
 export interface PageMeta {
   id: string;
   parentId: string | null;
@@ -77,8 +79,11 @@ export interface Me {
   authenticated: boolean;
   user: User | null;
   version: string;
-  // Duerfen Nicht-Admins eigene Workspaces anlegen? (Instanz-Setting, W97)
+  // May non-admins create workspaces of their own? (instance setting, W97)
   allowUserWorkspaces?: boolean;
+  /** Language and time preferences of this account (W112). Empty fields mean
+   *  automatic — see server/prefs.go. */
+  prefs?: Prefs;
 }
 
 export interface Revision {

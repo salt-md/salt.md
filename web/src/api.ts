@@ -11,6 +11,7 @@ import type {
   Workspace,
 } from './types';
 import { t } from './i18n';
+import type { Prefs } from './i18n';
 import { formatBytes } from './format';
 import { serverMessage } from './serverErrors';
 
@@ -78,6 +79,10 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => req<Me>('/api/me'),
+  // Language and time preferences. Its own endpoint, not a field on the user
+  // PATCH: that route lets an admin edit somebody else, and nobody should be
+  // able to set another person's clock format (see server/prefs.go).
+  putPrefs: (p: Prefs) => req<Prefs>('/api/me/prefs', { method: 'PUT', body: JSON.stringify(p) }),
   setup: (name: string, email: string, password: string) =>
     req<User>('/api/setup', { method: 'POST', body: JSON.stringify({ name, email, password }) }),
   login: (email: string, password: string, code?: string) =>

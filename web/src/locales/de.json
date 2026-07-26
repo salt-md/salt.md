@@ -696,5 +696,20 @@
   "does over MCP.": "es über MCP tut.",
   "Every row carries a stable Markdown link — copy": "Jede Zeile trägt einen stabilen Markdown-Link — kopiere",
   "and it stays searchable Markdown, wherever it lives.": "und alles bleibt durchsuchbares Markdown, egal wo es liegt.",
-  "A look inside “{name}” by the instance owner. Emergency access allows reading only, expires after two hours, and can be ended early at any time.": "Einsicht in „{name}“ durch den Instanz-Owner. Notfallzugriff erlaubt nur Lesen, läuft nach zwei Stunden ab und lässt sich jederzeit vorzeitig beenden."
+  "A look inside “{name}” by the instance owner. Emergency access allows reading only, expires after two hours, and can be ended early at any time.": "Einsicht in „{name}“ durch den Instanz-Owner. Notfallzugriff erlaubt nur Lesen, läuft nach zwei Stunden ab und lässt sich jederzeit vorzeitig beenden.",
+  "12-hour": "12 Stunden",
+  "24-hour": "24 Stunden",
+  "A calendar date never moves, whatever the time zone says.": "Ein Kalendertag verschiebt sich nie, was die Zeitzone auch sagt.",
+  "A deadline": "Ein Termin",
+  "A moment": "Ein Zeitpunkt",
+  "Automatic ({value})": "Automatisch ({value})",
+  "Automatic follows this browser and is right most of the time. Set a value yourself when it is not — a laptop on the wrong continent, or a language you read but do not want your dates in.": "Automatisch folgt diesem Browser und stimmt meistens. Stell etwas von Hand ein, wenn nicht — ein Rechner auf dem falschen Kontinent, oder eine Sprache, die du liest, in der du aber keine Datumsangaben willst.",
+  "Clock": "Uhrzeit",
+  "Date and number format": "Datums- und Zahlenformat",
+  "Language": "Sprache",
+  "Language and time": "Sprache und Zeit",
+  "Saving…": "Wird gespeichert …",
+  "Shown in your time zone.": "In deiner Zeitzone angezeigt.",
+  "Time zone": "Zeitzone",
+  "Week starts on": "Woche beginnt am"
 }

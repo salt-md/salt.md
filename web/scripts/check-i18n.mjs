@@ -260,8 +260,14 @@ for (const file of files) {
 // The rule is the same crude one the Go side uses (server/language_test.go): an
 // umlaut, or two words from a list with no English homographs. Plus the
 // ae/oe/ue spellings, because much of the German here was written that way.
+//
+// The trailing boundary is `(?![\w])` and NOT `(?![\w-])`. A hyphen has to be
+// allowed to follow, because German compounds are written with one — the first
+// version of this rule read straight past "Nicht-Admins" and "Instanz-Setting"
+// and reported types.ts as clean. A LEADING hyphen or word character still
+// blocks the match, so `--border-color` and `.header-bar` stay quiet.
 const GERMAN_WORDS =
-  /(?<![\w-])(und|nicht|wird|werden|sind|eine|einen|einem|einer|kann|muss|soll|sollen|beim|des|dem|der|das|den|für|fuer|aus|nach|über|ueber|ohne|damit|weil|wenn|dann|noch|nur|schon|sich|hier|aber|oder|bitte|kein|keine|wurde|wurden|diese|dieser|dieses|jeder|jede|mehr|sehr|immer|wieder|zwischen|während|waehrend|deshalb|sonst|bereits|jetzt|etwas|nichts|alles|ihre|seine|unser|gibt|geben|machen|macht|lassen|bleibt|steht|liegt|dabei|darauf|dafür|dafuer|dadurch|daher|sowie|zum|zur|vom|ist|sein|haben|hoehe|höhe|breite|farbe|zeile|zeilen|spalte|spalten)(?![\w-])/giu;
+  /(?<![\w-])(und|nicht|wird|werden|sind|eine|einen|einem|einer|kann|muss|soll|sollen|beim|des|dem|der|das|den|für|fuer|aus|nach|über|ueber|ohne|damit|weil|wenn|dann|noch|nur|schon|sich|hier|aber|oder|bitte|kein|keine|wurde|wurden|diese|dieser|dieses|jeder|jede|mehr|sehr|immer|wieder|zwischen|während|waehrend|deshalb|sonst|bereits|jetzt|etwas|nichts|alles|ihre|seine|unser|gibt|geben|machen|macht|lassen|bleibt|steht|liegt|dabei|darauf|dafür|dafuer|dadurch|daher|sowie|zum|zur|vom|ist|sein|haben|hoehe|höhe|breite|farbe|zeile|zeilen|spalte|spalten|duerfen|koennen|muessen|gehoert|eigene|eigenen|jeweils|nichts)(?![\w])/giu;
 const UMLAUT = /[äöüßÄÖÜ]/;
 
 function readsGerman(line) {
