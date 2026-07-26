@@ -79,8 +79,10 @@ var mcpTools = []map[string]any{
 			"required":   []string{"page_id"}},
 	},
 	{
-		"name":        "create_page",
-		"description": "Create a new page, optionally under a parent and with initial Markdown content.",
+		"name": "create_page",
+		"description": "Create a new page, optionally under a parent and with initial Markdown content. " +
+			"Cover, tags and description can be set right here — a page created without them is a page " +
+			"nobody goes back to finish.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"title":        map[string]any{"type": "string"},
@@ -89,8 +91,18 @@ var mcpTools = []map[string]any{
 				"markdown":     map[string]any{"type": "string", "description": "Optional initial content as Markdown"},
 				"icon":         map[string]any{"type": "string", "description": "Optional emoji, \"lucide:Name\", \"mdi:Name\" or image URL"},
 				"properties":   map[string]any{"type": "object", "description": "Typed property values when creating a database row — same shape as set_properties. Call get_schema first for property ids."},
+				"cover":        map[string]any{"type": "string", "description": coverHint},
+				"description":  map[string]any{"type": "string", "description": "Optional one-line summary, shown under the title."},
+				"tags":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Optional tags. Call list_tags first and reuse what exists instead of inventing near-duplicates."},
 			},
 			"required": []string{"title"}},
+	},
+	{
+		"name": "list_cover_presets",
+		"description": "The page covers the interface itself offers, ready to pass to create_page or update_page. " +
+			"Use one of these rather than inventing a gradient: they are picked to keep a page emoji legible " +
+			"and to look like the rest of the instance. Read-only.",
+		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
 	},
 	{
 		"name":        "append_markdown",
@@ -103,8 +115,10 @@ var mcpTools = []map[string]any{
 			"required": []string{"page_id", "markdown"}},
 	},
 	{
-		"name":        "update_page",
-		"description": "Update a page's metadata: title, icon, cover, description, tags and visibility. Only the fields you pass are changed. Tags replace the whole list — call list_tags first and reuse existing tags instead of inventing near-duplicates.",
+		"name": "update_page",
+		"description": "Update a page's metadata: title, icon, cover, description, tags and visibility. " +
+			"Only the fields you pass are changed. Tags replace the whole list — call list_tags first and " +
+			"reuse existing tags instead of inventing near-duplicates. Cover: " + coverHint,
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"page_id":     map[string]any{"type": "string"},
@@ -818,6 +832,15 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 				id, parent, args.Title, args.Icon, content, pos, ts, ts, workspaceID, userID); err != nil {
 				return "", err
 			}
+			// Cover, description and tags in the same call, for the same reason
+			// the properties are: a second call is one nobody makes. Routed
+			// through mcpUpdatePageMeta so the cover is validated and the tags
+			// normalised exactly as they are everywhere else.
+			if args.Cover != "" || args.Description != "" || args.Tags != nil {
+				if _, err := s.mcpUpdatePageMeta(id, "", "", args.Cover, args.Description, "", args.Tags); err != nil {
+					return "", fmt.Errorf("page created (%s) but its metadata failed: %w", id, err)
+				}
+			}
 			// Set the properties in the same call: otherwise a database row is
 			// only complete after a second call, and between the two a half-finished
 			// row sits in the database.
@@ -831,6 +854,12 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			}
 			s.pagesChanged()
 			return fmt.Sprintf("Created page %q with id %s (path: /p/%s)", args.Title, id, id), nil
+		case "list_cover_presets":
+			out, err := json.Marshal(map[string]any{"covers": coverPresets})
+			if err != nil {
+				return "", err
+			}
+			return string(out), nil
 		case "append_markdown":
 			if err := s.appendMarkdownToPage(args.PageID, args.Markdown); err != nil {
 				return "", err

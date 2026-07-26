@@ -37,6 +37,16 @@ func (s *Server) mcpUpdatePageMeta(pageID, title, icon, cover, description, visi
 		add("icon", icon, "icon")
 	}
 	if cover != "" {
+		// The same check the REST handler makes (see validCover in pages.go).
+		// It was missing here, and the gap was not cosmetic: anything that does
+		// not start with "gradient:" is rendered as url(<value>), so a cover set
+		// over MCP could point at a foreign host and every viewer of that page
+		// would fetch from it — a beacon, planted by an agent, in a document
+		// other people open.
+		if !validCover(cover) {
+			return "", fmt.Errorf("invalid cover — use %q or an uploaded %q path; an external URL is refused because every viewer of the page would fetch from that host",
+				"gradient:linear-gradient(...)", "/files/...")
+		}
 		add("cover", cover, "cover")
 	}
 	if description != "" {
