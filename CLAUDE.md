@@ -42,12 +42,15 @@ server/*.go          51 files, one concern each
                      no SPA and no JS, so no t() reaches it
   oauth.go           OIDC sign-in; errors travel as codes in the query string
   language_test.go   fails the build on German in a .go file
+  prefs.go           per-account language/time settings; '' means automatic
   mcp*.go            MCP tools
 web/src/
   i18n.ts            t(), plural(), locale switching
   format.ts          THE ONLY place that formats dates, numbers, sorting
   serverErrors.ts    server error code → translated message
-  locales/de.json    German catalog (686 entries)
+  components/LanguageTime.tsx  the settings dialog (language, region, zone,
+                     clock, week start)
+  locales/de.json    German catalog (701 entries)
   scripts/           check-i18n.mjs, check-format.mjs, translate.mjs
 docs/search-and-ai.md  design paper: local semantic search, stages 0-2
 ```
@@ -140,8 +143,13 @@ Shell suites live in the session scratchpad, not the repo: `token.sh` (18),
 throwaway port. **Assert on error codes, never on message text** — the text is
 English now and translated in the browser.
 
-`check-format.mjs` runs `format.ts` under six timezones (84 assertions),
-including that the calendar's first weekday agrees with its column headers.
+`check-format.mjs` runs `format.ts` under six timezones (228 assertions),
+including that the calendar's first weekday agrees with its column headers, and
+— since W112 — that **`formatDay` ignores the timezone setting entirely**. That
+last one is the load-bearing assertion of the whole settings feature: break it
+and a deadline of `2026-01-01` renders as `2025-12-31` for anybody who set a
+western zone. Two builders keep it honest: `dtf()` never carries a zone,
+`dtfZoned()` always does, and nothing that formats a DAY may call the second.
 
 ## Adding a language
 
@@ -160,7 +168,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.3-dev |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.0-dev |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -234,7 +242,7 @@ the ssh call. It has happened twice. The version is in the startup log
 Ship it like this (roughly six minutes end to end):
 
 ```bash
-cd web && SALT_VERSION=1.4.2-dev npm run build    # the gate runs inside this
+cd web && SALT_VERSION=1.5.0-dev npm run build    # the gate runs inside this
 cd .. && tar czf /tmp/salt-src.tgz --exclude='web/node_modules' --exclude='.git' \
   main.go go.mod go.sum Makefile server web/dist
 scp /tmp/salt-src.tgz root@172.16.0.10:/tmp/
@@ -243,8 +251,8 @@ ssh root@172.16.0.10 'pct exec 115 -- sh -c "
   rm -rf /tmp/saltbuild && mkdir -p /tmp/saltbuild
   tar xzf /tmp/salt-src.tgz -C /tmp/saltbuild && cd /tmp/saltbuild
   CGO_ENABLED=0 go build -trimpath \
-    -ldflags=\"-s -w -X salt/server.Version=1.4.2-dev\" -o salt .
-  cp -a /opt/salt/salt /opt/salt/salt.bak-w113
+    -ldflags=\"-s -w -X salt/server.Version=1.5.0-dev\" -o salt .
+  cp -a /opt/salt/salt /opt/salt/salt.bak-w115
   systemctl stop salt && cp salt /opt/salt/salt && systemctl start salt"'
 ```
 
@@ -315,15 +323,16 @@ the interface now, where they used to be German. They carry no error code, so
 `serverErrors.ts` cannot translate them. Giving them codes is a small, separate
 job — not done, deliberately, because it changes API responses.
 
-Branch `public` is **10 commits ahead of `origin/main`** — the translation work
-after 1.4.0. Test box runs `1.4.3-dev`, production stays on `1.4.0`.
+Branch `public` is **12 commits ahead of `origin/main`** — the translation work
+after 1.4.0, plus the settings that came out of it. Test box runs `1.5.0-dev`,
+production stays on `1.4.0`.
 
 **No `v1.4.0` tag has been pushed.** A `v*` tag fires both
 `.github/workflows/release.yml` and `docker.yml`, which publish platform
 binaries to a GitHub Release (where `install.sh` fetches from) and an image to
 GHCR. That is a separate decision from pushing code, so it waits for a word.
 
-Rollback: test server `/opt/salt/salt.bak-w114`, production the 1.0.2 image plus
+Rollback: test server `/opt/salt/salt.bak-w115`, production the 1.0.2 image plus
 `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
 migrated 1.0.2 → 1.4.0 in one jump and came up clean.
 
@@ -336,34 +345,36 @@ why `docker build` cannot pull on that box: not "no internet", no DNS.
 
 ## What's next
 
-The translation wave (W111) is **finished**. One item is left from it, and it is
-the one the owner asked for by name.
+The translation wave (W111) is finished, and so is **W112**, the settings that
+came out of it. Nothing is queued — ask the owner.
 
-**Language and time settings — Auto/Manual.** Agreed with the owner and not
-started. Today there is **no language picker in the interface at all**: the only
-way to switch is the `salt-locale` key in localStorage. Timezone and clock
-format are never asked, they come silently from the browser.
-
-His requirement, verbatim in intent: *somebody may not want it to follow their
-browser language, or the system clock is wrong* — so **every** value gets
-Automatic (today's behaviour, stays the default) or Manual:
+**W112 as built**, since the shape is worth knowing before touching it:
 
 | Setting | Automatic | Manual |
 | --- | --- | --- |
-| Language | `navigator.languages` | pick from `LOCALES` |
-| Region format | browser's regional tag | e.g. `de-AT`, `en-GB` |
-| Time zone | system zone | any IANA zone |
+| Language | `navigator.languages` | any code in `LOCALES` |
+| Date and number format | browser's regional tag | a curated list (`de-AT`, `en-GB`, …) |
+| Time zone | system zone | any IANA zone the browser knows |
 | Clock | what the region implies | 12 or 24 hours |
-| Week starts | what the region implies | Monday / Sunday / Saturday |
+| Week starts on | what the region implies | Monday / Sunday / Saturday |
 
-Three decisions already taken: settings live **on the account**, not in
-localStorage, or the phone and the laptop disagree — which is the thing he
-wants gone; localStorage stays as a cache so the first paint is not briefly
-wrong. `format.ts` and `i18n.ts` are already the only choke points, so no call
-site changes. And **`formatDay` must stay unconverted whatever the timezone
-setting says** — a deadline on the 18th is the 18th; that is the one place a
-timezone preference can do real damage, and `check-format.mjs` has to grow an
-assertion for it.
+Four things about it that are easy to undo by accident:
+
+- **Automatic is the empty string, everywhere** — column, JSON, `<select>`
+  value. The absence of a decision and the automatic mode are one state, so
+  there is no third case to handle. Do not introduce an `"auto"` sentinel.
+- **They live on the ACCOUNT.** localStorage (`salt-prefs`) is a first-paint
+  cache so the login screen is not briefly in the wrong language, and it
+  migrates the old `salt-locale` key. It is never the source of truth — the
+  whole point was that the phone and the laptop agree.
+- **`PUT /api/me/prefs` is its own endpoint**, not a field on
+  `PATCH /api/users/{id}`, because that route lets an admin edit somebody else
+  and nobody should be able to set another person's clock format. `sessionOnly`:
+  an API token is a key to content.
+- **The server validates SHAPE only**, including for the timezone: the binary
+  carries no tzdata (CGO off), so `time.LoadLocation` would reject valid input.
+  The browser is the authority, and `build()` in format.ts drops a zone it
+  cannot use rather than letting one bad setting blank out every timestamp.
 
 ## Working agreement
 
