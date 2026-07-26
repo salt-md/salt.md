@@ -76,7 +76,7 @@ export default function Editor(props: EditorProps) {
       <div className="editor-error">
         <p>{t('This page could not be loaded.')}</p>
         <button className="btn" onClick={() => props.onMissing(props.pageId)}>
-          Back to workspace
+          {t('Back to workspace')}
         </button>
       </div>
     );
@@ -688,10 +688,10 @@ function PageHeader({
                     className="btn-sm"
                     onClick={() => shareUrl && void navigator.clipboard.writeText(shareUrl)}
                   >
-                    Copy
+                    {t('Copy')}
                   </button>
                   <button className="btn-sm danger" onClick={stopShare}>
-                    Stop sharing
+                    {t('Stop sharing')}
                   </button>
                 </div>
               </div>
@@ -734,7 +734,7 @@ function PageHeader({
                       removeDescription();
                     }}
                   >
-                    <AlignLeft size={15} /> Beschreibung entfernen
+                    <AlignLeft size={15} /> {t('Remove description')}
                   </button>
                 )}
                 <button
@@ -744,7 +744,7 @@ function PageHeader({
                     document.getElementById('kommentare')?.scrollIntoView({ behavior: 'smooth' });
                   }}
                 >
-                  <MessageSquare size={15} /> Zu den Kommentaren
+                  <MessageSquare size={15} /> {t('To the comments')}
                 </button>
                 <button
                   className="menu-item"
@@ -753,7 +753,7 @@ function PageHeader({
                     setHistoryOpen(true);
                   }}
                 >
-                  <History size={15} /> Versionsverlauf
+                  <History size={15} /> {t('Version history')}
                 </button>
                 {canEdit && (
                   <button
@@ -799,7 +799,7 @@ function PageHeader({
                     }
                   }}
                 >
-                  <Printer size={15} /> Drucken / als PDF
+                  <Printer size={15} /> {t('Print / as PDF')}
                 </button>
               </div>
             )}
@@ -822,10 +822,10 @@ function PageHeader({
               onChange={onCoverFile}
             />
             <button className="cover-btn" onClick={() => setCoverMenuOpen((o) => !o)}>
-              Change cover
+              {t('Change cover')}
             </button>
             <button className="cover-btn" onClick={() => setCoverValue('')}>
-              Remove
+              {t('Remove')}
             </button>
             {coverMenuOpen && (
               <CoverMenu
@@ -905,12 +905,12 @@ function PageHeader({
             />
             {!icon && (
               <button className="add-btn" onClick={() => setIconPickerOpen((o) => !o)}>
-                <Smile size={14} /> Emoji
+                <Smile size={14} /> {t('Emoji')}
               </button>
             )}
             {!cover && (
               <button className="add-btn cover-trigger" onClick={() => setCoverMenuOpen((o) => !o)}>
-                <ImageIcon size={14} /> Cover
+                <ImageIcon size={14} /> {t('Cover')}
               </button>
             )}
             {!showDesc && !description && (
@@ -1077,7 +1077,7 @@ function CoverMenu({
   return (
     <div className="cover-menu" ref={ref}>
       <button className="cover-upload" onClick={onUpload}>
-        ⤒ Upload image
+        {t('⤒ Upload image')}
       </button>
       <div className="cover-grid">
         {COVER_GRADIENTS.map((g) => (

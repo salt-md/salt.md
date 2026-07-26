@@ -453,7 +453,7 @@ export default function SchemaEditor({
             checked={views.some((v) => v.type === 'board')}
             onChange={toggleBoardView}
           />
-          Show Kanban board view
+          {t('Show Kanban board view')}
         </label>
         <label className="check-label">
           <input
@@ -461,7 +461,7 @@ export default function SchemaEditor({
             checked={views.some((v) => v.type === 'gallery')}
             onChange={toggleGalleryView}
           />
-          Show Gallery view
+          {t('Show Gallery view')}
         </label>
         <label className="check-label">
           <input

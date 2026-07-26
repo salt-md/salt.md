@@ -476,7 +476,7 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
         {view.type !== 'form' && <FilterSortControls schema={schema} view={view} onChange={updateView} />}
         <ColumnsControl schema={schema} view={view} onChange={updateView} />
         <button className="btn-sm" onClick={() => setSchemaOpen(true)}>
-          <Settings2 size={14} /> Properties
+          <Settings2 size={14} /> {t('Properties')}
         </button>
         {view.type !== 'form' && (
           <button className="btn-sm primary" onClick={() => void addRow()}>
@@ -699,18 +699,18 @@ function FormView({
         <div className="form-share-bar">
           {!shared ? (
             <button className="btn-sm" disabled={shareBusy} onClick={() => void doShare()}>
-              <Share2 size={14} /> Öffentlich teilen
+              <Share2 size={14} /> {t('Share publicly')}
             </button>
           ) : (
             <>
               <span className="form-share-live">
-                <Globe size={13} /> Öffentlich
+                <Globe size={13} /> {t('Public')}
               </span>
               <button className="btn-sm" disabled={shareBusy} onClick={() => void doShare()}>
-                Link kopieren
+                {t('Copy link')}
               </button>
               <button className="btn-sm" disabled={shareBusy} onClick={() => void doUnshare()}>
-                Aufheben
+                {t('Revoke')}
               </button>
             </>
           )}
@@ -924,7 +924,7 @@ function FilterSortControls({
         className={'btn-sm' + (sort ? ' active' : '')}
         onClick={() => setOpen(open === 'sort' ? null : 'sort')}
       >
-        <ArrowUpDown size={14} /> Sort
+        <ArrowUpDown size={14} /> {t('Sort')}
       </button>
 
       {open && pos && (
@@ -1087,7 +1087,7 @@ function BoardView({
   if (!prop || (prop.type !== 'select' && prop.type !== 'multiselect')) {
     return (
       <div className="board-empty">
-        This board needs a <b>{t('Select')}</b> property to group by. Open ⚙ Properties to add one.
+        {t('This board needs a {type} property to group by. Open ⚙ Properties to add one.', { type: t('Select') })}
       </div>
     );
   }
@@ -1542,7 +1542,7 @@ function TimelineView({
   if (!startProp || !schema.some((p) => p.id === startProp && p.type === 'date')) {
     return (
       <div className="board-empty">
-        Diese Timeline braucht eine <b>{t('Date')}</b>-Eigenschaft als Start. Öffne ⚙ Properties, um eine anzulegen.
+        {t('This timeline needs a {type} property as its start. Open ⚙ Properties to add one.', { type: t('Date') })}
       </div>
     );
   }
@@ -1571,7 +1571,7 @@ function TimelineView({
   if (items.length === 0) {
     return (
       <div className="board-empty">
-        Noch keine Einträge mit Datum. Setze ein Startdatum, damit sie auf der Timeline erscheinen.
+        {t('No entries with a date yet. Set a start date so they appear on the timeline.')}
       </div>
     );
   }
@@ -1676,7 +1676,7 @@ function CalendarView({
   if (!dateProp || !schema.some((p) => p.id === dateProp && p.type === 'date')) {
     return (
       <div className="board-empty">
-        This calendar needs a <b>{t('Date')}</b> property. Open ⚙ Properties to add one.
+        {t('This calendar needs a {type} property. Open ⚙ Properties to add one.', { type: t('Date') })}
       </div>
     );
   }

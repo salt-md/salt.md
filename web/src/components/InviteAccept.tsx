@@ -104,7 +104,7 @@ export default function InviteAccept({
           {mismatch ? (
             <>
               <p>
-                Diese Einladung ist für <strong>{info?.email}</strong>, du bist aber als{' '}
+                {t('This invitation is for')} <strong>{info?.email}</strong>, du bist aber als{' '}
                 <strong>{currentUser.email}</strong> angemeldet.
               </p>
               <a className="btn" href="/api/logout">Abmelden &amp; neu anmelden</a>
@@ -112,7 +112,7 @@ export default function InviteAccept({
           ) : (
             <>
               <p>
-                Angemeldet als <strong>{currentUser.email}</strong>.
+                {t('Signed in as')} <strong>{currentUser.email}</strong>.
               </p>
               {error && <div className="login-error">{error}</div>}
               <div style={{ display: 'flex', gap: 8 }}>

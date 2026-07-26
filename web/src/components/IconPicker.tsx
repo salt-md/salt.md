@@ -90,13 +90,13 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
     <div className="icon-picker" ref={ref}>
       <div className="icon-picker-tabs">
         <button type="button" className={tab === 'emoji' ? 'on' : ''} onClick={() => { setTab('emoji'); setQ(''); }}>
-          Emoji
+          {t('Emoji')}
         </button>
         <button type="button" className={tab === 'icon' ? 'on' : ''} onClick={() => { setTab('icon'); setQ(''); }}>
-          Icons
+          {t('Icons')}
         </button>
         <button type="button" className={tab === 'upload' ? 'on' : ''} onClick={() => { setTab('upload'); setQ(''); }}>
-          Upload
+          {t('Upload')}
         </button>
         <button type="button" className="icon-picker-remove" onClick={onRemove} title={t('Remove icon')}>
           <Trash2 size={15} />
@@ -130,10 +130,10 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
           </div>
           <div className="icon-style-toggle">
             <button type="button" className={lib === 'lucide' ? 'on' : ''} onClick={() => setLib('lucide')}>
-              Lucide
+              {t('Lucide')}
             </button>
             <button type="button" className={lib === 'mdi' ? 'on' : ''} onClick={() => setLib('mdi')}>
-              Material
+              {t('Material')}
             </button>
           </div>
         </div>

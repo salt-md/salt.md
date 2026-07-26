@@ -85,7 +85,7 @@ export default function PublicForm({ token }: { token: string }) {
               setValues({});
             }}
           >
-            Noch eine Antwort senden
+            {t('Send another answer')}
           </button>
         </div>
       </div>
@@ -103,7 +103,7 @@ export default function PublicForm({ token }: { token: string }) {
         <div className="form-fields">
           <label className="form-field">
             <span className="form-label">
-              Titel <b className="form-req">*</b>
+              {t('Title')} <b className="form-req">*</b>
             </span>
             <input
               className="form-input"
@@ -128,7 +128,7 @@ export default function PublicForm({ token }: { token: string }) {
           </button>
         </div>
         <div className="public-form-footer">
-          Erstellt mit <b>Salt.md</b>
+          {t('Made with')} <b>Salt.md</b>
         </div>
       </div>
     </div>

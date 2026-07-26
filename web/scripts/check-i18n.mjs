@@ -9,9 +9,9 @@
 // became an endless chase after other people's commits. A check that fails the
 // build is the only version of "we'll remember" that works.
 //
-// Section 1 is enforced. Section 2 is advisory until the strings are converted,
-// and then becomes enforced too — at which point rot is mechanically
-// impossible rather than merely discouraged.
+// Both sections are enforced. Section 2 became enforceable the moment the last
+// string was wrapped: from here on, a bare string or a stale catalog fails the
+// build, so rot is mechanically impossible rather than merely discouraged.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
@@ -64,6 +64,50 @@ function topLevelCommas(arg) {
   return n;
 }
 
+
+/** Blank out comments while leaving everything else — and every line break —
+ *  exactly where it was, so line numbers still match.
+ *
+ *  This walks the text tracking string state instead of pattern-matching,
+ *  because pattern-matching got it wrong in a way that mattered:
+ *  `accept="image/*"` opened a comment that ran on for 868 characters and
+ *  swallowed real JSX, so a bare "Cover" label sat on screen while the check
+ *  reported the file clean. A scanner cannot make that mistake. */
+function blankComments(text) {
+  const out = text.split('');
+  let i = 0;
+  let quote = null; // ' " ` or null
+  while (i < text.length) {
+    const c = text[i];
+    const d = text[i + 1];
+    if (quote) {
+      if (c === '\\') i += 2;
+      else {
+        if (c === quote) quote = null;
+        i++;
+      }
+      continue;
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      quote = c;
+      i++;
+      continue;
+    }
+    if (c === '/' && d === '/') {
+      while (i < text.length && text[i] !== '\n') out[i++] = ' ';
+      continue;
+    }
+    if (c === '/' && d === '*') {
+      const end = text.indexOf('*/', i + 2);
+      const stop = end === -1 ? text.length : end + 2;
+      for (; i < stop; i++) if (out[i] !== '\n') out[i] = ' ';
+      continue;
+    }
+    i++;
+  }
+  return out.join('');
+}
+
 // ---- Section 1: formatting stays in one place (enforced) ----
 
 for (const file of files) {
@@ -110,7 +154,7 @@ for (const file of files) {
   });
 }
 
-// ---- Section 2: strings are wrapped, catalogs are current (advisory) ----
+// ---- Section 2: strings are wrapped, catalogs are current (enforced) ----
 
 // Names that are the same in every language, because they belong to somebody
 // else. Translating "Microsoft" or "nginx" would be wrong, not merely odd.
@@ -150,46 +194,54 @@ for (const file of files) {
   // Strip comments before collecting keys: i18n.ts documents t() with an
   // example, and an example is not a string the app ships.
   if (!FORMAT_OWNERS.has(file.split('/').pop())) {
-    const bare = text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    const bare = blankComments(text);
     for (const m of bare.matchAll(CALL)) used.add(m[2]);
     for (const m of bare.matchAll(PLURAL)) used.add(m[3]);
   }
 
   if (!file.endsWith('.tsx')) continue;
-  text.split('\n').forEach((line, i) => {
-    // Both comment forms: `// i18n-ok:` in code, `{/* i18n-ok: */}` in JSX.
-    if (/i18n-ok:\s*\S/.test(line)) return;
-    let code = line.replace(/\/\/.*$/, '').replace(/\{\/\*.*?\*\/\}/g, '');
-    // <code> holds identifiers, commands and paths — never prose. Blank it out
-    // before scanning so `X-Forwarded-For` and `./salt backup` do not read as
-    // untranslated interface text.
-    code = code.replace(/<code[^>]*>[\s\S]*?<\/code>/g, '<code/>');
-    // Declarations, not markup — `Map<string, PageMeta>` is not a label.
-    if (/^\s*(import|export type|interface|type |const \w+ = \{|\*)/.test(code)) return;
-    // Text sitting directly between JSX tags. The leading character must not
-    // be part of `=>` or a comparison, or every arrow function returning a
-    // generic reads as a label.
-    for (const m of code.matchAll(/(^|[^=!<>-])>\s*([^<>{}\n]*[A-Za-z][^<>{}\n]*?)\s*</g)) {
-      const s = m[2].trim();
-      if (s.length < 3) continue;
-      if (/^[\d\s.,:;|/·—–-]+$/.test(s)) continue;
-      // Operators and generic parameters both look like "text between angle
-      // brackets" to a regex. They are not.
-      if (/=>|&&|\|\||\?\?|===|!==|[[\]();:]/.test(s)) continue;
-      if (/\b(Map|Set|Array|Promise|Record|Partial|Awaited|React|useState|useRef|useMemo)\s*$/.test(code.slice(0, m.index + 1))) continue;
-      if (isTechnical(s)) continue;
-      unwrapped++;
-      allBare.push(`${rel}:${i + 1}  ${s.slice(0, 70)}`);
-      if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${i + 1}  ${s.slice(0, 52)}`);
-    }
-    // Attributes a human reads.
-    for (const m of code.matchAll(/\b(placeholder|title|aria-label|alt)=(["'])([^"']{2,})\2/g)) {
-      if (isTechnical(m[3])) continue;
-      unwrapped++;
-      allBare.push(`${rel}:${i + 1}  ${m[1]}="${m[3].slice(0, 55)}"`);
-      if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${i + 1}  ${m[1]}="${m[3].slice(0, 40)}"`);
-    }
-  });
+
+  // Scanned over the WHOLE file, not line by line. JSX puts text and its
+  // closing tag on separate lines all the time:
+  //
+  //     <button>
+  //       <ImageIcon /> Cover
+  //     </button>
+  //
+  // A per-line scan never sees the `<` and reports the file as clean. It did
+  // exactly that, and "Cover" sat untranslated on screen while the check said
+  // zero. Comments are blanked rather than removed so line numbers survive.
+  const blanked = blankComments(text).replace(/<code[^>]*>[\s\S]*?<\/code>/g, (m) =>
+    m.replace(/[^\n]/g, ' '),
+  );
+  const lineOf = (idx) => blanked.slice(0, idx).split('\n').length;
+  const rawLines = text.split('\n');
+  const exempt = (idx) => /i18n-ok:\s*\S/.test(rawLines[lineOf(idx) - 1] ?? '');
+
+  // Text between JSX tags, tolerating one line break on either side.
+  const JSX_TEXT = /(^|[^=!<>-])>[ \t]*\r?\n?[ \t]*([^<>{}\n]*[A-Za-z][^<>{}\n]*?)[ \t]*\r?\n?[ \t]*</g;
+  for (const m of blanked.matchAll(JSX_TEXT)) {
+    const s2 = m[2].trim();
+    if (s2.length < 3) continue;
+    if (/^[\d\s.,:;|/·—–-]+$/.test(s2)) continue;
+    if (/=>|&&|\|\||\?\?|===|!==|[[\]();:]/.test(s2)) continue;
+    const before = blanked.slice(Math.max(0, m.index - 40), m.index + 1);
+    if (/\b(Map|Set|Array|Promise|Record|Partial|Awaited|React|useState|useRef|useMemo)\s*$/.test(before)) continue;
+    if (isTechnical(s2)) continue;
+    if (exempt(m.index)) continue;
+    unwrapped++;
+    allBare.push(`${rel}:${lineOf(m.index)}  ${s2.slice(0, 70)}`);
+    if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${lineOf(m.index)}  ${s2.slice(0, 52)}`);
+  }
+
+  // Attributes a human reads.
+  for (const m of blanked.matchAll(/\b(placeholder|title|aria-label|alt)=(["'])([^"']{2,})\2/g)) {
+    if (isTechnical(m[3])) continue;
+    if (exempt(m.index)) continue;
+    unwrapped++;
+    allBare.push(`${rel}:${lineOf(m.index)}  ${m[1]}="${m[3].slice(0, 55)}"`);
+    if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${lineOf(m.index)}  ${m[1]}="${m[3].slice(0, 40)}"`);
+  }
 }
 
 // Catalogs: an entry nobody asks for any more is an orphan (usually the source
@@ -258,8 +310,15 @@ for (const r of report) {
 }
 
 console.log();
-if (errors.length) {
-  console.log(`  FAILED — ${errors.length} formatting violation(s)`);
+const stale = report.filter((r) => r.missing > 0 || r.orphans.length > 0);
+if (errors.length || unwrapped > 0 || stale.length) {
+  if (errors.length) console.log(`  FAILED — ${errors.length} formatting violation(s)`);
+  if (unwrapped > 0)
+    console.log(`  FAILED — ${unwrapped} user-visible string(s) not wrapped in t()`);
+  for (const r of stale)
+    console.log(`  FAILED — ${r.name}: ${r.missing} untranslated, ${r.orphans.length} orphaned`);
+  console.log('\n  Fix, or justify the line with `i18n-ok: <reason>`.');
+  console.log('  For a catalog: node scripts/check-i18n.mjs --missing <locale>');
   process.exit(1);
 }
-console.log('  ok — formatting rules hold');
+console.log('  ok — every string wrapped, every catalog current');

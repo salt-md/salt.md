@@ -324,7 +324,7 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
                   ctx.onDuplicate(p.id);
                 }}
               >
-                ⧉ Duplizieren
+                {t('⧉ Duplicate')}
               </button>
               {ctx.workspaces.length > 1 && (
                 <div className="menu-sub">
@@ -360,7 +360,7 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
                   api.download(`/api/export/${p.id}`);
                 }}
               >
-                ⤓ Export Markdown
+                {t('⤓ Export Markdown')}
               </button>
               <button
                 className="danger"
@@ -369,7 +369,7 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
                   ctx.onTrash(p.id);
                 }}
               >
-                🗑 Move to trash
+                {t('🗑 Move to trash')}
               </button>
             </div>
           )}
@@ -950,7 +950,7 @@ export default function Sidebar({
               <Tag size={13} /> #{tagFilter}
             </span>
             <button className="tag-filter-clear" onClick={() => setTagFilter(null)}>
-              Filter aufheben ×
+              {t('Clear filter ×')}
             </button>
           </div>
           {taggedPages.length === 0 && <div className="section-label">{t('No pages.')}</div>}
