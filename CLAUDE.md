@@ -116,39 +116,74 @@ entries in `<locale>.machine.json`. Plural categories come from
 `Intl.PluralRules`. Add the code to `LOCALES` in `i18n.ts` so it appears in the
 picker.
 
-## Test server
+## The two servers — do not mix them up
 
-`http://10.10.20.20:8420` — the home test box, the stage **before** a GitHub
-push. Deploying here is fine and expected; pushing and production are not.
+| Address | What it is | Reached via | Version |
+| --- | --- | --- | --- |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.3.1 |
+| `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.0.2 |
 
-Runs as a Docker container `salt` on the named volume `salt-data` (→ `/data`).
-Root SSH by key. The box has **no internet**, so `docker build` cannot pull a
-base image — build FROM an image already present locally.
+The test box answers on **port 80**, production on **8420** — a bare
+`10.10.20.20` in a command is a strong hint that something is aimed wrong.
 
-```bash
-V=1.4.0-i18n
-cd web && SALT_VERSION=$V npm run build && cd ..
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
-  -ldflags="-s -w -X salt/server.Version=$V" -o /tmp/salt-linux .
-scp /tmp/salt-linux root@10.10.20.20:/root/salt-build/salt
+`10.10.20.20` is production and is **never hand-deployed to**. It is built by
+`git pull` on the box, on the owner's word, and by nobody else. It holds 659
+real pages. Everything below about it is what an accidental deploy taught us —
+it is documentation of the terrain, not an invitation.
 
-ssh root@10.10.20.20 'cd /root/salt-build
-  printf "FROM ghcr.io/salt-md/salt.md:1.0.2\nCOPY salt /usr/local/bin/salt\n" > Dockerfile
-  docker build -t salt.md:'$V' .
-  docker rm -f salt
-  docker run -d --name salt --restart unless-stopped -p 8420:8420 -v salt-data:/data salt.md:'$V
-```
+- Docker container `salt`, named volume `salt-data` → `/data`. Root SSH by key.
+- **No outbound internet.** `docker pull`/`docker build` cannot reach a
+  registry, and `cloudflared` (which lives in the volume at `/data/bin`, not in
+  the image) loop-fails on startup. Both were true before anyone touched it.
+- It is **not** the host behind `salt.sevensecure.de` — it cannot be, it has no
+  internet. The public name answers 1.3.1 from elsewhere.
+- Published images `1.0.1`, `1.0.2` and `latest` are present locally, so a
+  rollback needs no network.
 
-**Back up the volume first** — migrations are one-way:
+Back up before anything, restore like this — the container must be stopped for
+both, or the WAL is caught mid-write:
 
 ```bash
 ssh root@10.10.20.20 'docker stop salt
-  tar czf /root/salt-backups/salt-data-$(date +%F-%H%M).tar.gz \
-    -C /var/lib/docker/volumes/salt-data/_data .
-  docker start salt'
+  tar czf /root/salt-backups/salt-data-$(date +%Y%m%d-%H%M%S).tar.gz \
+    -C /var/lib/docker/volumes/salt-data/_data .'
+
+# restore:
+ssh root@10.10.20.20 'D=/var/lib/docker/volumes/salt-data/_data
+  find "$D" -mindepth 1 -delete
+  tar xzf /root/salt-backups/<file>.tar.gz -C "$D"
+  docker rm -f salt
+  docker run -d --name salt --restart unless-stopped \
+    -p 8420:8420 -v salt-data:/data ghcr.io/salt-md/salt.md:1.0.2'
 ```
 
-Rollback is the old published image: `docker run … ghcr.io/salt-md/salt.md:1.0.2`.
+`tar` restores the recorded `1000:1000` ownership when run as root, so the
+files stay readable by the `salt` user. A restore worked cleanly: proof is the
+**absence** of a `search index: neu aufgebaut` line at startup — the old binary
+recognising its own schema.
+
+**Migrations are one-way and run on start.** Booting a main-based build against
+the 1.0.2 database migrated it across three releases at once and rebuilt the
+search index (Fassung 3, 659 pages). That is inherent to the version gap, not
+to any one branch.
+
+Deploying to `172.16.0.115` is fine and expected — it is the stage before a
+GitHub push. It takes **no direct SSH**; that is refused. It is reached through
+the Proxmox host:
+
+```bash
+ssh root@172.16.0.10          # hostname pve
+pct exec 115 -- <cmd>         # LXC container 115
+pct push 115 <local> <remote>
+```
+
+Inside: binary `/opt/salt/salt`, data `/opt/salt/data`, systemd unit **`salt`**
+(the older `blatt` unit is inactive — the project was renamed). Go 1.24.4 is
+installed there, so the container builds its own binary from a pushed source
+tarball. **No `curl`** in it — use `wget` or `python3 urllib` to smoke-test.
+
+The convention is to keep the outgoing binary as `salt.bak-w<N>` before
+swapping (they run from `w84` up), then `systemctl restart salt`.
 
 Frontend and backend must be built with the SAME version string, or the
 "reload" banner fires forever (that bug is fixed; do not reintroduce it by
@@ -156,9 +191,9 @@ building one side without `SALT_VERSION`).
 
 ## State
 
-Production runs 1.3.1 on a Proxmox container, public via a Cloudflare tunnel.
-**Nothing is rolled out to production or pushed without the user saying so.**
-Local commits are fine.
+**Nothing is rolled out or pushed without the user saying so.** Local commits
+are fine. Before any deploy, say which address you mean and wait for a yes —
+see the table above for why.
 
 Branch `i18n-groundwork` holds the English-first conversion. Frontend, server
 messages and the four permission files (`roles`, `lifecycle_account`, `users`,
@@ -174,6 +209,9 @@ Startup log lines are still German too ("search index: neu aufgebaut",
 `tunnel.go` and go with those files. Logs are read by whoever runs the server,
 so they belong in the English sweep.
 
-Deployed to the test box as `1.4.0-i18n` and verified there: the 1.0.2 → this
-migration path runs clean (search index rebuilt, 659 pages), login returns
-`bad_credentials` with English text, and both sides report the same version.
+`1.4.0-i18n` has been built and run once, but against the **production**
+database by mistake, and has since been rolled back. What that run did prove is
+worth keeping: the migration path onto a real 659-page instance completes,
+login answers `bad_credentials` with English text, and both sides report one
+version. What it did **not** prove is anything on the test server — the branch
+has never run on `172.16.0.115`.
