@@ -120,8 +120,8 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.3.1 |
-| `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.0.2 |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.0 |
+| `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
 `10.10.20.20` in a command is a strong hint that something is aimed wrong.
@@ -213,13 +213,17 @@ Startup log lines are still German too ("search index: neu aufgebaut",
 `tunnel.go` and go with those files. Logs are read by whoever runs the server,
 so they belong in the English sweep.
 
-`1.4.0-i18n` runs on the test server (LXC 115) and therefore on
-`salt.sevensecure.de`. Verified there: search index rebuilt over 736 pages,
-login answers `{"code":"bad_credentials"}` with English text, frontend and
-server report the same version, no console errors, and the interface comes up
-in **German** from the catalog while the source is English — the whole point,
-proven on a real instance. Rollback is `/opt/salt/salt.bak-w110` (1.3.1) with
-`data-backup-20260726-w110.tar.gz` beside it.
+1.4.0 is on GitHub (`origin/main`) and on **both** servers. Verified on each:
+search index rebuilt (736 pages on test, 659 on production), login answers
+`{"code":"bad_credentials"}` with English text, frontend and server report one
+version, no console errors, and the interface comes up in **German** from the
+catalog while the source is English — the whole point, proven on real data.
 
-It was also run once against the **production** database by mistake and rolled
-back; the backups from that are on `10.10.20.20` under `/root/salt-backups/`.
+**No `v1.4.0` tag has been pushed.** A `v*` tag fires both
+`.github/workflows/release.yml` and `docker.yml`, which publish platform
+binaries to a GitHub Release (where `install.sh` fetches from) and an image to
+GHCR. That is a separate decision from pushing code, so it waits for a word.
+
+Rollback: test server `/opt/salt/salt.bak-w110` (1.3.1); production the 1.0.2
+image plus `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`.
+Production migrated 1.0.2 → 1.4.0 in one jump and came up clean.
