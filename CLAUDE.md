@@ -168,7 +168,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.0-dev |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.1-dev |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -323,8 +323,8 @@ the interface now, where they used to be German. They carry no error code, so
 `serverErrors.ts` cannot translate them. Giving them codes is a small, separate
 job — not done, deliberately, because it changes API responses.
 
-Branch `public` is **12 commits ahead of `origin/main`** — the translation work
-after 1.4.0, plus the settings that came out of it. Test box runs `1.5.0-dev`,
+Branch `public` is **14 commits ahead of `origin/main`** — the translation work
+after 1.4.0, plus the settings that came out of it. Test box runs `1.5.1-dev`,
 production stays on `1.4.0`.
 
 **No `v1.4.0` tag has been pushed.** A `v*` tag fires both
@@ -332,7 +332,7 @@ production stays on `1.4.0`.
 binaries to a GitHub Release (where `install.sh` fetches from) and an image to
 GHCR. That is a separate decision from pushing code, so it waits for a word.
 
-Rollback: test server `/opt/salt/salt.bak-w115`, production the 1.0.2 image plus
+Rollback: test server `/opt/salt/salt.bak-w116`, production the 1.0.2 image plus
 `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
 migrated 1.0.2 → 1.4.0 in one jump and came up clean.
 
@@ -375,6 +375,13 @@ Four things about it that are easy to undo by accident:
   carries no tzdata (CGO off), so `time.LoadLocation` would reject valid input.
   The browser is the authority, and `build()` in format.ts drops a zone it
   cannot use rather than letting one bad setting blank out every timestamp.
+- **The language applies on SAVE, the formats preview live.** Not cosmetic:
+  changing the language remounts the whole tree (`key={locale}` in main.tsx),
+  which destroys the open dialog and re-runs App's mount effect — and that
+  re-fetches `/api/me` and re-applies the still unsaved value. The first
+  version did exactly that and looked like a dropdown that did nothing. Use
+  `previewFormat()` for anything that must not remount; `applyPrefs()` only
+  once the value is stored.
 
 ## Working agreement
 
