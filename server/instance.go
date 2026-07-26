@@ -61,9 +61,10 @@ func (s *Server) handleAdminInfo(w http.ResponseWriter, r *http.Request) {
 // snapshot + all uploads) — the same archive `salt backup` produces on the
 // CLI, but downloadable from the browser.
 func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
-	// Owner, nicht Admin: dieses Archiv enthält JEDEN Workspace, alle Uploads,
-	// Passwort-Hashes und Sitzungs-Token. Einem Admin gegeben, wäre die ganze
-	// Trennung hinfällig — der Einzelexport wäre nur der umständlichere Weg zu
+	// Owner, not admin: this archive holds EVERY workspace, all uploads,
+	// password hashes and session tokens. Handed to an admin, the whole
+	// separation would be void — a per-workspace export would just be the more
+	// laborious route to
 	// denselben Daten.
 	if !s.isOwner(requestUser(r).ID) {
 		httpErrorCode(w, 403, "owner_only_backup", "Only the owner can download an instance backup — it contains every workspace.")

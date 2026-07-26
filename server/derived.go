@@ -123,18 +123,18 @@ func (s *Server) relatedRowProps(u *user, relationProp, targetProp string, rows 
 	// Fetch target props for referenced ids.
 	targetVal := map[string]any{}
 	for id := range idSet {
-		// Die Ziel-Ids stammen aus einer Zeile, die der Nutzer selbst befuellen
-		// kann — ungeprueft war das ein Leseprimitiv auf JEDE Seite der Instanz:
-		// eigene Datenbank anlegen, fremde Seiten-Id in die Relation schreiben,
-		// Rollup darauf, und der Wert stand in der eigenen Tabelle. Auch
-		// "count" verriet so, ob eine Id ueberhaupt existiert.
+		// The target ids come from a row the user fills in themselves —
+		// unchecked that was a read primitive on EVERY page of the instance:
+		// create your own database, write somebody else's page id into the
+		// relation, put a rollup on it, and the value stood in your own table.
+		// Even "count" revealed whether an id exists at all.
 		if !s.canRead(u.ID, id) {
 			continue
 		}
-		// Auch die Workspace-Grenze eines eingeschraenkten API-Tokens gilt:
-		// sonst laese ein auf Workspace A beschraenktes Token ueber eine
-		// Relation Werte aus Workspace B, in dem der Mensch zwar Mitglied ist,
-		// das Token aber nicht gelten soll.
+		// The workspace boundary of a narrowed API token applies too: otherwise
+		// a token restricted to workspace A would read values out of workspace B
+		// through a relation — one the human is a member of, but the token is
+		// not meant to reach.
 		if !u.tokenCanReach(s.pageWorkspace(id)) {
 			continue
 		}

@@ -103,7 +103,7 @@ func main() {
 			}()
 			httpSrv.Addr = ":443"
 			httpSrv.TLSConfig = m.TLSConfig()
-			log.Printf("Salt.md %s listening on :443 (Auto-HTTPS für %s, data: %s)", server.Version, domain, dataDir)
+			log.Printf("Salt.md %s listening on :443 (auto-HTTPS for %s, data: %s)", server.Version, domain, dataDir)
 			serveErr <- httpSrv.ListenAndServeTLS("", "")
 			return
 		}
@@ -136,8 +136,8 @@ func main() {
 		if err := httpSrv.Shutdown(ctx); err != nil {
 			log.Printf("graceful shutdown: %v", err)
 		}
-		// Erst jetzt einsammeln — das SIGTERM lief während des Drains bereits.
-		// Zusammen bleibt der Stopp unter systemds TimeoutStopSec (20s).
+		// Only collect now — the SIGTERM already ran during the drain. Together
+		// the stop stays under systemd's TimeoutStopSec (20s).
 		srv.AwaitTunnelStop(4 * time.Second)
 		if err := srv.Close(); err != nil {
 			log.Printf("db close: %v", err)

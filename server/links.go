@@ -100,12 +100,12 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 			scanned = append(scanned, e)
 		}
 	}
-	rows.Close() // erst leeren, dann per-Zeile prüfen (eine DB-Verbindung)
+	rows.Close() // drain first, then check per row (one DB connection)
 
-	// Wie die Backlinks auch hier je Seite prüfen: der Workspace-Filter allein
-	// lieferte Kanten von und zu privaten Seiten anderer. Titel standen nicht
-	// darin, aber die Ids — und die waren der fehlende Baustein, um über
-	// Relationen oder parentId gezielt auf eine fremde Seite zu zeigen.
+	// As with backlinks, check per page here too: the workspace filter alone
+	// returned edges from and to other people's private pages. Titles were not
+	// in them, but the ids were — and those were the missing piece for pointing
+	// at somebody else's page through a relation or parentId.
 	uid := requestUser(r).ID
 	readable := map[string]bool{}
 	canSee := func(id string) bool {

@@ -5,43 +5,43 @@ import (
 	"strings"
 )
 
-// Der Suchindex und seine Fassungen (W110).
+// The search index and its versions (W110).
 //
-// `pages_fts` wurde ohne Tokenizer-Angabe angelegt und lief damit auf dem
-// Standard `unicode61` OHNE Diakritika-Faltung. Das kostet im Deutschen mehr,
-// als es zunaechst klingt:
+// `pages_fts` was created without naming a tokenizer, so it ran on the default
+// `unicode61` WITHOUT diacritic folding. In German that costs more than it
+// first sounds like:
 //
-//	Verträge   findet   Vertrag   nicht
-//	Straße     findet   Strasse   nicht
-//	Grüße      findet   Gruesse   nicht
+//	Verträge   does not find   Vertrag
+//	Straße     does not find   Strasse
+//	Grüße      does not find   Gruesse
 //
-// Mit `remove_diacritics 2` faltet SQLite ä→a, ö→o, ü→u und ß→ss VOR dem
-// Indexieren. Zusammen mit der Praefixsuche, die die Abfrage ohnehin schon
-// anhaengt, faellt damit ein grosser Teil der deutschen Beugung von selbst weg:
-// aus "Verträge" wird "vertrage", und "vertrag*" trifft es.
+// With `remove_diacritics 2` SQLite folds ä→a, ö→o, ü→u BEFORE indexing.
+// Together with the prefix search the query already appends, a large part of
+// German inflection then falls away on its own: "Verträge" becomes "vertrage",
+// and "vertrag*" reaches it.
 //
-// Warum 2 und nicht 1: Fassung 1 laesst ß und einige osteuropaeische Zeichen
-// stehen; Fassung 2 ist die vollstaendige Unicode-Faltung.
+// Why 2 and not 1: version 1 leaves ß and some eastern European characters
+// alone; version 2 is the complete Unicode folding.
 //
-// Ein Tokenizer laesst sich an einer bestehenden FTS5-Tabelle nicht aendern —
-// sie muss neu gebaut und der Bestand neu indexiert werden. Das passiert einmal
-// beim Start, gesteuert ueber eine Fassungsnummer in app_settings.
+// A tokenizer cannot be changed on an existing FTS5 table — it has to be
+// rebuilt and the content re-indexed. That happens once at startup, driven by
+// a version number in app_settings.
 
-// ftsVersion ist die Fassung, die dieser Build erwartet. Erhoehen, wenn sich
-// die Tokenizer-Zeile oder das Spaltenlayout aendert.
+// ftsVersion is the version this build expects. Raise it whenever the
+// tokenizer line or the column layout changes.
 const ftsVersion = "3"
 
-// foldQuery faltet einen Suchbegriff genauso, wie der Index es tut.
+// foldQuery folds a search term exactly the way the index does.
 //
-// Noetig, weil FTS5 den Tokenizer auf den GESPEICHERTEN Text anwendet, nicht
-// auf das MATCH-Muster. Ohne diese Zeile sucht jemand nach "Verträge", der
-// Index enthaelt aber "vertrage" — und findet nichts.
+// Necessary because FTS5 applies the tokenizer to the STORED text, not to the
+// MATCH pattern. Without this line somebody searches for "Verträge" while the
+// index holds "vertrage" — and finds nothing.
 //
-// Was `remove_diacritics 2` TATSAECHLICH tut, habe ich am Index nachgesehen
-// statt es anzunehmen: ä→a, ü→u, é→e. Das ß bleibt STEHEN — es ist kein
-// diakritisches Zeichen, sondern ein eigener Buchstabe. Im Index steht
-// "straßenbahn" und "gruße". Wer hier ß→ss faltet, sucht nach "grusse" und
-// findet nie etwas; dafuer gibt es unten die Variante.
+// What `remove_diacritics 2` ACTUALLY does was checked against the index
+// rather than assumed: ä→a, ü→u, é→e. The ß STAYS — it is not a diacritic but
+// a letter of its own. The index holds "straßenbahn" and "gruße". Folding ß→ss
+// here would search for "grusse" and never find anything; that is what the
+// variant below is for.
 func foldQuery(s string) string {
 	r := strings.NewReplacer(
 		"ä", "a", "Ä", "a", "ö", "o", "Ö", "o", "ü", "u", "Ü", "u",
@@ -52,23 +52,22 @@ func foldQuery(s string) string {
 	return r.Replace(strings.ToLower(s))
 }
 
-// deutsche Endungen, die beim Suchen abgeschnitten werden — laengste zuerst.
+// German endings that get cut off when searching — longest first.
 var germanSuffixes = []string{"ungen", "erin", "chen", "lein", "heit", "keit", "enen", "ern", "est", "end", "en", "er", "es", "em", "et", "e", "n", "s"}
 
-// stemLite schneidet eine haeufige Endung ab, damit die Praefixsuche greift.
+// stemLite cuts off a common ending so the prefix search can bite.
 //
-// Der Fall, um den es geht: "Verträge" wird gefaltet zu "vertrage". Als
-// Praefix "vertrage*" trifft das NICHT "Vertragsverlängerung" — das faengt mit
-// "vertragsv" an. Erst der Stamm "vertrag*" verbindet beide. Im Deutschen mit
-// seinen Zusammensetzungen ist das der Unterschied zwischen "findet die eine
-// Seite" und "findet alles zum Thema".
+// The case it is about: "Verträge" folds to "vertrage". As the prefix
+// "vertrage*" that does NOT reach "Vertragsverlängerung" — which starts with
+// "vertragsv". Only the stem "vertrag*" connects the two. In German, with its
+// compounds, that is the difference between "finds the one page" and "finds
+// everything on the subject".
 //
-// Bewusst zurueckhaltend: nur ab sechs Zeichen, und der Rest muss mindestens
-// vier behalten. Sonst wird aus "Rate" ein "Rat" und die Suche schleppt das
-// halbe Rathaus mit an. Der abgeschnittene Stamm ERSETZT den Begriff nicht,
-// er kommt als zusaetzliche Variante dazu (siehe ftsMatch) — ein falsch
-// geratener Stamm verliert damit nichts, er fuegt nur Rauschen hinzu, das
-// BM25 nach hinten sortiert.
+// Deliberately cautious: only from six characters up, and the remainder has to
+// keep at least four. Otherwise "Rate" turns into "Rat" and the search drags
+// half the town hall along. The truncated stem does NOT replace the term, it
+// joins it as an additional variant (see ftsMatch) — so a wrongly guessed stem
+// loses nothing, it only adds noise that BM25 sorts to the back.
 func stemLite(w string) string {
 	if len([]rune(w)) < 6 {
 		return w
@@ -81,17 +80,17 @@ func stemLite(w string) string {
 	return w
 }
 
-// ftsMatch baut aus einer Eingabe das MATCH-Muster.
+// ftsMatch builds the MATCH pattern out of an input.
 //
-// Je Wort entstehen bis zu drei Varianten, mit ODER verbunden:
+// Each word yields up to three variants, joined by OR:
 //
-//	gefaltet          "vertrage"*      — der Begriff, wie der Index ihn schreibt
-//	Stamm             "vertrag"*       — verbindet Beugung und Zusammensetzung
-//	ss/ß-Tausch       "straße"*        — weil der Index das ß behaelt, die
-//	                                     Tastatur es aber oft nicht hergibt
+//	folded            "vertrage"*      — the term as the index writes it
+//	stem              "vertrag"*       — connects inflection and compounding
+//	ss/ß swap         "straße"*        — because the index keeps the ß while
+//	                                     the keyboard often will not produce it
 //
-// Die Woerter untereinander bleiben UND-verknuepft: wer zwei Begriffe eingibt,
-// meint beide.
+// The words stay AND-joined among themselves: whoever types two terms means
+// both.
 func ftsMatch(q string) string {
 	var groups []string
 	for _, raw := range strings.Fields(foldQuery(q)) {
@@ -107,7 +106,8 @@ func ftsMatch(q string) string {
 		}
 		add(raw)
 		add(stemLite(raw))
-		// Beide Richtungen: getipptes "strasse" soll "straße" finden und umgekehrt.
+		// Both directions: a typed "strasse" should find "straße" and the other
+		// way round.
 		if strings.Contains(raw, "ss") {
 			add(strings.ReplaceAll(raw, "ss", "ß"))
 		}
@@ -123,13 +123,12 @@ func ftsMatch(q string) string {
 	return strings.Join(groups, " ")
 }
 
-// migrateSearchIndex baut den Volltextindex neu, wenn er aus einer aelteren
-// Fassung stammt.
+// migrateSearchIndex rebuilds the full-text index when it comes from an older
+// version.
 //
-// Der Neuaufbau laeuft synchron beim Start: bei 800 Seiten dauert er den
-// Bruchteil einer Sekunde, und eine halb migrierte Suche waere schlimmer als
-// ein kurzer Start. Bei sehr grossen Bestaenden ist das die Stelle, an der man
-// spaeter in den Hintergrund geht.
+// The rebuild runs synchronously at startup: at 800 pages it takes a fraction
+// of a second, and a half-migrated search would be worse than a slow start. On
+// very large collections this is the place to move into the background later.
 func (s *Server) migrateSearchIndex() error {
 	if s.setting("fts_version", "1") == ftsVersion {
 		return nil
@@ -137,8 +136,8 @@ func (s *Server) migrateSearchIndex() error {
 	if _, err := s.db.Exec(`DROP TABLE IF EXISTS pages_fts`); err != nil {
 		return err
 	}
-	// Fassung 3: die Abschnitte kommen dazu. Beide Indizes werden von
-	// reindexPage gefuellt, also genuegt es, sie zu leeren.
+	// Version 3: the passages join in. Both indexes are filled by reindexPage,
+	// so emptying them is enough.
 	s.db.Exec(`DELETE FROM chunks_fts`)
 	s.db.Exec(`DELETE FROM page_chunks`)
 	if _, err := s.db.Exec(`CREATE VIRTUAL TABLE pages_fts USING fts5(
@@ -148,9 +147,9 @@ func (s *Server) migrateSearchIndex() error {
 		return err
 	}
 
-	// Alle Seiten-Ids einsammeln und ERST DANACH indexieren: reindexPage setzt
-	// eigene Abfragen ab, und bei einer einzigen DB-Verbindung blockiert eine
-	// Abfrage innerhalb eines offenen Cursors den ganzen Server.
+	// Collect all page ids and index them ONLY AFTERWARDS: reindexPage issues
+	// queries of its own, and on a single DB connection a query inside an open
+	// cursor blocks the whole server.
 	rows, err := s.db.Query(`SELECT id FROM pages WHERE trashed_at IS NULL`)
 	if err != nil {
 		return err
@@ -171,9 +170,9 @@ func (s *Server) migrateSearchIndex() error {
 		}
 	}
 	if failed > 0 {
-		log.Printf("search index: %d von %d Seiten konnten nicht indexiert werden", failed, len(ids))
+		log.Printf("search index: %d of %d pages could not be indexed", failed, len(ids))
 	}
 	s.setSetting("fts_version", ftsVersion)
-	log.Printf("search index: neu aufgebaut (Fassung %s, %d Seiten)", ftsVersion, len(ids)-failed)
+	log.Printf("search index: rebuilt (version %s, %d pages)", ftsVersion, len(ids)-failed)
 	return nil
 }

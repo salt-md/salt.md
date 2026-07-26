@@ -98,7 +98,7 @@ func cloudflaredAsset() (asset string, isTgz bool, err error) {
 			return "cloudflared-windows-amd64.exe", false, nil
 		}
 	}
-	return "", false, fmt.Errorf("no cloudflared build for %s/%s — bitte cloudflared manuell installieren", runtime.GOOS, runtime.GOARCH)
+	return "", false, fmt.Errorf("no cloudflared build for %s/%s — install cloudflared manually", runtime.GOOS, runtime.GOARCH)
 }
 
 // downloadCloudflared fetches the official release binary into dataDir/bin.
@@ -111,11 +111,11 @@ func (s *Server) downloadCloudflared(dest string) error {
 	client := &http.Client{Timeout: 3 * time.Minute}
 	resp, err := client.Get(url)
 	if err != nil {
-		return fmt.Errorf("download fehlgeschlagen: %w", err)
+		return fmt.Errorf("download failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("download fehlgeschlagen: HTTP %d", resp.StatusCode)
+		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
 	}
 	body := io.LimitReader(resp.Body, 200<<20)
 
@@ -155,7 +155,7 @@ func (s *Server) downloadCloudflared(dest string) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("cloudflared nicht im Archiv gefunden")
+			return fmt.Errorf("cloudflared not found in the archive")
 		}
 	} else {
 		f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
@@ -182,7 +182,7 @@ func (s *Server) StartTunnel(mode, token string) error {
 	t.mu.Lock()
 	if t.status == "starting" || t.status == "running" {
 		t.mu.Unlock()
-		return fmt.Errorf("tunnel läuft bereits")
+		return fmt.Errorf("tunnel is already running")
 	}
 	t.gen++
 	gen := t.gen
@@ -206,7 +206,7 @@ func (s *Server) StartTunnel(mode, token string) error {
 			token = s.setting("tunnel_token", "")
 		}
 		if token == "" {
-			return fail(fmt.Errorf("kein Tunnel-Token gespeichert"))
+			return fail(fmt.Errorf("no tunnel token stored"))
 		}
 		s.setSetting("tunnel_token", token)
 	}
@@ -223,11 +223,12 @@ func (s *Server) StartTunnel(mode, token string) error {
 	case "quick":
 		args = []string{"tunnel", "--no-autoupdate", "--url", s.localURL()}
 	case "token":
-		// --grace-period: cloudflared draint sonst bis zu 30s nach SIGTERM. So
-		// lange darf ein Neustart nicht dauern (systemd gibt uns 20s insgesamt).
+		// --grace-period: otherwise cloudflared drains for up to 30s after
+		// SIGTERM. A restart must not take that long (systemd gives us 20s
+		// altogether).
 		args = []string{"tunnel", "--no-autoupdate", "--grace-period", "2s", "run", "--token", token}
 	default:
-		return fail(fmt.Errorf("unbekannter Modus"))
+		return fail(fmt.Errorf("unknown mode"))
 	}
 
 	cmd := exec.Command(bin, args...)
@@ -261,10 +262,10 @@ func (s *Server) StartTunnel(mode, token string) error {
 				first := t.status != "running"
 				t.status = "running"
 				t.mu.Unlock()
-				// Ohne diese Zeile war im Journal nicht zu sehen, OB und WANN
-				// der Tunnel nach einem Neustart wieder oben ist.
+				// Without this line the journal never showed WHETHER and WHEN
+				// the tunnel came back up after a restart.
 				if first {
-					log.Printf("tunnel: verbunden (%s)", mode)
+					log.Printf("tunnel: connected (%s)", mode)
 				}
 				// Behind Cloudflare the proxy headers are trustworthy — flip it
 				// on so rate limiting & audit see real client IPs.
@@ -272,7 +273,7 @@ func (s *Server) StartTunnel(mode, token string) error {
 			}
 			if strings.Contains(line, "Unauthorized") || strings.Contains(line, "invalid token") || strings.Contains(line, "failed to parse token") {
 				t.mu.Lock()
-				t.lastErr = "Token ungültig (Cloudflare hat die Verbindung abgelehnt)"
+				t.lastErr = "Token rejected (Cloudflare refused the connection)"
 				t.mu.Unlock()
 				log.Printf("tunnel: %s", line)
 			}
@@ -310,9 +311,9 @@ func (s *Server) StartTunnel(mode, token string) error {
 		mode := t.mode
 		lastErr := t.lastErr
 		t.mu.Unlock()
-		log.Printf("tunnel: cloudflared beendet (%s) — %s", mode, lastErr)
+		log.Printf("tunnel: cloudflared exited (%s) — %s", mode, lastErr)
 		if mode == "token" && s.boolSetting("tunnel_autostart") {
-			log.Print("tunnel: Neuversuch in 5s")
+			log.Print("tunnel: retrying in 5s")
 			time.Sleep(5 * time.Second)
 			t.mu.Lock()
 			stale := gen != t.gen
@@ -359,8 +360,8 @@ func (s *Server) StopTunnel() {
 // SIGKILLed cloudflared never tells Cloudflare's edge that it is going away,
 // so the dead connection stays registered and the next process needs minutes
 // before the domain answers again. SIGTERM lets it deregister first.
-// Zweigeteilt, damit das Abmelden PARALLEL zum HTTP-Drain läuft statt obendrauf:
-// systemd gewährt nur 20s zum Stoppen, und der Drain allein braucht bis zu 15.
+// Split in two so the deregistration runs ALONGSIDE the HTTP drain instead of
+// after it: systemd grants only 20s to stop, and the drain alone takes up to 15.
 func (s *Server) SignalTunnelStop() {
 	t := &s.tunnel
 	t.mu.Lock()
@@ -370,18 +371,18 @@ func (s *Server) SignalTunnelStop() {
 		return
 	}
 	if t.stopping {
-		t.mu.Unlock() // main.go hat schon signalisiert, Close() ruft erneut
+		t.mu.Unlock() // main.go already signalled; Close() calls again
 		return
 	}
-	t.stopping = true // hält den Supervisor vom Neustart ab
+	t.stopping = true // keeps the supervisor from restarting it
 	t.gen++
 	t.mu.Unlock()
-	log.Print("tunnel: cloudflared wird beendet…")
+	log.Print("tunnel: stopping cloudflared…")
 	_ = cmd.Process.Signal(syscall.SIGTERM)
 }
 
-// AwaitTunnelStop wartet auf das oben signalisierte Ende und beendet hart,
-// falls cloudflared hängt.
+// AwaitTunnelStop waits for the end signalled above and kills hard if
+// cloudflared hangs.
 func (s *Server) AwaitTunnelStop(max time.Duration) {
 	t := &s.tunnel
 	t.mu.Lock()
@@ -390,20 +391,20 @@ func (s *Server) AwaitTunnelStop(max time.Duration) {
 	if cmd == nil || cmd.Process == nil {
 		return
 	}
-	// Der Supervisor besitzt cmd.Wait() — deshalb auf den von ihm gesetzten
-	// Zustand warten statt ein zweites Mal zu warten (das wäre ein Fehler).
+	// The supervisor owns cmd.Wait() — so wait for the state IT sets rather
+	// than waiting a second time (which would be an error).
 	deadline := time.Now().Add(max)
 	for time.Now().Before(deadline) {
 		t.mu.Lock()
 		gone := t.cmd == nil
 		t.mu.Unlock()
 		if gone {
-			log.Print("tunnel: cloudflared beendet")
+			log.Print("tunnel: cloudflared stopped")
 			return
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	log.Print("tunnel: cloudflared reagiert nicht auf SIGTERM — hart beendet")
+	log.Print("tunnel: cloudflared ignored SIGTERM — killed")
 	_ = cmd.Process.Kill()
 }
 
@@ -437,9 +438,9 @@ func (s *Server) AutostartTunnel() {
 		// lines AFTER this call, so wait for the port instead of guessing with
 		// a fixed sleep (which is what used to make restarts drop the domain).
 		if !s.waitForOrigin(30 * time.Second) {
-			log.Printf("tunnel: origin %s kam nicht hoch — starte cloudflared trotzdem", s.addr)
+			log.Printf("tunnel: origin %s never came up — starting cloudflared anyway", s.addr)
 		}
-		log.Print("tunnel: autostart (gespeicherter Token)")
+		log.Print("tunnel: autostart (stored token)")
 		if err := s.StartTunnel("token", ""); err != nil {
 			log.Printf("tunnel autostart: %v", err)
 		}

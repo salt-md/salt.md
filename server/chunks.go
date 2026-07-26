@@ -5,48 +5,47 @@ import (
 	"strings"
 )
 
-// Seiten in Abschnitte schneiden (W110, Stufe 1).
+// Cutting pages into passages (W110, stage 1).
 //
-// Warum ueberhaupt: bisher ist die kleinste Einheit der Suche die SEITE. Ein
-// Treffer sagt "in diesem 4000-Wort-Dokument steht etwas" und liefert 14
-// Woerter Umgebung. Fuer einen Menschen reicht das, er scrollt. Fuer einen
-// Agenten nicht — er bekommt entweder zu wenig, um zu antworten, oder er laedt
-// die ganze Seite und verbrennt sein Kontextfenster an Text, der nichts mit
-// der Frage zu tun hat.
+// Why at all: so far the smallest unit of search is the PAGE. A hit says
+// "something is in this 4000-word document" and hands back 14 words of
+// surroundings. For a human that is enough, they scroll. For an agent it is
+// not — it either gets too little to answer with, or it loads the whole page
+// and burns its context window on text that has nothing to do with the
+// question.
 //
-// Geschnitten wird entlang der BLOCKGRENZEN, nicht nach Zeichenzahl. Ein
-// Abschnitt, der mitten im Satz beginnt, ist als Antwort wertlos; einer, der
-// an einer Ueberschrift beginnt, traegt seinen Zusammenhang mit. Dieselbe
-// Entscheidung wie im Nachbarprojekt, wo pro Gespraechsblock geschnitten wird,
-// damit ein Treffer auf den tatsaechlichen Wortwechsel zeigt.
+// The cut follows BLOCK BOUNDARIES, not a character count. A passage starting
+// mid-sentence is worthless as an answer; one starting at a heading carries
+// its context with it. The same decision as in the neighbouring project, which
+// cuts per conversation turn so a hit points at the actual exchange.
 //
-// Jeder Abschnitt merkt sich ausserdem die Ueberschriften ueber ihm
-// ("Vertrag › Kündigung › Fristen"). Das ist die Auskunft, die einem Agenten
-// erlaubt, einen Absatz einzuordnen, ohne die Seite zu laden.
+// Every passage also remembers the headings above it
+// ("Vertrag › Kündigung › Fristen"). That is the information which lets an
+// agent place a paragraph without loading the page.
 
 const (
-	// Zielgroesse eines Abschnitts. Gross genug fuer einen Gedanken, klein
-	// genug, dass ein Treffer noch etwas aussagt.
+	// Target size of a passage. Big enough for one thought, small enough that a
+	// hit still says something.
 	chunkTarget = 700
-	// Ab hier wird auch mitten in einem sehr langen Block getrennt — sonst
-	// waere eine Tabelle mit 20 000 Zeichen ein einziger Abschnitt.
+	// From here on even a very long block gets split mid-way — otherwise a
+	// table of 20,000 characters would be a single passage.
 	chunkHardMax = 1800
 )
 
 type pageChunk struct {
 	Ord     int
-	Heading string // Ueberschriften-Pfad, z. B. "Verträge › Kündigung"
+	Heading string // heading path, e.g. "Verträge › Kündigung"
 	Text    string
 }
 
-// chunkContent zerlegt BlockNote-JSON in Abschnitte.
+// chunkContent breaks BlockNote JSON into passages.
 func chunkContent(raw []byte) []pageChunk {
 	var blocks []mdBlock
 	if json.Unmarshal(raw, &blocks) != nil {
 		return nil
 	}
 	var out []pageChunk
-	var trail []string // aktueller Ueberschriften-Pfad
+	var trail []string // the heading path so far
 	var buf strings.Builder
 	bufHeading := ""
 
@@ -64,8 +63,8 @@ func chunkContent(raw []byte) []pageChunk {
 		for _, blk := range bs {
 			text := strings.TrimSpace(blockPlainText(blk))
 			if blk.Type == "heading" {
-				// Eine Ueberschrift beginnt einen neuen Abschnitt: sie ist die
-				// Grenze, die der Mensch beim Schreiben selbst gezogen hat.
+				// A heading starts a new passage: it is the boundary the writer
+				// drew themselves.
 				flush()
 				level := intProp(blk.Props, "level", 1)
 				if level < 1 {
@@ -77,8 +76,8 @@ func chunkContent(raw []byte) []pageChunk {
 					trail = append(trail[:level-1], text)
 				}
 				bufHeading = strings.Join(trail, " › ")
-				// Die Ueberschrift selbst gehoert in den Text, sonst findet die
-				// Suche sie im Abschnitt nicht wieder.
+				// The heading itself belongs in the text, or the search will not
+				// find it again inside the passage.
 				buf.WriteString(text)
 				buf.WriteString("\n")
 				walk(blk.Children)
@@ -88,8 +87,8 @@ func chunkContent(raw []byte) []pageChunk {
 				if buf.Len() == 0 {
 					bufHeading = strings.Join(trail, " › ")
 				}
-				// Sehr lange Bloecke hart trennen, damit ein Abschnitt eine
-				// lesbare Groesse behaelt.
+				// Split very long blocks hard so a passage keeps a readable
+				// size.
 				for len(text) > chunkHardMax {
 					cut := lastSpaceBefore(text, chunkHardMax)
 					buf.WriteString(text[:cut])
@@ -112,8 +111,8 @@ func chunkContent(raw []byte) []pageChunk {
 	return out
 }
 
-// lastSpaceBefore sucht die letzte Wortgrenze vor max — damit ein harter
-// Schnitt wenigstens nicht mitten in einem Wort landet.
+// lastSpaceBefore looks for the last word boundary before max — so a hard cut
+// at least does not land in the middle of a word.
 func lastSpaceBefore(s string, max int) int {
 	if len(s) <= max {
 		return len(s)
@@ -124,15 +123,15 @@ func lastSpaceBefore(s string, max int) int {
 	return max
 }
 
-// blockPlainText holt den sichtbaren Text EINES Blocks (ohne seine Kinder).
+// blockPlainText takes the visible text of ONE block (without its children).
 func blockPlainText(blk mdBlock) string {
 	if len(blk.Content) == 0 {
 		return ""
 	}
 	var inl []mdInline
 	if json.Unmarshal(blk.Content, &inl) != nil {
-		// Tabellen und andere Sonderformen haben eine eigene Struktur —
-		// dafuer der allgemeine Weg.
+		// Tables and other special forms have a structure of their own —
+		// that is what the general path is for.
 		return strings.TrimSpace(extractText(blk.Content))
 	}
 	var b strings.Builder
@@ -151,11 +150,11 @@ func blockPlainText(blk mdBlock) string {
 	return strings.TrimSpace(b.String())
 }
 
-// reindexChunks schreibt die Abschnitte einer Seite neu.
+// reindexChunks rewrites the passages of a page.
 //
-// Laeuft im selben Atemzug wie reindexPage. Der Loeschweg braucht nichts
-// Eigenes: page_chunks haengt per Fremdschluessel an pages, und chunks_fts
-// wird hier mitgefuehrt (eine virtuelle Tabelle kennt keine Kaskade).
+// Runs in the same breath as reindexPage. The delete path needs nothing of its
+// own: page_chunks hangs off pages by foreign key, and chunks_fts is carried
+// along here (a virtual table knows no cascade).
 func (s *Server) reindexChunks(pageID, workspaceID, title string, content []byte, trashed bool) error {
 	if _, err := s.db.Exec(`DELETE FROM chunks_fts WHERE chunk_id IN
 		(SELECT id FROM page_chunks WHERE page_id = ?)`, pageID); err != nil {
@@ -169,8 +168,8 @@ func (s *Server) reindexChunks(pageID, workspaceID, title string, content []byte
 	}
 	chunks := chunkContent(content)
 	if len(chunks) == 0 {
-		// Eine leere Seite bekommt trotzdem einen Abschnitt aus ihrem Titel,
-		// sonst verschwindet sie aus der abschnittsbasierten Suche.
+		// An empty page still gets one passage from its title, otherwise it
+		// disappears from the passage-based search.
 		if strings.TrimSpace(title) == "" {
 			return nil
 		}
@@ -182,8 +181,9 @@ func (s *Server) reindexChunks(pageID, workspaceID, title string, content []byte
 			VALUES (?, ?, ?, ?, ?, ?)`, id, pageID, workspaceID, c.Ord, c.Heading, c.Text); err != nil {
 			return err
 		}
-		// Der Titel kommt in jeden Abschnitt: sonst findet "Vertrag Kündigung"
-		// nichts, wenn das eine im Titel und das andere im Absatz steht.
+		// The title goes into every passage: otherwise "Vertrag Kündigung"
+		// finds nothing when one word is in the title and the other in the
+		// paragraph.
 		if _, err := s.db.Exec(`INSERT INTO chunks_fts (chunk_id, title, heading, text) VALUES (?, ?, ?, ?)`,
 			id, title, c.Heading, c.Text); err != nil {
 			return err

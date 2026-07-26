@@ -130,12 +130,12 @@ func (s *Server) collectionRowsQuery(u *user, colID string, filters []rowFilter,
 	where := []string{"parent_id = ?", "trashed_at IS NULL"}
 	args := []any{colID}
 	// Private Zeilen anderer ausblenden. Der Sichtbarkeits-Schalter im
-	// Seitenkopf gilt auch für Datenbankzeilen, aber diese Abfrage hat ihn nie
-	// beachtet: jedes Workspace-Mitglied las über die Zeilenliste Titel und
-	// Eigenschaften ALLER Zeilen, auch der als privat markierten.
+	// The page header applies to database rows too, but this query never
+	// honoured it: through the row list every workspace member read titles and
+	// properties of ALL rows, including the ones marked private.
 	//
-	// Die Bedingung gehört ins SQL, nicht hinter das LIMIT: nachträgliches
-	// Filtern würde Seitenweise und Gesamtzahl verfälschen. Workspace-Admins
+	// The condition belongs in the SQL, not behind the LIMIT: filtering
+	// afterwards would falsify paging and the total count. Workspace admins
 	// sehen weiterhin alles — dieselbe Regel wie in forbiddenPrivateAncestor.
 	wsAdmin := 0
 	if s.isWorkspaceAdmin(u.ID, s.pageWorkspace(colID)) {
@@ -231,12 +231,12 @@ func (s *Server) collectionRowsQuery(u *user, colID string, filters []rowFilter,
 	// Compute rollups and formulas server-side (relations resolved against the
 	// target rows), so they're correct and consistent regardless of client.
 	//
-	// Ab hier wird wieder abgefragt (das Schema, und in computeDerived je
-	// Zielseite ein canRead), obwohl `defer rows.Close()` erst beim Verlassen
-	// greift. Das geht nur, weil die Schleife oben bis zum Ende durchläuft:
-	// database/sql schließt die Rows dann selbst und gibt die — einzige —
-	// Verbindung frei. Wer hier ein `break` einbaut, hält den Cursor offen und
-	// legt damit den ganzen Server still.
+	// From here on we query again (the schema, and inside computeDerived a
+	// canRead per target page), even though `defer rows.Close()` only fires on
+	// leaving. That works solely because the loop above runs to the end:
+	// database/sql then closes the rows itself and frees the — single —
+	// connection. Anyone adding a `break` here keeps the cursor open and brings
+	// the whole server to a standstill.
 	var schemaJSON string
 	if s.db.QueryRow(`SELECT schema FROM collections WHERE page_id = ?`, colID).Scan(&schemaJSON) == nil {
 		s.computeDerived(u, parseSchema(schemaJSON), list)

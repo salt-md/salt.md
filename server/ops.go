@@ -114,12 +114,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "ok", "version": Version})
 }
 
-// Env liest eine Umgebungsvariable unter ihrem SALT_-Namen.
+// Env reads an environment variable under its SALT_ name.
 func Env(name string) string {
 	return os.Getenv("SALT_" + name)
 }
 
-// EnvOr ist Env mit Standardwert.
+// EnvOr is Env with a default.
 func EnvOr(name, fallback string) string {
 	if v := Env(name); v != "" {
 		return v

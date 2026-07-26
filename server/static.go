@@ -34,11 +34,11 @@ func spaHandler(dist fs.FS) http.Handler {
 			}
 			// A missing hashed asset (e.g. after a redeploy) must 404 instead
 			// of returning index.html, or browsers cache the wrong response.
-			// Dasselbe gilt für alles, was erkennbar eine Datei sein soll: ein
-			// Abruf von /favicon.ico bekam sonst index.html mit Status 200, und
-			// wer ein Bild erwartet, sieht dann gar nichts statt eines ehrlichen
-			// 404. Bewusst eine feste Endungsliste statt „enthält einen Punkt" —
-			// Client-Routen wie /t/<tag> dürfen Punkte enthalten.
+			// The same goes for anything recognisably meant to be a file: a
+			// request for /favicon.ico used to get index.html with status 200, and
+			// whoever expected an image then saw nothing at all instead of an
+			// honest 404. Deliberately a fixed extension list rather than "contains
+			// a dot" — client routes like /t/<tag> may contain dots.
 			if strings.HasPrefix(p, "assets/") || isStaticFileName(p) {
 				http.NotFound(w, r)
 				return
@@ -53,8 +53,8 @@ func spaHandler(dist fs.FS) http.Handler {
 	})
 }
 
-// staticFileExts sind Endungen, bei denen ein Treffer eine echte Datei sein
-// MUSS — fehlt sie, ist das ein 404 und keine Client-Route.
+// staticFileExts are extensions where a match MUST be a real file — if it is
+// missing, that is a 404 and not a client route.
 var staticFileExts = []string{
 	".ico", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp", ".avif",
 	".css", ".js", ".mjs", ".map", ".json", ".webmanifest",

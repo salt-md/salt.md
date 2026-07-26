@@ -160,9 +160,9 @@ func renderBlocks(b *strings.Builder, blocks []mdBlock, depth int) {
 				b.WriteString(indent + "[" + raw + "](" + safeURL(raw) + ")\n\n")
 			}
 		case "database":
-			// Eingebettete Datenbank: der Block hält nur eine Referenz, die Daten
-			// liegen in der Datenbankseite. Im Markdown steht deshalb ein Link
-			// dorthin — ein Abzug der Zeilen wäre eine Kopie, die sofort veraltet.
+			// Embedded database: the block holds only a reference, the data lives
+			// in the database page. So the Markdown carries a link there — a dump
+			// of the rows would be a copy that goes stale at once.
 			if id := strProp(blk.Props, "collectionId", ""); id != "" {
 				b.WriteString(indent + "[Datenbank](/p/" + id + ")\n\n")
 			}
@@ -437,8 +437,8 @@ func (s *Server) handleExportPage(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 	userID := requestUser(r).ID
 	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(userID))
-	// ?workspace= grenzt auf EINEN Workspace ein — "Workspace exportieren"
-	// im Menü soll nicht still die ganze Instanz mitnehmen.
+	// ?workspace= narrows to ONE workspace — "export workspace" in the menu
+	// must not quietly take the whole instance along.
 	if only := r.URL.Query().Get("workspace"); only != "" {
 		found := false
 		for _, v := range ws {
