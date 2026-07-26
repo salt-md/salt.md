@@ -116,11 +116,49 @@ entries in `<locale>.machine.json`. Plural categories come from
 `Intl.PluralRules`. Add the code to `LOCALES` in `i18n.ts` so it appears in the
 picker.
 
+## Test server
+
+`http://10.10.20.20:8420` — the home test box, the stage **before** a GitHub
+push. Deploying here is fine and expected; pushing and production are not.
+
+Runs as a Docker container `salt` on the named volume `salt-data` (→ `/data`).
+Root SSH by key. The box has **no internet**, so `docker build` cannot pull a
+base image — build FROM an image already present locally.
+
+```bash
+V=1.4.0-i18n
+cd web && SALT_VERSION=$V npm run build && cd ..
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath \
+  -ldflags="-s -w -X salt/server.Version=$V" -o /tmp/salt-linux .
+scp /tmp/salt-linux root@10.10.20.20:/root/salt-build/salt
+
+ssh root@10.10.20.20 'cd /root/salt-build
+  printf "FROM ghcr.io/salt-md/salt.md:1.0.2\nCOPY salt /usr/local/bin/salt\n" > Dockerfile
+  docker build -t salt.md:'$V' .
+  docker rm -f salt
+  docker run -d --name salt --restart unless-stopped -p 8420:8420 -v salt-data:/data salt.md:'$V
+```
+
+**Back up the volume first** — migrations are one-way:
+
+```bash
+ssh root@10.10.20.20 'docker stop salt
+  tar czf /root/salt-backups/salt-data-$(date +%F-%H%M).tar.gz \
+    -C /var/lib/docker/volumes/salt-data/_data .
+  docker start salt'
+```
+
+Rollback is the old published image: `docker run … ghcr.io/salt-md/salt.md:1.0.2`.
+
+Frontend and backend must be built with the SAME version string, or the
+"reload" banner fires forever (that bug is fixed; do not reintroduce it by
+building one side without `SALT_VERSION`).
+
 ## State
 
 Production runs 1.3.1 on a Proxmox container, public via a Cloudflare tunnel.
-**Nothing is rolled out without the user saying so.** Local commits are fine;
-pushing is not.
+**Nothing is rolled out to production or pushed without the user saying so.**
+Local commits are fine.
 
 Branch `i18n-groundwork` holds the English-first conversion. Frontend, server
 messages and the four permission files (`roles`, `lifecycle_account`, `users`,
@@ -131,8 +169,11 @@ Still German: ~740 comment lines in 31 Go files — largest are `ingest.go` (76)
 (40). Plus `docs/suche-und-ki.md` (148 lines). Mechanical work: one file at a
 time, `go build ./...` after each.
 
-Known bug, pre-existing: `BUILD_VERSION` in `web/src/App.tsx` says `1.2.0`
-while `server.Version` says `1.3.1`. They are compared for equality, so the
-"new version available — reload" toast fires on every single page load and
-never stops — which trains people to ignore the one warning that matters after
-a deploy.
+Startup log lines are still German too ("search index: neu aufgebaut",
+"tunnel: autostart (gespeicherter Token)") — they live in `searchindex.go` and
+`tunnel.go` and go with those files. Logs are read by whoever runs the server,
+so they belong in the English sweep.
+
+Deployed to the test box as `1.4.0-i18n` and verified there: the 1.0.2 → this
+migration path runs clean (search index rebuilt, 659 pages), login returns
+`bad_credentials` with English text, and both sides report the same version.
