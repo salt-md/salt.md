@@ -1,10 +1,13 @@
 # --- Frontend build (its output is the same for every target arch) ---
 FROM --platform=$BUILDPLATFORM node:20-alpine AS web
+ARG VERSION=dev
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
 RUN npm ci || npm install
 COPY web ./
-RUN npm run build
+# Same VERSION the backend is stamped with, so the two never disagree and the
+# "reload" banner only fires after an actual deploy.
+RUN SALT_VERSION=${VERSION} npm run build
 
 # --- Backend build (cross-compiled to the requested target arch) ---
 FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build

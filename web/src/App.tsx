@@ -39,9 +39,14 @@ if (mailOauthMsg) {
   setTimeout(() => toast(mailOauthMsg === 'ok' ? t('Mail sending connected ✓') : t('Mail connection: {detail}', { detail: mailOauthMsg })), 400);
 }
 
-// Kept in sync with server.Version. A stale open tab after a deploy sees a
-// different server version (via /api/me and the SSE hello) and is told to reload.
-const BUILD_VERSION = '1.2.0';
+// Injected at build time from the same value the server is built with (see
+// vite.config.ts). A stale open tab after a deploy sees a different server
+// version (via /api/me and the SSE hello) and is told to reload.
+//
+// Never hardcode this again: as two hand-kept numbers they drifted, and the
+// reload banner then fired on every load forever.
+declare const __SALT_VERSION__: string;
+const BUILD_VERSION = __SALT_VERSION__;
 
 function pageIdFromLocation(): string | null {
   const m = window.location.pathname.match(/^\/p\/([0-9a-f]+)$/);
