@@ -21,17 +21,18 @@ CREATE TABLE IF NOT EXISTS pages (
 	trashed_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_pages_parent ON pages(parent_id);
--- remove_diacritics 2: faltet ä→a, ü→u, ß→ss vor dem Indexieren. Zusammen mit
--- der Praefixsuche faellt damit ein grosser Teil der deutschen Beugung weg
--- ("Verträge" wird zu "vertrage" und ist ueber "vertrag*" erreichbar).
--- Aenderungen hier brauchen eine neue ftsVersion in searchindex.go.
+-- remove_diacritics 2 folds ä→a, ü→u, ß→ss before indexing (i18n-ok: the
+-- folded characters are the subject). Together with the prefix search this
+-- removes a large part of German inflection on its own: the plural of
+-- "Vertrag" is stored as "vertrage" and "vertrag*" reaches it.
+-- Changes here need a new ftsVersion in searchindex.go.
 CREATE VIRTUAL TABLE IF NOT EXISTS pages_fts USING fts5(
 	id UNINDEXED, title, body,
 	tokenize = "unicode61 remove_diacritics 2"
 );
--- Abschnitte einer Seite (W110): die Sucheinheit unterhalb der Seite. Haengt
--- per Kaskade an pages; chunks_fts wird von Hand nachgefuehrt, weil eine
--- virtuelle Tabelle keine Fremdschluessel kennt.
+-- Passages of a page (W110): the search unit below the page. Hangs off pages
+-- by cascade; chunks_fts is carried along by hand, because a virtual table
+-- knows no foreign keys.
 CREATE TABLE IF NOT EXISTS page_chunks (
 	id TEXT PRIMARY KEY,
 	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
@@ -117,11 +118,11 @@ CREATE TABLE IF NOT EXISTS workspace_members (
 	role TEXT NOT NULL DEFAULT 'member',
 	PRIMARY KEY (workspace_id, user_id)
 );
--- Die Organisation ist die Ebene ÜBER den Workspaces: heute genau eine Zeile
--- (diese Instanz), damit "wem gehört die Instanz" eine Abfrage statt einer
--- Annahme ist. org_members spiegelt bewusst workspace_members — wenn daraus
--- einmal eine gehostete Mehrmandanten-Version wird, ist org_id bereits die
--- Schranke und es bleibt beim Zuschneiden der Abfragen statt eines Umbaus.
+-- The organisation is the level ABOVE the workspaces: today exactly one row
+-- (this instance), so that "who owns the instance" is a query rather than an
+-- assumption. org_members deliberately mirrors workspace_members — if this
+-- ever becomes a hosted multi-tenant version, org_id is already the barrier
+-- and the work is narrowing queries rather than a rebuild.
 CREATE TABLE IF NOT EXISTS organizations (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL,
@@ -133,10 +134,10 @@ CREATE TABLE IF NOT EXISTS org_members (
 	role TEXT NOT NULL DEFAULT 'member', -- owner | admin | member
 	PRIMARY KEY (org_id, user_id)
 );
--- Notfallzugriff ("Break-Glass"): ein Owner kann sich bewusst, befristet und
--- protokolliert Lesezugriff auf einen Workspace verschaffen, dem er nicht
--- angehört. Ohne diesen Weg gäbe es nur die stille Hintertür (Passwort
--- zurücksetzen, sich selbst eintragen) — die genau deshalb geschlossen wird.
+-- Emergency access ("break-glass"): an owner can deliberately, temporarily
+-- and with an audit trail gain read access to a workspace they do not belong
+-- to. Without this route the only way in is the quiet back door (reset a
+-- password, add yourself) — which is closed for exactly that reason.
 CREATE TABLE IF NOT EXISTS break_glass (
 	id TEXT PRIMARY KEY,
 	workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

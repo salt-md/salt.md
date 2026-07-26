@@ -15,24 +15,24 @@ import (
 	"strings"
 )
 
-// Workspace-Transfer: ein Workspace als natives ZIP — 1:1 wieder importierbar.
+// Workspace transfer: a workspace as a native ZIP — importable 1:1 again.
 //
-// Der Markdown-Export ist zum Mitnehmen der Inhalte gedacht; beim Wiederimport
-// gehen Datenbanken (Schema, Views, Zeilen-Properties), Hierarchie-Metadaten
-// und Datei-Anhänge verloren. Dieses Format überträgt einen Workspace
-// verlustarm zwischen Instanzen: Seitenbaum, Datenbanken, Tags samt Farben,
-// Cover/Icons/Beschreibungen und alle referenzierten Uploads.
+// The Markdown export is meant for taking the content with you; on re-import it
+// loses databases (schema, views, row properties), hierarchy metadata and file
+// attachments. This format carries a workspace between instances with little
+// loss: the page tree, databases, tags with their colours, covers, icons,
+// descriptions and every referenced upload.
 //
-// Bewusst NICHT enthalten: Nutzer/Rollen (instanzspezifisch), Kommentare und
-// Versionshistorie (hängen an Nutzer-IDs), Freigabe-Links (Secrets), Yjs-Live-
-// State (der materialisierte Seiteninhalt ist die Quelle; beim ersten Öffnen
-// wird das CRDT daraus neu geseedet — derselbe Weg wie bei neuen Seiten).
+// Deliberately NOT included: users and roles (instance specific), comments and
+// version history (they hang off user ids), share links (secrets), the live Yjs
+// state (the materialised page content is the source; on the first open the
+// CRDT is seeded from it again — the same path as for new pages).
 //
-// ZIP-Layout:
-//   salt-workspace.json   Manifest (Formatversion, Workspace-Meta, Zähler)
-//   pages.json            alle Seiten inkl. Collection-Schema/-Views
-//   tags.json             Tag → Farbe
-//   files/<name>          referenzierte Uploads
+// ZIP layout:
+//   salt-workspace.json   manifest (format version, workspace meta, counters)
+//   pages.json            every page including collection schema and views
+//   tags.json             tag → colour
+//   files/<name>          referenced uploads
 
 const transferFormat = 1
 
@@ -65,21 +65,21 @@ type transferPage struct {
 	IsTemplate  bool            `json:"isTemplate"`
 	CreatedAt   string          `json:"createdAt"`
 	UpdatedAt   string          `json:"updatedAt"`
-	// Nur für type == "collection":
+	// Only for type == "collection":
 	Schema json.RawMessage `json:"schema,omitempty"`
 	Views  json.RawMessage `json:"views,omitempty"`
 }
 
-// fileRefPattern findet Upload-Referenzen in Inhalt, Props und Covern.
-// Upload-Namen sind newID()+Endung (siehe handleUpload) — keine Leerzeichen.
+// fileRefPattern finds upload references in content, props and covers.
+// Upload names are newID()+extension (see handleUpload) — no spaces.
 var fileRefPattern = regexp.MustCompile(`/files/([A-Za-z0-9._%-]+)`)
 
 func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
 	wsID := r.PathValue("id")
-	// Mitgliedschaft (oder ein laufender, protokollierter Notfallzugriff) ist
-	// Pflicht. Früher genügte hier das Instanz-Admin-Flag — damit konnte ein
-	// Admin JEDEN fremden Workspace komplett herunterladen, ohne Spur.
+	// Membership (or a running, logged break-glass access) is mandatory. The
+	// instance admin flag used to be enough here — with it an admin could download
+	// ANY workspace belonging to anybody, in full, without a trace.
 	if !s.isMember(u.ID, wsID) && !s.hasBreakGlass(u.ID, wsID) {
 		httpError(w, 404, "workspace not found")
 		return
@@ -125,10 +125,10 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		scanned = append(scanned, p)
 	}
-	rows.Close() // erst leeren, dann per-Row-Rechte prüfen (eine DB-Verbindung)
+	rows.Close() // drain first, then check per-row permissions (one DB connection)
 
-	// Private Seiten anderer bleiben draußen — der Export enthält exakt das,
-	// was der Exportierende auch in der App sieht.
+	// Other people's private pages stay out — the export holds exactly what the
+	// person exporting sees in the app as well.
 	var pages []transferPage
 	for _, p := range scanned {
 		if s.canRead(u.ID, p.ID) {
@@ -189,10 +189,10 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for name := range fileSet {
-		// name kommt aus einem Regex ohne Pfadtrenner — kein Traversal möglich.
+		// name comes from a regex without path separators — no traversal possible.
 		src, err := os.Open(filepath.Join(s.dataDir, "files", name))
 		if err != nil {
-			continue // Referenz auf gelöschte Datei: Seite bleibt nutzbar, Datei fehlt halt
+			continue // reference to a deleted file: the page still works, the file is gone
 		}
 		if f, err := zw.Create("files/" + name); err == nil {
 			io.Copy(f, src)
@@ -266,8 +266,8 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(b, &tagColors)
 	}
 
-	// Dateien zuerst: alte → neue Namen, damit die ID-Ersetzung in den Inhalten
-	// beides in einem Durchgang erledigen kann.
+	// Files first: old → new names, so the id replacement in the content can do
+	// both in a single pass.
 	fileMap := map[string]string{}
 	filesWritten := 0
 	for _, f := range zr.File {
@@ -297,9 +297,10 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		rc.Close()
 	}
 
-	// Seiten-IDs neu vergeben. Die Ersetzung läuft als Text über die JSON-Rohfelder:
-	// IDs sind 32 Hex-Zeichen aus newID() — als Substring praktisch kollisionsfrei,
-	// und genau so referenzieren Mentions/Relationen Seiten im Inhalt.
+	// Hand out new page ids. The replacement runs as text over the raw JSON
+	// fields: ids are 32 hex characters from newID() — practically collision free
+	// as a substring, and that is exactly how mentions and relations refer to
+	// pages inside the content.
 	idMap := map[string]string{}
 	for _, p := range pages {
 		idMap[p.ID] = newID()
@@ -340,15 +341,15 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for tag, color := range tagColors {
-		// Tag-Farben sind Palettennamen (siehe handleSetTagColor), keine Hex-Werte.
+		// Tag colours are palette names (see handleSetTagColor), not hex values.
 		if tagColorPalette[strings.ToLower(color)] {
 			tx.Exec(`INSERT OR REPLACE INTO tag_colors (workspace_id, tag, color) VALUES (?, ?, ?)`, wsID, tag, strings.ToLower(color))
 		}
 	}
 
-	// Eltern vor Kindern einfügen (FK auf parent_id): Wurzeln zuerst, dann
-	// ebenenweise. Seiten mit unbekanntem Parent (z. B. beim Export gefilterte
-	// private Teilbäume) landen auf oberster Ebene statt zu verschwinden.
+	// Insert parents before children (FK on parent_id): roots first, then level
+	// by level. Pages with an unknown parent (private subtrees filtered out during
+	// the export, say) land at the top level instead of disappearing.
 	inserted := map[string]bool{}
 	remaining := append([]transferPage(nil), pages...)
 	defaultJSON := func(raw json.RawMessage, def string) string {
@@ -407,8 +408,8 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 			progressed = true
 		}
 		if !progressed {
-			// Zyklus in parent_id — kann nur aus einem manipulierten Archiv
-			// kommen; Rest oben einhängen statt endlos zu kreisen.
+			// A cycle in parent_id — can only come from a tampered archive; hang the rest
+			// at the top instead of circling forever.
 			for i := range next {
 				next[i].ParentID = nil
 			}
@@ -420,7 +421,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Suchindex + Backlink-Graph für die neuen Seiten aufbauen.
+	// Build the search index and the backlink graph for the new pages.
 	for _, p := range pages {
 		id := idMap[p.ID]
 		s.reindexPage(id)

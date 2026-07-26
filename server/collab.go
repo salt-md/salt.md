@@ -77,10 +77,10 @@ type collabConn struct {
 	done chan struct{}
 	once sync.Once
 
-	// userID: wer an dieser Verbindung haengt. Die Rechte werden beim Upgrade
-	// geprueft und danach pro Schreibrahmen — aber ein stillgelegtes Konto
-	// wuerde davon nichts merken: seine Sitzungen und Token sind geloescht,
-	// dieser Socket lief weiter. Mit der Id laesst er sich gezielt schliessen.
+	// userID: who is on the other end of this connection. Permissions are
+	// checked at the upgrade and then per write frame — but a deactivated
+	// account would notice none of that: its sessions and tokens are gone while
+	// this socket kept running. The id is what lets us close it deliberately.
 	userID string
 
 	// Awareness bookkeeping, guarded by the room's mu. The server never
@@ -107,11 +107,11 @@ func (c *collabConn) enqueue(m outMsg) {
 func (c *collabConn) shutdown(code websocket.StatusCode, reason string) {
 	c.once.Do(func() {
 		close(c.done)
-		// Close blockiert (Close-Handshake, gegen einen steckengebliebenen Peer
-		// bis ~5s) — und shutdown wird aus Broadcast-Pfaden gerufen, die
-		// room.mu (und in leave sogar hub.mu) halten. Ein einziger toter Peer
-		// mit vollem out-Puffer würde sonst sekundenlang JEDEN Join/Leave
-		// aller Räume anhalten. Deshalb asynchron schließen.
+		// Close blocks (close handshake, up to ~5s against a stuck peer) — and
+		// shutdown is called from broadcast paths that hold room.mu (and in
+		// leave even hub.mu). A single dead peer with a full out buffer would
+		// otherwise stall EVERY join and leave in every room for seconds. So
+		// close asynchronously.
 		go c.ws.Close(code, reason)
 	})
 }
@@ -151,10 +151,10 @@ func (c *collabConn) pingLoop(ctx context.Context) {
 			err := c.ws.Ping(pctx)
 			cancel()
 			if err != nil {
-				// Der Pong wird von der Read-Schleife dieser Verbindung
-				// verarbeitet — und die kann gerade hinter room.mu warten
-				// (z. B. großer Snapshot-INSERT). Ein einzelner Fehlschlag
-				// beweist also keinen toten Peer; erst der zweite in Folge.
+				// The pong is handled by this connection's read loop — and
+				// that loop may be waiting behind room.mu right now (a big
+				// snapshot INSERT, say). One failure therefore proves no dead
+				// peer; only the second one in a row does.
 				misses++
 				if misses >= 2 {
 					c.shutdown(websocket.StatusGoingAway, "ping timeout")
@@ -365,13 +365,11 @@ func (s *Server) resetYjsDoc(pageID string) {
 	}
 }
 
-// reset closes a page's editors without touching the DB (used when the page
-// is trashed/deleted — the rows are removed by the caller's transaction).
-// dropUser schliesst alle offenen Verbindungen eines Kontos.
+// dropUser closes every open connection of one account.
 //
-// Aufgerufen beim Stilllegen: "Sitzungen enden sofort" muss auch fuer einen
-// offenen Editor-Tab gelten, sonst liest und schreibt das Konto weiter, bis
-// jemand das Fenster schliesst.
+// Called on deactivation: "sessions end immediately" has to hold for an open
+// editor tab too, or the account keeps reading and writing until somebody
+// closes the window.
 func (h *collabHub) dropUser(userID string) int {
 	if userID == "" {
 		return 0
@@ -396,6 +394,8 @@ func (h *collabHub) dropUser(userID string) int {
 	return len(doomed)
 }
 
+// reset closes a page's editors without touching the DB (used when the page
+// is trashed/deleted — the rows are removed by the caller's transaction).
 func (h *collabHub) reset(pageID string) {
 	h.mu.Lock()
 	room := h.rooms[pageID]
@@ -523,16 +523,16 @@ func (s *Server) handleCollab(w http.ResponseWriter, r *http.Request) {
 		if typ != websocket.MessageBinary || len(data) < 1 {
 			continue
 		}
-		// Wer nur lesen darf, darf auch hier nur lesen. Der Socket blieb bisher
-		// die eine Schreibtür, die an canWrite vorbeiführt: er wurde beim
-		// Verbindungsaufbau allein gegen canRead geprüft, und jedes eingehende
-		// Yjs-Update landete ungeprüft in der Datenbank. Das betraf Betrachter
-		// ebenso wie einen Notfallzugriff, der ausdrücklich nur lesen darf.
-		// Empfangen (und damit Live-Mitlesen) bleibt erlaubt — nur Senden nicht.
+		// Whoever may only read may only read here too. The socket used to be
+		// the one write door that walks past canWrite: at connection time it was
+		// checked against canRead alone, and every incoming Yjs update landed in
+		// the database unchecked. That covered viewers as much as a break-glass
+		// access that is explicitly read-only. Receiving — and so following along
+		// live — stays allowed; only sending does not.
 		//
-		// Die Prüfung läuft bei JEDEM Frame, nicht einmal beim Verbinden: sonst
-		// würde ein offener Socket den Ablauf oder den Widerruf des
-		// Notfallzugriffs überdauern.
+		// The check runs on EVERY frame, not once at connect: otherwise an open
+		// socket would outlive the expiry or the revocation of a break-glass
+		// access.
 		if data[0] == frameUpdate || data[0] == frameSnapshot {
 			if !s.canWriteReq(r, pageID) {
 				continue

@@ -89,8 +89,8 @@ type appSettings struct {
 	MailProvider    string `json:"mailProvider"`
 	MailAddress     string `json:"mailAddress"`
 	MailFrom        string `json:"mailFrom"`
-	// W97: duerfen Nicht-Admins eigene Workspaces anlegen (und deren Admin
-	// werden)? Standard: ja — so war es bisher; der Schalter gibt Kontrolle.
+	// W97: may non-admins create workspaces of their own (and become their
+	// admin)? Default yes — that is how it was; the switch gives control.
 	AllowUserWorkspaces bool `json:"allowUserWorkspaces"`
 }
 
@@ -189,8 +189,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		s.setSetting("trust_proxy", v)
 	}
 	if body.AllowUserWorkspaces != nil {
-		// "0" = ausdruecklich aus; sonst erlaubt (Default). Nicht "" schreiben,
-		// sonst faellt der Wert auf den Default "1" zurueck.
+		// "0" = explicitly off; anything else allowed (the default). Do not write
+		// "", or the value falls back to the default "1".
 		v := "1"
 		if !*body.AllowUserWorkspaces {
 			v = "0"
@@ -309,7 +309,7 @@ func (s *Server) sendMail(to, subject, body string) error {
 	}
 	host := s.setting("smtp_host", "")
 	if host == "" {
-		return fmt.Errorf("Kein Mail-Versand konfiguriert — SMTP eintragen oder Google/Microsoft verbinden.")
+		return fmt.Errorf("no mail delivery configured — set up SMTP or connect Google/Microsoft")
 	}
 	port := s.setting("smtp_port", "587")
 	user := s.setting("smtp_user", "")
@@ -319,10 +319,10 @@ func (s *Server) sendMail(to, subject, body string) error {
 		from = "salt@" + host
 	}
 	addr := host + ":" + port
-	// Kopfzeilen duerfen keine Zeilenumbrueche enthalten: ein Betreff mit
-	// "\r\nBcc: ..." wuerde sonst einen zusaetzlichen Empfaenger einschmuggeln
-	// oder — mit einer Leerzeile — den ganzen Mailtext ersetzen. Betrifft jeden
-	// Betreff, der Nutzereingaben enthaelt (etwa einen Workspace-Namen).
+	// Headers may not contain line breaks: a subject holding "\r\nBcc: ..."
+	// would otherwise smuggle in an extra recipient or — with a blank line —
+	// replace the whole body. Affects every subject that carries user input (a
+	// workspace name, say).
 	subject = headerSafe(subject)
 	to = headerSafe(to)
 	from = headerSafe(from)
@@ -457,9 +457,9 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 	// workspace — the session already proves identity, so no password is asked.
 	// A bound invite must still match the signed-in account's address.
 	if cur := s.currentUser(r); cur != nil {
-		// Auch hier: eine stillgelegte Sitzung tritt keinem Workspace mehr bei.
-		// Hard to reach (deactivating clears the sessions), but this is the one
-		// mutating currentUser site without that check.
+		// Here too: a deactivated session joins no workspace any more. Hard to reach
+		// (deactivating clears the sessions), but this is the one mutating
+		// currentUser site without that check.
 		if cur.Disabled {
 			httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated — talk to an admin.")
 			return
@@ -499,10 +499,9 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 			httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Wrong email or wrong password.")
 			return
 		}
-		// Wie bei handleLogin: erst nach der Passwortpruefung ablehnen, damit die
-		// Antwort nicht verraet, ob es die Adresse gibt. Ohne das koennte sich ein
-		// stillgelegtes Konto ueber einen offenen Einladungslink eine frische
-		// Sitzung besorgen.
+		// As in handleLogin: refuse only after the password check, so the answer does
+		// not give away whether the address exists. Without this a deactivated account
+		// could get itself a fresh session through an open invitation link.
 		if disabled != 0 {
 			httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated — talk to an admin.")
 			return
@@ -530,9 +529,9 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.addOrgMember(uid, false)
-		// Auch wer eingeladen wurde, bekommt seinen eigenen Bereich — sonst haengt
-		// sein Konto ganz am Wohlwollen des einladenden Teams. Nur bei einem NEUEN
-		// Konto: wer schon da ist, hat seinen Bereich laengst.
+		// Somebody who was invited gets their own area too — otherwise their account
+		// hangs entirely on the goodwill of the inviting team. Only for a NEW account:
+		// whoever is already here has had their area for a long time.
 		s.onboardUser(uid, body.Name)
 	}
 
@@ -560,11 +559,11 @@ func (s *Server) joinWorkspace(ws, uid, role string) {
 // domainAllowsSelfSignup reports whether an email may self-register given the
 // current signup policy.
 //
-// Wohin das neue Konto kommt, entscheidet diese Funktion nicht mehr: früher
-// lieferte sie den ÄLTESTEN Workspace der Instanz, wer sich also selbst
-// registrierte, saß sofort im Hauptbereich samt allen Inhalten. Seit W102
-// bekommt jedes Konto seinen eigenen Bereich, und geteilte Workspaces nur, wenn
-// der Owner sie ausdrücklich für alle geöffnet hat (siehe onboardUser).
+// Where the new account lands is no longer this function's decision: it used
+// to return the OLDEST workspace on the instance, so whoever self-registered
+// sat in the main area with all its content straight away. Since W102 every
+// account gets an area of its own, and shared workspaces only if the owner has
+// deliberately opened them to everybody (see onboardUser).
 func (s *Server) domainAllowsSelfSignup(email string) bool {
 	if s.setting("signup_mode", "invite") != "domain" {
 		return false
@@ -598,9 +597,9 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 		// erlaubt
 	case "domain":
 		if !s.domainAllowsSelfSignup(email) {
-			// Ohne die Domain zu nennen: sonst wäre der Fehlertext dieselbe
-			// Auskunft, die aus der Richtlinie entfernt wurde — nur eine
-			// Anmeldemaske später.
+			// Without naming the domain: the error text would otherwise be the same
+			// disclosure that was taken out of the policy — just one login screen
+			// later.
 			httpErrorCode(w, 403, "signup_not_allowed", "This email address cannot register on its own. Ask for an invitation.")
 			return
 		}
@@ -637,11 +636,11 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 // signupPolicy is unauthenticated: tells the login screen whether to show a
 // "create account" option.
 //
-// Die erlaubten Domains stehen hier BEWUSST NICHT drin. Sie sagen einem
-// Fremden, welche Absenderadressen dieses Haus für vertrauenswürdig hält —
-// die halbe Vorarbeit für einen Anruf im Namen der IT oder eine Mail von einer
-// nachgemachten Adresse. Der Bildschirm braucht sie nicht: ob jemand sich
-// selbst registrieren darf, entscheidet der Server beim Versuch.
+// The allowed domains are DELIBERATELY not in here. They tell a stranger
+// which sender addresses this house holds trustworthy — half the groundwork
+// for a phone call in the name of IT, or a mail from a lookalike address. The
+// screen does not need them: whether somebody may register on their own is
+// decided by the server when they try.
 func (s *Server) handleSignupPolicy(w http.ResponseWriter, r *http.Request) {
 	mode := s.setting("signup_mode", "invite")
 	g, m := s.oauthEnabled()

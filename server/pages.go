@@ -319,10 +319,10 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Workspace-Umzug: eigener Weg, weil der GANZE Unterbaum mitmuss und die
-	// Elternverknüpfung fallen muss (der Elternteil bleibt im alten Workspace).
-	// Ein blosses UPDATE workspace_id würde Datenbankzeilen von ihrer Datenbank
-	// trennen.
+	// Moving between workspaces: its own path, because the WHOLE subtree has to
+	// come along and the parent link has to go (the parent stays in the old
+	// workspace). A bare UPDATE workspace_id would separate database rows from
+	// their database.
 	if body.WorkspaceID != nil && *body.WorkspaceID != "" {
 		n, err := s.moveSubtreeToWorkspace(requestUser(r).ID, id, *body.WorkspaceID,
 			func(ws string) bool { return s.tokenReachesWorkspace(r, ws) })
@@ -428,16 +428,16 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 		metaChanged = true
 	}
 
-	// Ein neuer Elternteil braucht Schreibrecht auf den Elternteil UND denselben
-	// Workspace. Geprüft wurde bisher nur, dass es ihn gibt — damit konnte man
-	// eine eigene Seite unter eine fremde hängen: im Zielworkspace tauchte sie
-	// in Datenbank-Ansichten, Markdown-Export und Kalender-Feed auf, denn die
-	// listen Kinder ohne eigene Rechteprüfung. Innerhalb eines Workspace war es
-	// der Weg, eine private Seite unter eine Collection zu hängen und so allen
-	// Mitgliedern zu zeigen.
+	// A new parent needs write permission on that parent AND the same workspace.
+	// All that used to be checked was that it exists — so you could hang a page of
+	// your own under somebody else's: in the target workspace it turned up in
+	// database views, the Markdown export and the calendar feed, because those
+	// list children without a permission check of their own. Inside one workspace
+	// it was the way to hang a private page under a collection and show it to
+	// every member.
 	//
-	// Vor tx.Begin(): die Verbindungsgrenze ist eins, eine Abfrage in einer
-	// offenen Transaktion würde sich selbst blockieren.
+	// Before tx.Begin(): the connection limit is one, so a query inside an open
+	// transaction would block itself.
 	if len(body.ParentID) > 0 {
 		if t := bytes.TrimSpace(body.ParentID); string(t) != "null" {
 			var newParent string
@@ -589,11 +589,11 @@ func (s *Server) handleReindexSiblings(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "invalid JSON")
 		return
 	}
-	// Der Endpunkt hatte gar keine Prüfung: mit parentId=null traf er
-	// `parent_id IS NULL` und schrieb damit die Reihenfolge ALLER Wurzelseiten
-	// der GESAMTEN Instanz neu — für jedes angemeldete Konto, quer durch alle
-	// Workspaces. Unterhalb einer Seite braucht es Schreibrecht auf sie; auf
-	// oberster Ebene wird auf den eigenen Workspace eingegrenzt.
+	// This endpoint had no check at all: with parentId=null it matched
+	// `parent_id IS NULL` and so rewrote the order of EVERY root page on the
+	// WHOLE instance — for any signed-in account, across all workspaces. Below a
+	// page it needs write permission on that page; at the top level it is narrowed
+	// to your own workspace.
 	me := requestUser(r)
 	var wsFilter string
 	if body.ParentID != nil {
@@ -693,9 +693,9 @@ func (s *Server) reindexPage(id string) error {
 		id, clean.Replace(title), clean.Replace(body)); err != nil {
 		return err
 	}
-	// Abschnitte im selben Zug (siehe chunks.go). Fehler hier duerfen die
-	// Seitenindexierung nicht scheitern lassen — die Volltextsuche ist die
-	// Grundlage, die Abschnitte sind die Verfeinerung.
+	// Passages in the same breath (see chunks.go). A failure here may not make the
+	// page indexing fail — the full-text search is the foundation, the passages
+	// are the refinement.
 	var wsID string
 	s.db.QueryRow(`SELECT workspace_id FROM pages WHERE id = ?`, id).Scan(&wsID)
 	if err := s.reindexChunks(id, wsID, clean.Replace(title), []byte(content), false); err != nil {
@@ -743,9 +743,9 @@ func (s *Server) handleDeletePage(w http.ResponseWriter, r *http.Request) {
 			httpError(w, 500, err.Error())
 			return
 		}
-		// chunks_fts ist virtuell und kennt keine Kaskade — sonst blieben die
-		// Abschnitte der geloeschten Seiten im Suchindex stehen und lieferten
-		// Treffer auf Text, den es nicht mehr gibt.
+		// chunks_fts is virtual and knows no cascade — otherwise the passages of the
+		// deleted pages would stay in the search index and return hits on text that
+		// no longer exists.
 		if _, err := tx.Exec(`DELETE FROM chunks_fts WHERE chunk_id IN
 			(SELECT id FROM page_chunks WHERE page_id IN (`+placeholders(len(ids))+`))`, idArgs...); err != nil {
 			httpError(w, 500, err.Error())
@@ -863,9 +863,9 @@ type searchResult struct {
 	Title   string `json:"title"`
 	Icon    string `json:"icon"`
 	Snippet string `json:"snippet"`
-	// Heading: der Ueberschriften-Pfad des getroffenen Abschnitts
-	// ("Verträge › Kündigung"). Leer, wenn der Treffer aus der
-	// Rueckfallebene kommt oder ueber keiner Ueberschrift steht.
+	// Heading: the heading path of the passage that matched, for example
+	// "Contract › Termination". Empty when the hit comes from the fallback or
+	// sits under no heading at all.
 	Heading string `json:"heading,omitempty"`
 }
 
@@ -889,30 +889,30 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	for _, v := range ws {
 		wargs = append(wargs, v)
 	}
-	// Gesucht wird ueber die ABSCHNITTE, nicht ueber ganze Seiten (siehe
-	// chunks.go): der Textausschnitt stammt dann aus dem Absatz, der wirklich
-	// passt, und traegt seinen Ueberschriften-Pfad mit.
+	// The search runs over the PASSAGES, not over whole pages (see chunks.go):
+	// the excerpt then comes from the paragraph that actually matches, and carries
+	// its heading path along.
 	//
-	// Nachladen, statt einmal 40 zu holen: der canRead-Filter unten wirft
-	// Treffer weg, und mit einem festen LIMIT blieb die Liste kurz, sobald in
-	// einem Workspace viele fremde private Seiten liegen — man bekam vier
-	// Ergebnisse und dachte, mehr gebe es nicht.
+	// Fetching in rounds rather than 40 at once: the canRead filter below throws
+	// hits away, and with a fixed LIMIT the list stayed short as soon as a
+	// workspace held many private pages belonging to other people — you got four
+	// results and believed there were no more.
 	results = s.searchChunks(userID, match, ws, 20)
-	// Rueckfallebene: findet die Abschnittssuche nichts, zaehlt die alte
-	// Seitensuche. Sie ist die Grundlage; ein Fehler beim Schneiden darf
-	// Inhalte nicht unauffindbar machen.
+	// Fallback: if the passage search finds nothing, the old page search counts.
+	// It is the foundation; a mistake in the cutting may not make content
+	// unfindable.
 	if len(results) == 0 {
 		results = s.searchPagesFallback(userID, match, ws, 20)
 	}
 	writeJSON(w, results)
 }
 
-// searchChunks sucht ueber die Abschnitte und liefert je Seite den BESTEN.
+// searchChunks searches the passages and returns the BEST one per page.
 //
-// Die Entdopplung passiert in Go und nicht in SQL: `GROUP BY page_id` wuerfe
-// die Rangfolge durcheinander, weil FTS5 seine Sortierung nur auf der
-// aeusseren Abfrage garantiert. Da die Zeilen ohnehin nach Rang kommen, ist
-// der erste Treffer je Seite der beste.
+// The de-duplication happens in Go and not in SQL: `GROUP BY page_id` would
+// upset the ranking, because FTS5 only guarantees its ordering on the outer
+// query. Since the rows arrive ranked anyway, the first hit per page is the
+// best one.
 func (s *Server) searchChunks(userID, match string, ws []string, want int) []searchResult {
 	out := []searchResult{}
 	seen := map[string]bool{}
@@ -936,8 +936,8 @@ func (s *Server) searchChunks(userID, match string, ws []string, want int) []sea
 		if err != nil {
 			return out
 		}
-		// Cursor VOR jeder canRead-Abfrage leeren — bei einer einzigen
-		// DB-Verbindung blockiert eine Abfrage im offenen Cursor den Server.
+		// Drain the cursor BEFORE any canRead query — with a single DB connection, a
+		// query inside an open cursor blocks the server.
 		var cand []searchResult
 		for rows.Next() {
 			var res searchResult

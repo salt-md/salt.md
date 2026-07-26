@@ -45,23 +45,11 @@ var exemptFile = regexp.MustCompile(`i18n-ok-file:\s*\S`)
 // of the test. Otherwise this turns into the usual allowlist that outlives the
 // problem and quietly re-opens the door.
 var pendingTranslation = map[string]bool{
-	"server/admin.go":          true,
-	"server/audit.go":          true,
-	"server/collab.go":         true,
-	"server/db.go":             true,
-	"server/ingest.go":         true,
-	"server/lifecycle.go":      true,
-	"server/mail_oauth.go":     true,
-	"server/mcp.go":            true,
-	"server/mcp_db.go":         true,
-	"server/mcp_history.go":    true,
-	"server/mcp_pages.go":      true,
-	"server/mcp_schema.go":     true,
-	"server/mcp_workspace.go":  true,
-	"server/pages.go":          true,
-	"server/server.go":         true,
-	"server/transfer.go":       true,
-	"server/workspace_move.go": true,
+	"server/ingest.go":        true,
+	"server/mcp.go":           true,
+	"server/mcp_pages.go":     true,
+	"server/mcp_schema.go":    true,
+	"server/mcp_workspace.go": true,
 }
 
 func goSources(t *testing.T) []string {

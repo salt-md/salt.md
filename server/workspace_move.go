@@ -5,28 +5,27 @@ import (
 	"strings"
 )
 
-// Seiten zwischen Workspaces umziehen.
+// Moving pages between workspaces.
 //
-// Das fehlte bisher ÜBERALL — Oberfläche, REST und MCP. `workspaceId` wurde nur
-// beim Anlegen ausgewertet; wer eine Seite im falschen Workspace erzeugt hatte,
-// konnte sie nie mehr dorthin bringen, wo sie hingehört. Aufgefallen ist es,
-// als ein Agent eine Datenbank im Standard-Workspace anlegte und sie danach
-// niemand mehr umziehen konnte.
+// This was missing EVERYWHERE — interface, REST and MCP. `workspaceId` was only
+// read when creating a page; whoever had made one in the wrong workspace could
+// never get it to where it belonged. It surfaced when an agent created a
+// database in the default workspace and afterwards nobody could move it.
 //
-// Warum das mehr ist als ein `UPDATE workspace_id`:
-//   • Der GANZE Unterbaum muss mit, sonst liegen die Zeilen einer Datenbank in
-//     einem anderen Workspace als die Datenbank selbst.
-//   • Die Elternverknüpfung muss fallen: der bisherige Elternteil bleibt im
-//     alten Workspace zurück, ein Kind dort wäre unerreichbar verwaist.
-//   • Rechte auf BEIDEN Seiten: schreiben dürfen auf der Seite, und im
-//     Zielworkspace mehr als nur Leser sein.
-// Unberührt bleiben Yjs-Dokument, Kommentare, Versionen, Favoriten und
-// Freigabelinks — die hängen alle an der Seiten-Id, und die ändert sich nicht.
+// Why this is more than an `UPDATE workspace_id`:
+//   • The WHOLE subtree has to come along, or the rows of a database sit in a
+//     different workspace than the database itself.
+//   • The parent link has to go: the previous parent stays behind in the old
+//     workspace, and a child there would be orphaned out of reach.
+//   • Permissions on BOTH sides: allowed to write on the page, and more than a
+//     reader in the target workspace.
+// Untouched: the Yjs document, comments, versions, favourites and share links —
+// they all hang off the page id, and that does not change.
 
-// moveSubtreeToWorkspace zieht pageID samt Unterbaum in den Zielworkspace.
-// tokenOK meldet, ob ein workspace-beschraenktes API-Token den Zielworkspace
-// erreichen darf. Der Aufrufer reicht die Pruefung herein, weil hier nur die
-// Nutzer-Id ankommt, die Einschraenkung aber am Token haengt.
+// moveSubtreeToWorkspace moves pageID and its subtree into the target
+// workspace. tokenOK reports whether a workspace-restricted API token is
+// allowed to reach the target. The caller passes that check in, because only
+// the user id arrives here while the restriction hangs off the token.
 func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string, tokenOK func(string) bool) (int, error) {
 	var curWS string
 	var title string
@@ -53,12 +52,12 @@ func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string, tokenOK
 	if len(ids) == 0 {
 		ids = []string{pageID}
 	}
-	// Nichts umziehen, was der Umziehende nicht sehen darf. Der Unterbaum kann
-	// FREMDE private Seiten enthalten; im Zielworkspace ist er womöglich Admin,
-	// und Workspace-Admins sehen private Seiten. Der Umzug wäre damit ein Weg,
-	// sich fremde Notizen lesbar zu machen. Zurücklassen geht auch nicht — die
-	// Seiten hingen dann an einem Elternteil in einem anderen Workspace. Also
-	// abbrechen und den Grund nennen.
+	// Move nothing the mover is not allowed to see. The subtree can hold other
+	// people's private pages; in the target workspace they may well be an admin,
+	// and workspace admins see private pages. The move would then be a way to
+	// make somebody else's notes readable. Leaving them behind is no option
+	// either — those pages would hang off a parent in another workspace. So
+	// stop and say why.
 	for _, id := range ids {
 		if !s.canRead(userID, id) {
 			return 0, fmt.Errorf("this subtree contains private pages owned by someone else — they cannot be moved along")
@@ -71,9 +70,9 @@ func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string, tokenOK
 	}
 	defer tx.Rollback()
 
-	// Die Wurzel verliert ihren Elternteil — der bleibt im alten Workspace.
-	// Ohne das hinge der Unterbaum an einem Elternteil, den im Zielworkspace
-	// niemand sehen kann, und wäre in der Seitenleiste unauffindbar.
+	// The root loses its parent — that one stays in the old workspace. Without
+	// this the subtree would hang off a parent nobody in the target workspace
+	// can see, and would be unfindable in the sidebar.
 	var pos float64
 	tx.QueryRow(`SELECT COALESCE(MAX(position), 0) + 1 FROM pages WHERE parent_id IS NULL AND workspace_id = ?`, targetWS).Scan(&pos)
 	if _, err := tx.Exec(`UPDATE pages SET parent_id = NULL, position = ?, updated_at = ? WHERE id = ?`,
@@ -99,14 +98,14 @@ func (s *Server) moveSubtreeToWorkspace(userID, pageID, targetWS string, tokenOK
 	return len(ids), nil
 }
 
-// mcpCreateWorkspace legt einen Workspace an; der Aufrufer wird sein Admin.
+// mcpCreateWorkspace creates a workspace; the caller becomes its admin.
 func (s *Server) mcpCreateWorkspace(userID, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	// Derselbe Gate wie im REST-Handler: ein Agent soll keine Grenze umgehen,
-	// die einem Menschen in der Oberflaeche gesetzt ist.
+	// The same gate as in the REST handler: an agent should not walk past a
+	// boundary that is set for a human in the interface.
 	if u := s.userByID(userID); (u == nil || !u.IsAdmin) && !s.loadSettings().AllowUserWorkspaces {
 		return "", fmt.Errorf("creating workspaces is disabled on this instance")
 	}

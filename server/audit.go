@@ -46,15 +46,15 @@ type auditEntry struct {
 // (default 50, max 200) — so the whole history is reachable, not just the tail.
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
-	// Vorgänge, die die ganze Instanz betreffen (Konto stillgelegt, Workspace
-	// übergeben oder gelöscht), hängen an keinem oder an einem nicht mehr
-	// existierenden Workspace. Der Workspace-Filter ließ sie damit für JEDEN
-	// verschwinden — ausgerechnet die Vorgänge, wegen derer man ein Protokoll
-	// führt. Der Owner sieht sie; für alle anderen bleibt es beim Workspace.
-	// Auch der Instanz-Admin: er ist es, der Konten stilllegt und Zuordnungen
-	// ändert. Fand er seinen eigenen Vorgang nie wieder, war das Protokoll für
-	// ihn wertlos. Die NULL-Zeilen nennen nur Konto- und Workspace-Namen —
-	// beides verwaltet er ohnehin — und keine Seitentitel.
+	// Events that concern the whole instance (an account deactivated, a workspace
+	// handed over or deleted) hang off no workspace, or off one that no longer
+	// exists. The workspace filter therefore made them vanish for EVERYBODY —
+	// precisely the events a log is kept for. The owner sees them; for everybody
+	// else the workspace still decides. The instance admin too: they are the one
+	// who deactivates accounts and changes assignments. If they could never find
+	// their own action again, the log was worthless to them. The NULL rows name
+	// only account and workspace names — both of which they administer anyway —
+	// and no page titles.
 	me := requestUser(r)
 	instanceScope := (s.isOwner(me.ID) || me.IsAdmin) && me.TokenWorkspaces == nil
 	if len(ws) == 0 && !instanceScope {
@@ -70,16 +70,16 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		wsCond = "0"
 	}
 	if instanceScope {
-		// IS NULL, nicht = '': s.audit schreibt einen fehlenden Workspace als
-		// NULL (siehe nullIfEmpty), und NULL vergleicht sich mit nichts.
+		// IS NULL, not = '': s.audit writes a missing workspace as NULL (see
+		// nullIfEmpty), and NULL compares equal to nothing.
 		//
-		// NUR die NULL-Zeilen. Ein früherer Zusatz ließ auch Einträge zu
-		// Workspaces durch, die es nicht mehr gibt — gedacht als Weg, Vorgänge
-		// wie "Workspace gelöscht" sichtbar zu halten, tatsächlich aber die
-		// vollständige Titelliste jedes gelöschten Workspace: `detail` enthält
-		// bei create_page den Seitentitel, und die Rechteprüfung darunter greift
-		// nicht mehr, weil es die Seite nicht mehr gibt. Die Vorgänge selbst
-		// werden jetzt ohne Workspace-Bezug geschrieben und stehen damit hier.
+		// ONLY the NULL rows. An earlier addition also let through entries for
+		// workspaces that no longer exist — meant as a way to keep events like
+		// "workspace deleted" visible, but in fact the complete title list of every
+		// deleted workspace: for create_page, `detail` holds the page title, and the
+		// permission check below no longer bites because the page is gone. The events
+		// themselves are now written without a workspace reference, which is what
+		// puts them here.
 		wsCond = "(" + wsCond + " OR workspace_id IS NULL)"
 	}
 	limit := 50
@@ -91,16 +91,15 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		cursor = v
 	}
 
-	// Der Workspace-Filter allein genügt nicht: `detail` enthält Seitentitel
-	// (etwa beim Anlegen), und über die Seitenweise ließ sich so die Titelliste
-	// ALLER je angelegten Seiten lesen — auch der privaten Teilbäume anderer,
-	// die /api/pages und /api/search korrekt verbergen.
+	// The workspace filter alone is not enough: `detail` holds page titles (on
+	// creation, for one), and paging through the log let anybody read the title
+	// list of EVERY page ever created — including the private subtrees of other
+	// people, which /api/pages and /api/search correctly hide.
 	//
-	// Gefiltert wird nachträglich, also muss NACHGELADEN werden, bis die Seite
-	// voll ist: die Oberfläche erkennt das Ende der Historie daran, dass
-	// weniger als `limit` Einträge zurückkommen. Würde einfach gekürzt, wäre
-	// nach dem ersten ausgefilterten Eintrag die gesamte ältere Historie
-	// unerreichbar.
+	// The filtering happens afterwards, so more has to be FETCHED until the page
+	// is full: the interface recognises the end of the history by getting back
+	// fewer than `limit` entries. If the list were simply truncated, everything
+	// older than the first filtered-out entry would be out of reach.
 	uid := requestUser(r).ID
 	list := []auditEntry{}
 	for round := 0; len(list) < limit && round < 20; round++ {
@@ -124,19 +123,18 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 				batch = append(batch, e)
 			}
 		}
-		rows.Close() // erst leeren, dann per-Zeile prüfen (eine DB-Verbindung)
+		rows.Close() // drain first, then check row by row (one DB connection)
 		if len(batch) == 0 {
-			break // Historie erschöpft
+			break // history exhausted
 		}
 		cursor = batch[len(batch)-1].ID
 		for _, e := range batch {
 			if len(list) == limit {
 				break
 			}
-			// Verweist der Eintrag auf eine Seite, die es NICHT MEHR gibt, bleibt
-			// er stehen: sonst verschwänden genau die Vorgänge, für die ein
-			// Protokoll da ist — endgültiges Löschen, und mit der automatischen
-			// Papierkorb-Räumung nach und nach von selbst.
+			// If the entry points at a page that NO LONGER exists, it stays: otherwise
+			// exactly the events a log is there for would disappear — permanent deletion,
+			// and, with the automatic emptying of the trash, gradually and on their own.
 			if e.PageID != "" && s.pageExists(e.PageID) && !s.canRead(uid, e.PageID) {
 				continue
 			}

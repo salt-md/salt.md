@@ -27,13 +27,13 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 	if len(ids) == 0 {
 		return "", sql.ErrNoRows
 	}
-	// Nur kopieren, was der Aufrufer auch sehen darf. subtreeIDs sammelt den
-	// ganzen Teilbaum ungefiltert, autorisiert war bisher nur die Wurzel — eine
-	// FREMDE private Unterseite wurde also mitkopiert. Und weil die Kopie
-	// owner_id auf den Kopierenden setzt, die Sichtbarkeit aber 'private'
-	// bleibt, gehörte sie danach ihm: aus "kein Zugriff" wurde durch
-	// Duplizieren "mein Eigentum". Ausgefilterte Zweige entfallen samt ihren
-	// Nachfahren; deren Eltern-Verweis zeigte sonst ins Leere.
+	// Copy only what the caller is allowed to see. subtreeIDs collects the
+	// whole subtree unfiltered, and only the root used to be authorised — so
+	// somebody else's private subpage was copied along. And because the copy
+	// sets owner_id to whoever copied while visibility stays 'private', it then
+	// belonged to them: duplicating turned "no access" into "mine". Filtered
+	// branches drop out together with their descendants; their parent reference
+	// would otherwise point at nothing.
 	readable := make([]string, 0, len(ids))
 	for _, id := range ids {
 		if s.canRead(userID, id) {
@@ -47,14 +47,13 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 	// Load every page in the subtree into memory (drain before further queries;
 	// single DB connection).
 	//
-	// Eingefügt wird später in der Reihenfolge von `ids` — und die kommt aus der
-	// rekursiven Abfrage, also Eltern vor Kindern. Die Reihenfolge DIESER
-	// Abfrage taugt dafür nicht: `WHERE id IN (…)` läuft über den Index und
-	// liefert nach Id sortiert. Ist die Id eines Kindes kleiner als die seines
-	// Elternteils, wurde es zuerst eingefügt und verwies auf einen Elternteil,
-	// den es noch nicht gab — die Kopie brach dann mit einem
-	// Fremdschlüsselfehler ab. Weil Ids zufällig sind, passierte das etwa jedes
-	// zweite Mal.
+	// The insert later follows the order of `ids` — which comes from the
+	// recursive query, so parents before children. The order of THIS query is
+	// no good for that: `WHERE id IN (…)` runs over the index and comes back
+	// sorted by id. If a child's id is smaller than its parent's, it got
+	// inserted first and pointed at a parent that did not exist yet — the copy
+	// then broke off with a foreign key error. Because ids are random, that
+	// happened roughly every second time.
 	rowsByID := map[string]*dupRow{}
 	q := `SELECT id, parent_id, title, icon, cover, content, type, props, visibility, position, workspace_id
 	      FROM pages WHERE id IN (` + placeholders(len(ids)) + `)`
@@ -86,8 +85,8 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 	rows.Close()
 	workspaceID := wsByID[rootID]
 
-	// Eltern vor Kindern: die Reihenfolge aus subtreeIDs, beschränkt auf das,
-	// was wirklich geladen wurde.
+	// Parents before children: the order from subtreeIDs, narrowed to what was
+	// actually loaded.
 	order := make([]string, 0, len(rowsByID))
 	for _, id := range ids {
 		if _, ok := rowsByID[id]; ok {
@@ -138,12 +137,12 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 		} else if np, ok := newID2[d.parentID]; ok {
 			parent = np
 		} else if d.hasParent {
-			// Der Elternteil wurde nicht mitkopiert — entweder weil er
-			// ausgefiltert wurde (unlesbar) oder weil der Baum über
-			// Workspace-Grenzen verbogen ist. Früher wurde die Kopie hier an den
-			// ORIGINAL-Elternteil gehängt: bei einem unlesbaren privaten
-			// Elternteil landete sie damit in einem fremden Teilbaum, mit dem
-			// Kopierenden als Eigentümer. Solche Zweige gehören übersprungen.
+			// The parent was not copied along — either because it was filtered
+			// out (unreadable) or because the tree is bent across workspace
+			// boundaries. This used to hang the copy on the ORIGINAL parent:
+			// with an unreadable private parent it landed in somebody else's
+			// subtree, with the copier as its owner. Branches like that belong
+			// skipped.
 			continue
 		}
 		if _, err := s.db.Exec(`INSERT INTO pages (id, parent_id, title, icon, cover, content, position, created_at, updated_at, type, props, workspace_id, owner_id, visibility)

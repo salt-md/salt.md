@@ -27,7 +27,7 @@ type Server struct {
 	events      *eventHub
 	collab      *collabHub
 	mcpRate     *rateLimiter
-	mcpIcon     string          // Data-URI des Logos für serverInfo.icons (siehe mcp.go)
+	mcpIcon     string          // data URI of the logo for serverInfo.icons (see mcp.go)
 	ingest      *ingestRegistry // laufende Massenimporte (siehe ingest.go)
 	loginRate   *rateLimiter
 	formRate    *rateLimiter
@@ -38,11 +38,10 @@ type Server struct {
 // graceful shutdown so WAL is checkpointed and the sole connection is returned
 // cleanly.
 func (s *Server) Close() error {
-	// NICHT StopTunnel: das ist der bewusste „Aus"-Knopf des Admins und löscht
-	// deshalb `tunnel_autostart`. Close() läuft aber bei JEDEM geordneten
-	// Herunterfahren — der konfigurierte Tunnel schaltete sich damit bei jedem
-	// Neustart selbst ab und musste von Hand wieder aktiviert werden.
-	// Beenden ja, dauerhaft abschalten nein.
+	// NOT StopTunnel: that is the admin's deliberate "off" switch and therefore
+	// clears `tunnel_autostart`. Close() however runs on EVERY orderly shutdown
+	// — so a configured tunnel switched itself off on every restart and had to
+	// be re-enabled by hand. Stop yes, disable permanently no.
 	s.SignalTunnelStop()
 	s.AwaitTunnelStop(3 * time.Second)
 	select {
@@ -65,10 +64,10 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 		return nil, err
 	}
 
-	// Das Logo wird EINMAL beim Start aus dem eingebetteten Build gelesen und
-	// als Data-URI vorgehalten. Als Data-URI statt als Verweis, weil manche
-	// MCP-Clients keine fremden Bilder nachladen (strenge CSP) — ein Verweis
-	// wäre dort still leer.
+	// The logo is read ONCE at startup out of the embedded build and kept as a
+	// data URI. A data URI rather than a link, because some MCP clients will
+	// not fetch foreign images (strict CSP) — a link would be silently empty
+	// there.
 	iconURI := ""
 	if b, err := fs.ReadFile(dist, "favicon.svg"); err == nil && len(b) < 64<<10 {
 		iconURI = "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString(b)
@@ -94,8 +93,8 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	if err := s.migrateWorkspaces(); err != nil {
 		return nil, err
 	}
-	// Nach den Workspaces: Organisation, Instanzrollen und Workspace-Eigentümer
-	// aus dem Bestand ableiten (idempotent, siehe roles.go).
+	// After the workspaces: derive organisation, instance roles and workspace
+	// owners from what is already there (idempotent, see roles.go).
 	if err := s.migrateOrg(); err != nil {
 		return nil, err
 	}
@@ -149,15 +148,15 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("PUT /api/admin/membership", s.adminOnly(s.handleAdminMembership))
 	m.HandleFunc("POST /api/users", s.adminOnly(s.handleCreateUser))
 	m.HandleFunc("PATCH /api/users/{id}", s.auth(s.sessionOnly(s.handleUpdateUser)))
-	// ownerOnly, nicht adminOnly: Löschen vernichtet den persönlichen Bereich des
-	// Kontos endgültig. Genau das ist die Datenkontrolle, die ein Admin laut
-	// Rechtemodell NICHT hat — er soll Konten verwalten, nicht fremde Inhalte
-	// wegwerfen können. Fürs Offboarding gibt es das Stilllegen, das jeder Admin
-	// darf und bei dem nichts verloren geht.
+	// ownerOnly, not adminOnly: deleting destroys the account's personal area
+	// for good. That is precisely the control over data an admin does NOT have
+	// under the permission model — admins manage accounts, they do not throw
+	// away other people's content. For offboarding there is deactivation, which
+	// every admin may do and which loses nothing.
 	m.HandleFunc("DELETE /api/users/{id}", s.ownerOnly(s.handleDeleteUser))
-	// Lebenszyklus: Folgen zeigen, stilllegen, herrenlose Workspaces aufraeumen.
-	// ownerOnly: die Antwort nennt Id, Name und Seitenzahl der persönlichen
-	// Bereiche — Kenntnisse, die die Zugriffs-Übersicht bewusst ausblendet.
+	// Lifecycle: show the consequences, deactivate, clean up stranded
+	// workspaces. ownerOnly: the answer names the id, the name and the page
+	// count of personal areas — things the access overview deliberately hides.
 	m.HandleFunc("GET /api/users/{id}/deletion-impact", s.ownerOnly(s.handleDeletionImpact))
 	m.HandleFunc("PUT /api/users/{id}/disabled", s.adminOnly(s.handleSetUserDisabled))
 	m.HandleFunc("POST /api/admin/transfer-owner", s.ownerOnly(s.handleTransferOwner))
@@ -198,12 +197,12 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("GET /api/audit", s.auth(s.handleAudit))
 	m.HandleFunc("GET /api/workspaces", s.auth(s.handleListWorkspaces))
 	m.HandleFunc("POST /api/workspaces", s.auth(s.handleCreateWorkspace))
-	// Nativer 1:1-Transfer (vor den {id}-Routen registriert, damit "import"
-	// nicht als Workspace-ID geparst wird).
+	// Native 1:1 transfer (registered before the {id} routes so that "import"
+	// is not parsed as a workspace id).
 	m.HandleFunc("POST /api/workspaces/import", s.auth(s.handleImportWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/export", s.auth(s.handleExportWorkspace))
-	// Notfallzugriff: anfordern darf nur der Owner; einsehen und beenden auch
-	// die Verantwortlichen des betroffenen Workspace.
+	// Break-glass: only the owner may request it; the people responsible for
+	// the workspace concerned may view and end it too.
 	m.HandleFunc("POST /api/workspaces/{id}/break-glass", s.ownerOnly(s.handleBreakGlass))
 	m.HandleFunc("GET /api/workspaces/{id}/break-glass", s.auth(s.handleListBreakGlass))
 	m.HandleFunc("DELETE /api/workspaces/{id}/break-glass/{grantId}", s.auth(s.handleRevokeBreakGlass))
@@ -249,10 +248,10 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 
 	filesInner := http.StripPrefix("/files/", http.FileServer(http.Dir(filepath.Join(dataDir, "files"))))
 	m.HandleFunc("GET /files/", s.auth(func(w http.ResponseWriter, r *http.Request) {
-		// http.FileServer liefert für ein Verzeichnis ohne index.html eine
-		// Auflistung — hier wäre das ein Inhaltsverzeichnis SÄMTLICHER Uploads
-		// der Instanz, workspace-übergreifend, für jeden angemeldeten Nutzer.
-		// Die Zufallsnamen schützen nur, solange sie niemand aufzählen kann.
+		// For a directory without an index.html, http.FileServer serves a
+		// listing — here that would be a table of contents of EVERY upload on
+		// the instance, across workspaces, for any signed-in user. The random
+		// names only protect as long as nobody can enumerate them.
 		if strings.HasSuffix(r.URL.Path, "/") {
 			httpError(w, 404, "not found")
 			return

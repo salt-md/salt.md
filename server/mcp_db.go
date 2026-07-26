@@ -39,7 +39,7 @@ func (s *Server) mcpQueryRows(u *user, pageID string, filters []rowFilter, sort 
 	if offset < 0 {
 		offset = 0
 	}
-	// Filterwerte dürfen ebenfalls als Options-Name kommen (siehe set_properties).
+	// Filter values may arrive as an option NAME as well (see set_properties).
 	filters = s.resolveFilterValues(pageID, filters)
 	rows, total, err := s.collectionRowsQuery(u, pageID, filters, sort, limit, offset)
 	if err != nil {
@@ -63,9 +63,9 @@ func (s *Server) mcpSetProperties(pageID string, properties json.RawMessage) (st
 	if err := json.Unmarshal(properties, &patch); err != nil {
 		return "", fmt.Errorf("properties must be a JSON object")
 	}
-	// Auswahlwerte, die als NAME statt als Id kommen, auf die Id abbilden.
-	// MUSS vor tx.Begin() stehen: der Pool hat genau EINE Verbindung, eine
-	// Abfrage innerhalb der offenen Transaktion blockiert sonst für immer.
+	// Map select values that arrive as a NAME instead of an id onto the id.
+	// MUST come before tx.Begin(): the pool holds exactly ONE connection, so a
+	// query inside the open transaction would block forever.
 	s.resolveOptionValues(pageID, patch)
 
 	tx, err := s.db.Begin()
@@ -123,9 +123,9 @@ func (s *Server) mcpCreateDatabase(u *user, title, parentID, wsID string, schema
 		if err := json.Unmarshal(schema, &defs); err != nil {
 			return "", fmt.Errorf("schema must be an array of property definitions, e.g. [{\"name\":\"Status\",\"type\":\"select\",\"options\":[\"To do\",\"Done\"]}]")
 		}
-		// Dieselbe Normalisierung wie update_schema: Optionen dürfen als reine
-		// Zeichenketten kommen. Ungeprüft gespeichert legten sie die Oberfläche
-		// beim Öffnen der Datenbank lahm.
+		// The same normalisation as update_schema: options may arrive as plain
+		// strings. Stored unchecked, they froze the interface the moment the
+		// database was opened.
 		defs, err := normalizeSchema(defs)
 		if err != nil {
 			return "", err
@@ -149,9 +149,9 @@ func (s *Server) mcpCreateDatabase(u *user, title, parentID, wsID string, schema
 		workspaceID = pws
 	} else {
 		var err error
-		// Ohne Elternseite darf der Aufrufer den Workspace bestimmen. Vorher
-		// landete alles stumm im Standard-Workspace — ein Agent legte Seite und
-		// Datenbank am falschen Ort an und konnte das nicht einmal sehen.
+		// With no parent page the caller decides the workspace. Before this,
+		// everything landed silently in the default workspace — an agent created
+		// page and database in the wrong place and could not even see that.
 		workspaceID, err = s.mcpCreateWorkspaceTarget(u, wsID)
 		if err != nil {
 			return "", err
@@ -188,11 +188,11 @@ func (s *Server) mcpMovePage(userID, pageID, parentID string) (string, error) {
 		if !s.canWrite(userID, parentID) {
 			return "", fmt.Errorf("parent page %q not found", parentID)
 		}
-		// Dieselbe Regel wie im REST-Handler: nur innerhalb des eigenen
-		// Workspace umhängen. Fehlte sie hier, wäre die Grenze über einen
-		// Agenten umgehbar — und der entstehende Mischbaum (Seite in A unter
-		// einem Elternteil in B) hebelt Sichtbarkeitsprüfungen aus, die den
-		// Workspace der jeweiligen Seite heranziehen.
+		// The same rule as in the REST handler: re-parent only inside your own
+		// workspace. Missing here, the boundary would be walkable through an
+		// agent — and the mixed tree that results (a page in A under a parent in
+		// B) defeats visibility checks, which read the workspace off whichever
+		// page they are looking at.
 		if s.pageWorkspace(parentID) != s.pageWorkspace(pageID) {
 			return "", fmt.Errorf("a page can only be re-parented within its own workspace")
 		}
@@ -236,12 +236,11 @@ func (s *Server) mcpMovePage(userID, pageID, parentID string) (string, error) {
 }
 
 // mcpListUsers returns people who share at least one workspace with the caller.
-// mcpListUsers nennt die Menschen, mit denen man Workspaces teilt.
 //
-// Die Liste folgt der Begrenzung des TOKENS, nicht nur der des Kontos: ein auf
-// einen Workspace eingeschraenkter Zugang gab vorher trotzdem Namen und
-// E-Mail-Adressen aller Kolleginnen und Kollegen heraus, weil die Abfrage
-// direkt auf den Mitgliedschaften des Nutzers stand.
+// The list follows the limit of the TOKEN, not only that of the account: a
+// token narrowed to a single workspace used to hand out the names and e-mail
+// addresses of every colleague anyway, because the query read the user's
+// memberships directly.
 func (s *Server) mcpListUsers(u *user) (string, error) {
 	ws := scopeWorkspaces(u, s.visibleWorkspaces(u.ID))
 	if len(ws) == 0 {

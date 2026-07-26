@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-// Mail-Versand über Google/Microsoft (Welle 42): dieselben OAuth-Clients wie
-// der Login, aber ein separater Admin-Consent-Flow mit Sende-Scope
-// (gmail.send bzw. Mail.Send) + offline_access. Das Refresh-Token wird als
-// Setting-Secret gespeichert; sendMail bevorzugt den verbundenen Provider und
-// fällt sonst auf SMTP zurück. Kein SMTP-Gefummel mehr nötig.
+// Sending mail through Google/Microsoft (wave 42): the same OAuth clients as
+// the login, but a separate admin consent flow with a send scope (gmail.send
+// or Mail.Send) plus offline_access. The refresh token is kept as a setting
+// secret; sendMail prefers the connected provider and falls back to SMTP.
+// No more fiddling with SMTP.
 
 const mailOauthCookie = "salt_mail_oauth"
 
@@ -88,9 +88,9 @@ func (s *Server) handleMailOAuthStart(w http.ResponseWriter, r *http.Request) {
 	q.Set("code_challenge", sum)
 	q.Set("code_challenge_method", "S256")
 	if pname == "google" {
-		// Offline-Zugriff + erzwungener Consent (sonst liefert Google kein
-		// Refresh-Token) + Kontoauswahl: der Admin kann hier ein BELIEBIGES
-		// Postfach wählen — es muss nicht sein Login-Konto sein.
+		// Offline access + forced consent (without it Google hands back no
+		// refresh token) + account picker: the admin may pick ANY mailbox here,
+		// it does not have to be their own sign-in account.
 		q.Set("access_type", "offline")
 		q.Set("prompt", "consent select_account")
 	} else {
@@ -211,17 +211,17 @@ func (s *Server) handleMailTest(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 403, "admin only")
 		return
 	}
-	if err := s.sendMail(u.Email, "Salt.md Test-Mail", "Der Mail-Versand funktioniert! 🧂"); err != nil {
+	if err := s.sendMail(u.Email, "Salt.md test message", "Sending mail works! 🧂"); err != nil {
 		httpError(w, 400, err.Error())
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "to": u.Email})
 }
 
-// ---- Versand über Provider-APIs ----
+// ---- Sending through the provider APIs ----
 
-// refreshedAccessToken tauscht das gespeicherte Refresh-Token gegen ein
-// frisches Access-Token (Mails sind selten — kein Cache nötig).
+// refreshedAccessToken swaps the stored refresh token for a fresh access
+// token (mail is rare — no cache needed).
 func (s *Server) refreshedAccessToken(provider string) (string, error) {
 	prov := oauthProviders[provider]
 	clientID, clientSecret := s.oauthClient(provider)
