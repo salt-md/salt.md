@@ -12,6 +12,7 @@ import type {
 } from './types';
 import { t } from './i18n';
 import { formatBytes } from './format';
+import { serverMessage } from './serverErrors';
 
 /** An error carrying an HTTP status and a machine-readable reason, so callers
  *  can branch on those rather than on the message text — the text changes with
@@ -38,14 +39,21 @@ export class ApiError extends Error {
 async function toApiError(res: Response, fallback: string): Promise<ApiError> {
   let msg = fallback || res.statusText;
   let code = '';
+  let data: Record<string, unknown> | undefined;
   try {
-    const body = (await res.json()) as { error?: string; code?: string };
-    msg = body.error ?? msg;
-    code = body.code ?? '';
+    const body = (await res.json()) as Record<string, unknown>;
+    msg = (body.error as string) ?? msg;
+    code = (body.code as string) ?? '';
+    data = body;
   } catch {
     if (res.status === 413) msg = t('The file is too large for this instance.');
   }
-  return new ApiError(msg, res.status, code);
+  // Translating here rather than at each call site: every screen that shows
+  // `err.message` gets the reader's language without knowing that server
+  // messages are translatable at all. An unknown code keeps the server's
+  // English, which is a correct sentence in the wrong language rather than a
+  // broken one.
+  return new ApiError(serverMessage(code, msg, data), res.status, code);
 }
 
 /** An expired session sends the user back to the sign-in screen — except on the

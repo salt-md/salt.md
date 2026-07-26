@@ -421,13 +421,13 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		hash = dummyHash // verify anyway so timing doesn't reveal account existence
 	}
 	if !verifyPassword(body.Password, hash) || err != nil {
-		httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Falsche E-Mail oder falsches Passwort.")
+		httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Wrong email or wrong password.")
 		return
 	}
 	// Stillgelegtes Konto: erst NACH der Passwortprüfung ablehnen, sonst
 	// verriete die Antwort, dass es diese Adresse überhaupt gibt.
 	if disabled != 0 {
-		httpErrorCode(w, http.StatusForbidden, "account_disabled", "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
+		httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated — talk to an admin.")
 		return
 	}
 	// Second factor: password was correct, now require a valid TOTP code. The
@@ -435,11 +435,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	// the password.
 	if totpEnabled != 0 {
 		if body.Code == "" {
-			httpErrorCode(w, http.StatusUnauthorized, "2fa_required", "Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.")
+			httpErrorCode(w, http.StatusUnauthorized, "2fa_required", "Please enter the 6-digit code from your authenticator app.")
 			return
 		}
 		if !verifyTOTP(totpSecret, body.Code) {
-			httpErrorCode(w, http.StatusUnauthorized, "2fa_invalid", "Falscher Code — nochmal versuchen.")
+			httpErrorCode(w, http.StatusUnauthorized, "2fa_invalid", "Wrong code — try again.")
 			return
 		}
 	}
@@ -589,7 +589,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	// Datei ohnehin hat. Dasselbe gilt für eine fremde E-Mail: sie entscheidet
 	// über die künftige SSO-Identität.
 	if me.ID != id && changingSensitive && !s.isOwner(me.ID) {
-		httpError(w, 403, "Nur der Owner kann Passwort oder E-Mail eines anderen Kontos ändern. Als Admin kannst du eine Einladung verschicken.")
+		httpErrorCode(w, 403, "owner_only_credentials", "Only the owner can change another account's password or email. As an admin you can send an invitation.")
 		return
 	}
 	if body.IsAdmin != nil && me.IsAdmin && !*body.IsAdmin {
@@ -609,7 +609,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		// Dem Owner is_admin zu nehmen ließe ihn halb ausgesperrt zurück: die
 		// Owner-Rolle behielte er, aber jede adminOnly-Route wäre zu.
 		if s.isOwner(id) {
-			httpError(w, 400, "Dem Owner können die Rechte nicht entzogen werden — übertrage die Owner-Rolle zuerst.")
+			httpErrorCode(w, 400, "owner_rights_locked", "The owner's rights cannot be revoked — hand the owner role on first.")
 			return
 		}
 	}
@@ -705,7 +705,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	// Passwort-Reset, kein Instanz-Backup. Reparabel wäre das nur von Hand in
 	// der Datenbank. Erst übertragen, dann löschen.
 	if s.isOwner(id) {
-		httpError(w, 400, "Der Owner kann nicht gelöscht werden — übertrage die Owner-Rolle zuerst an ein anderes Konto.")
+		httpErrorCode(w, 400, "owner_cannot_be_deleted", "The owner cannot be deleted — hand the owner role to another account first.")
 		return
 	}
 	// Reihenfolge: erst AUFNEHMEN, was am Konto hängt (danach sind die
@@ -718,7 +718,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if plan.Err != nil {
 		// Ein leerer Plan sähe aus wie "es hängt nichts dran" und ließe alle
 		// Workspaces dieses Kontos verwaisen. Lieber gar nicht löschen.
-		httpError(w, 500, "Die Folgen dieses Löschvorgangs ließen sich nicht ermitteln — bitte erneut versuchen.")
+		httpErrorCode(w, 500, "impact_unavailable", "The consequences of this deletion could not be determined — please try again.")
 		return
 	}
 	target := s.userByID(id)

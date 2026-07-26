@@ -493,7 +493,7 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		s.loginSem <- struct{}{}
 		defer func() { <-s.loginSem }()
 		if !verifyPassword(body.Password, hash) {
-			httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Falsche E-Mail oder falsches Passwort.")
+			httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Wrong email or wrong password.")
 			return
 		}
 		// Wie bei handleLogin: erst nach der Passwortpruefung ablehnen, damit die
@@ -501,16 +501,16 @@ func (s *Server) handleAcceptInvite(w http.ResponseWriter, r *http.Request) {
 		// stillgelegtes Konto ueber einen offenen Einladungslink eine frische
 		// Sitzung besorgen.
 		if disabled != 0 {
-			httpErrorCode(w, http.StatusForbidden, "account_disabled", "Dieses Konto wurde stillgelegt — wende dich an einen Admin.")
+			httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated — talk to an admin.")
 			return
 		}
 		if totpEnabled != 0 {
 			if body.Code == "" {
-				httpErrorCode(w, http.StatusUnauthorized, "2fa_required", "Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.")
+				httpErrorCode(w, http.StatusUnauthorized, "2fa_required", "Please enter the 6-digit code from your authenticator app.")
 				return
 			}
 			if !verifyTOTP(totpSecret, body.Code) {
-				httpErrorCode(w, http.StatusUnauthorized, "2fa_invalid", "Falscher Code — nochmal versuchen.")
+				httpErrorCode(w, http.StatusUnauthorized, "2fa_invalid", "Wrong code — try again.")
 				return
 			}
 		}
@@ -598,7 +598,7 @@ func (s *Server) handleSelfSignup(w http.ResponseWriter, r *http.Request) {
 			// Ohne die Domain zu nennen: sonst wäre der Fehlertext dieselbe
 			// Auskunft, die aus der Richtlinie entfernt wurde — nur eine
 			// Anmeldemaske später.
-			httpError(w, 403, "Für diese E-Mail-Adresse ist keine Selbstregistrierung möglich. Bitte lass dich einladen.")
+			httpErrorCode(w, 403, "signup_not_allowed", "This email address cannot register on its own. Ask for an invitation.")
 			return
 		}
 	default:

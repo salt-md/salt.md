@@ -359,11 +359,11 @@ func (s *Server) handleTransferOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if target.Disabled {
-		httpError(w, 400, "Ein stillgelegtes Konto kann die Instanz nicht übernehmen.")
+		httpErrorCode(w, 400, "disabled_cannot_own", "A deactivated account cannot take over the instance.")
 		return
 	}
 	if !target.IsAdmin {
-		httpError(w, 400, "Die Instanz übernimmt nur ein Konto, das schon Instanz-Admin ist — mach es zuerst dazu.")
+		httpErrorCode(w, 400, "owner_must_be_admin", "Only an account that is already an instance admin can take the instance over — make it one first.")
 		return
 	}
 	orgID := s.defaultOrg()
@@ -441,7 +441,7 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.isMember(u.ID, wsID) {
-		httpError(w, 400, "Du bist bereits Mitglied dieses Workspace — ein Notfallzugriff ist nicht nötig.")
+		httpErrorCode(w, 400, "already_member", "You are already a member of this workspace — emergency access is not needed.")
 		return
 	}
 	// Ein persönlicher Bereich ist auch für den Notfallzugriff tabu. Sonst wäre
@@ -454,7 +454,7 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 	var personal int
 	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
 	if personal != 0 {
-		httpError(w, 403, "Ein persönlicher Bereich ist auch im Notfall nicht einsehbar — er gehört zu genau einem Konto.")
+		httpErrorCode(w, 403, "personal_no_break_glass", "A personal space cannot be looked into even in an emergency — it belongs to exactly one account.")
 		return
 	}
 	expires := time.Now().UTC().Add(breakGlassTTL).Format(tsFixed)

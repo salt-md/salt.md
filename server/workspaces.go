@@ -392,13 +392,13 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		// Workspace — deshalb Owner statt Workspace-Admin. Ein persönlicher
 		// Bereich kann es nie sein, er gehört einem Menschen.
 		if !s.isOwner(requestUser(r).ID) {
-			httpError(w, 403, "Nur der Owner kann einen Workspace für alle öffnen.")
+			httpErrorCode(w, 403, "owner_only_autojoin", "Only the owner can open a workspace to everyone.")
 			return
 		}
 		var personal int
 		s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
 		if personal != 0 {
-			httpError(w, 400, "Ein persönlicher Bereich kann nicht für alle geöffnet werden.")
+			httpErrorCode(w, 400, "personal_no_autojoin", "A personal space cannot be opened to everyone.")
 			return
 		}
 		v := 0
@@ -642,7 +642,7 @@ func (s *Server) handleUpdateMember(w http.ResponseWriter, r *http.Request) {
 	}
 	role := normalizeRole(body.Role)
 	if role != "admin" && target == s.personalOwner(wsID) {
-		httpError(w, 403, "Das ist der persönliche Bereich dieser Person — ihre Rolle darin bleibt.")
+		httpErrorCode(w, 403, "personal_role_fixed", "That is this person's personal space — their role in it stays as it is.")
 		return
 	}
 	if role != "admin" && s.workspaceRole(target, wsID) == "admin" && s.otherActiveAdmins(wsID, target) == 0 {
@@ -682,14 +682,14 @@ func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if target == s.personalOwner(wsID) {
-		httpError(w, 403, "Das ist der persönliche Bereich dieser Person — sie kann darin nicht entfernt werden.")
+		httpErrorCode(w, 403, "personal_no_remove", "That is this person's personal space — they cannot be removed from it.")
 		return
 	}
 	if s.workspaceRole(target, wsID) == "admin" && s.otherActiveAdmins(wsID, target) == 0 {
 		// Die alte Meldung sagte nur, dass es nicht geht — nicht, was zu tun ist.
 		// Beides sind gangbare Wege, und ohne den Hinweis sucht man danach.
 		if target == me {
-			httpError(w, 400, "Du bist der letzte Admin dieses Workspace. Mach zuerst jemand anderen zum Admin — oder lösch den Workspace, wenn er weg soll.")
+			httpErrorCode(w, 400, "last_admin", "You are the last admin of this workspace. Make somebody else an admin first — or delete the workspace if it should go.")
 		} else {
 			httpError(w, 400, "Das ist der letzte Admin dieses Workspace. Mach zuerst jemand anderen zum Admin.")
 		}
@@ -705,11 +705,15 @@ func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 			wsID, target).Scan(&privatePages)
 		if privatePages > 0 {
 			if target == me {
-				httpError(w, 409, fmt.Sprintf("Du hast hier %d private Seite(n) liegen. Sie bleiben im Workspace und sind danach nur noch für dessen Admins sichtbar.", privatePages))
+				httpErrorData(w, 409, "private_pages_left_self",
+					fmt.Sprintf("You have %d private page(s) here. They stay in the workspace and will only be visible to its admins afterwards.", privatePages),
+					map[string]any{"pages": privatePages})
 			} else {
 				// Beim Entfernen eines ANDEREN trifft die Person die Entscheidung
 				// nicht selbst — umso mehr gehört der Hinweis vor den Klick.
-				httpError(w, 409, fmt.Sprintf("Diese Person hat hier %d private Seite(n) liegen. Sie bleiben im Workspace und sind danach nur noch für dessen Admins sichtbar.", privatePages))
+				httpErrorData(w, 409, "private_pages_left_other",
+					fmt.Sprintf("This person has %d private page(s) here. They stay in the workspace and will only be visible to its admins afterwards.", privatePages),
+					map[string]any{"pages": privatePages})
 			}
 			return
 		}
@@ -920,7 +924,7 @@ func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.isOwner(me.ID) && !s.isWorkspaceAdmin(me.ID, body.WorkspaceID) {
-		httpError(w, 403, "Nur der Owner oder ein Admin dieses Workspace kann seine Mitglieder ändern.")
+		httpErrorCode(w, 403, "not_workspace_admin", "Only the owner or an admin of this workspace can change its members.")
 		return
 	}
 	// Ein persönlicher Bereich wird hier NIE vergeben — auch nicht vom Owner.
@@ -931,7 +935,7 @@ func (s *Server) handleAdminMembership(w http.ResponseWriter, r *http.Request) {
 	var personalWS int
 	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, body.WorkspaceID).Scan(&personalWS)
 	if personalWS != 0 && !s.isWorkspaceAdmin(me.ID, body.WorkspaceID) {
-		httpError(w, 403, "Ein persönlicher Bereich wird nicht von außen vergeben — nur sein Eigentümer lädt dort ein.")
+		httpErrorCode(w, 403, "personal_invite_owner_only", "A personal space is not handed out from outside — only its owner invites anyone there.")
 		return
 	}
 	// Den letzten Admin eines Workspace nie entfernen oder degradieren — sonst

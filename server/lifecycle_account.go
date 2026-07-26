@@ -295,7 +295,7 @@ func (s *Server) handleSetUserDisabled(w http.ResponseWriter, r *http.Request) {
 	// Denselben Schutz wie beim Löschen: ohne Owner steht die Instanz ohne
 	// Verantwortlichen da, und die Rolle ist über die App nicht neu vergebbar.
 	if body.Disabled && s.isOwner(id) {
-		httpError(w, 400, "Der Owner kann nicht stillgelegt werden — übertrage die Owner-Rolle zuerst.")
+		httpErrorCode(w, 400, "owner_cannot_be_disabled", "The owner cannot be deactivated — hand the owner role on first.")
 		return
 	}
 	v := 0
@@ -529,11 +529,11 @@ func (s *Server) handleAdoptWorkspace(w http.ResponseWriter, r *http.Request) {
 	s.db.QueryRow(`SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ?`, wsID).Scan(&members)
 	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
 	if members > 0 {
-		httpError(w, 400, "Dieser Workspace hat noch Mitglieder. Fehlt ein Verantwortlicher, ernenne einen von ihnen in der Nutzerverwaltung — für bloße Einsicht gibt es den Notfallzugriff.")
+		httpErrorCode(w, 400, "workspace_has_members", "This workspace still has members. If nobody is in charge, appoint one of them in user management — for a look inside there is emergency access.")
 		return
 	}
 	if personal != 0 {
-		httpError(w, 400, "Ein persönlicher Bereich wird nicht übernommen — er gehört zu einem Konto.")
+		httpErrorCode(w, 400, "personal_not_adoptable", "A personal space is not adopted — it belongs to an account.")
 		return
 	}
 	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')
@@ -563,7 +563,7 @@ func (s *Server) handleDeleteStrandedWorkspace(w http.ResponseWriter, r *http.Re
 	var members int
 	s.db.QueryRow(`SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ?`, wsID).Scan(&members)
 	if members > 0 {
-		httpError(w, 400, "Dieser Workspace hat noch Mitglieder — er lässt sich nur von innen löschen.")
+		httpErrorCode(w, 400, "workspace_delete_from_inside", "This workspace still has members — it can only be deleted from the inside.")
 		return
 	}
 	if strings.TrimSpace(body.Confirm) != name {

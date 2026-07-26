@@ -300,16 +300,36 @@ func httpError(w http.ResponseWriter, code int, msg string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
-// httpErrorCode ist httpError mit einem maschinenlesbaren Grund.
+// httpErrorCode is httpError with a machine-readable reason.
 //
-// Der Anmeldebildschirm muss unterscheiden, WARUM eine Anmeldung scheiterte:
-// bei "2fa_required" blendet er das Feld für den Code ein, sonst zeigt er
-// "falsche Zugangsdaten". Beides ist ein 401, also reicht der Status nicht.
-// Bisher verglich die Oberfläche dafür den englischen Meldungstext Zeichen für
-// Zeichen — eine Umformulierung oder Übersetzung hätte das Code-Feld wortlos
-// verschwinden lassen und jedes Konto mit Zwei-Faktor-Anmeldung ausgesperrt.
+// The sign-in screen has to know WHY an attempt failed: on "2fa_required" it
+// reveals the code field, otherwise it says the credentials were wrong. Both
+// are a 401, so the status alone does not carry it. The interface used to
+// compare the English message text character by character — a rewording or a
+// translation would have made the code field vanish without a word and locked
+// out every account with two-factor sign-in.
+//
+// It is also what makes the server translatable at all. The message travels in
+// English so curl, scripts and MCP agents get something readable; the browser
+// looks at `code` and renders the reader's own language. The server never has
+// to know what language anybody speaks.
 func httpErrorCode(w http.ResponseWriter, status int, code, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": msg, "code": code})
+}
+
+// httpErrorData is httpErrorCode carrying the values its message needs.
+//
+// "You have 3 private pages here" cannot be rebuilt from the code alone: the
+// browser has to know the 3 to put it through its own plural rules. So the
+// number travels beside the code instead of baked into a sentence.
+func httpErrorData(w http.ResponseWriter, status int, code, msg string, data map[string]any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	body := map[string]any{"error": msg, "code": code}
+	for k, v := range data {
+		body[k] = v
+	}
+	json.NewEncoder(w).Encode(body)
 }

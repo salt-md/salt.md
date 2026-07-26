@@ -66,7 +66,7 @@ func (s *Server) handleAdminBackup(w http.ResponseWriter, r *http.Request) {
 	// Trennung hinfällig — der Einzelexport wäre nur der umständlichere Weg zu
 	// denselben Daten.
 	if !s.isOwner(requestUser(r).ID) {
-		httpError(w, 403, "Nur der Owner kann ein Instanz-Backup herunterladen — es enthält alle Workspaces.")
+		httpErrorCode(w, 403, "owner_only_backup", "Only the owner can download an instance backup — it contains every workspace.")
 		return
 	}
 	tmp, err := os.CreateTemp("", "salt-backup-*.tar.gz")
