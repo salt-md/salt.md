@@ -112,12 +112,37 @@ for (const file of files) {
 
 // ---- Section 2: strings are wrapped, catalogs are current (advisory) ----
 
+// Names that are the same in every language, because they belong to somebody
+// else. Translating "Microsoft" or "nginx" would be wrong, not merely odd.
+const BRANDS = new Set([
+  'Google', 'Microsoft', 'Gmail', 'Outlook', 'Cloudflare', 'Caddy', 'nginx',
+  'Notion', 'Markdown', 'GitHub', 'Salt.md', 'salt.md', 'MCP', 'API', 'DB',
+  'md', 'JSON', 'CSV', 'ICS', 'SMTP', 'OAuth', 'HTTPS', 'URL', 'PWA',
+]);
+
+/** True for example values, identifiers, commands and brand names — anything
+ *  that is not prose and must therefore stay as it is.
+ *
+ *  Without this the check cries wolf about `smtp.example.com` and
+ *  `00000000-0000-…`, and a check that cries wolf gets switched off. */
+function isTechnical(s) {
+  const v = s.trim();
+  if (BRANDS.has(v)) return true;
+  // A single token holding a dot, slash, at-sign or underscore: hostname, path,
+  // email, env var. "Delete user" has a space and none of those.
+  if (!/\s/.test(v) && /[./@_]/.test(v)) return true;
+  // No lowercase word of three letters or more anywhere — nothing to translate.
+  if (!/[a-z]{3}/.test(v)) return true;
+  return false;
+}
+
 const CALL = /\bt\(\s*(['"`])((?:\\.|(?!\1)[^\\])*)\1/g;
 const PLURAL = /\bplural\(\s*[^,]+,\s*(['"`])(?:\\.|(?!\1)[^\\])*\1\s*,\s*(['"`])((?:\\.|(?!\2)[^\\])*)\2/g;
 
 const used = new Set();
 let unwrapped = 0;
 const unwrappedSample = [];
+const allBare = [];
 
 for (const file of files) {
   const rel = relative(join(here, '..'), file);
@@ -132,7 +157,13 @@ for (const file of files) {
 
   if (!file.endsWith('.tsx')) continue;
   text.split('\n').forEach((line, i) => {
-    const code = line.replace(/\/\/.*$/, '').replace(/\{\/\*.*?\*\/\}/g, '');
+    // Both comment forms: `// i18n-ok:` in code, `{/* i18n-ok: */}` in JSX.
+    if (/i18n-ok:\s*\S/.test(line)) return;
+    let code = line.replace(/\/\/.*$/, '').replace(/\{\/\*.*?\*\/\}/g, '');
+    // <code> holds identifiers, commands and paths — never prose. Blank it out
+    // before scanning so `X-Forwarded-For` and `./salt backup` do not read as
+    // untranslated interface text.
+    code = code.replace(/<code[^>]*>[\s\S]*?<\/code>/g, '<code/>');
     // Declarations, not markup — `Map<string, PageMeta>` is not a label.
     if (/^\s*(import|export type|interface|type |const \w+ = \{|\*)/.test(code)) return;
     // Text sitting directly between JSX tags. The leading character must not
@@ -146,12 +177,16 @@ for (const file of files) {
       // brackets" to a regex. They are not.
       if (/=>|&&|\|\||\?\?|===|!==|[[\]();:]/.test(s)) continue;
       if (/\b(Map|Set|Array|Promise|Record|Partial|Awaited|React|useState|useRef|useMemo)\s*$/.test(code.slice(0, m.index + 1))) continue;
+      if (isTechnical(s)) continue;
       unwrapped++;
+      allBare.push(`${rel}:${i + 1}  ${s.slice(0, 70)}`);
       if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${i + 1}  ${s.slice(0, 52)}`);
     }
     // Attributes a human reads.
     for (const m of code.matchAll(/\b(placeholder|title|aria-label|alt)=(["'])([^"']{2,})\2/g)) {
+      if (isTechnical(m[3])) continue;
       unwrapped++;
+      allBare.push(`${rel}:${i + 1}  ${m[1]}="${m[3].slice(0, 55)}"`);
       if (unwrappedSample.length < 8) unwrappedSample.push(`${rel}:${i + 1}  ${m[1]}="${m[3].slice(0, 40)}"`);
     }
   });
@@ -167,6 +202,25 @@ for (const name of readdirSync(localeDir).filter((f) => f.endsWith('.json'))) {
   const orphans = keys.filter((k) => !used.has(k));
   const missing = [...used].filter((k) => !(k in cat));
   report.push({ name, have: keys.length, orphans, missing: missing.length });
+}
+
+// `--bare` lists every unwrapped string with its location, grouped by file, so
+// the conversion can be worked through file by file instead of guessed at.
+// Searching for umlauts is not enough — plenty of German has none ("Senden",
+// "Kommentare", "Liste").
+if (process.argv.includes('--bare')) {
+  const byFile = new Map();
+  for (const s of allBare) {
+    const f = s.slice(0, s.indexOf(':'));
+    if (!byFile.has(f)) byFile.set(f, []);
+    byFile.get(f).push(s);
+  }
+  for (const [f, list] of [...byFile.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`\n${f}  (${list.length})`);
+    for (const s of list) console.log('  ' + s);
+  }
+  console.log(`\n${allBare.length} total`);
+  process.exit(0);
 }
 
 // `--missing de` prints the source strings that locale has no entry for, as a

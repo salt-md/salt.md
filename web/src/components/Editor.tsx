@@ -16,6 +16,7 @@ import { api } from '../api';
 import { toast } from '../toast';
 import type { Backlink, CollectionConfig, Page, PageMeta, PropOption, User } from '../types';
 import { SaltProvider } from '../collab';
+import { plural, t } from '../i18n';
 import PropertyValue from './PropertyValue';
 import { saltSchema } from '../pageLink';
 import IconPicker from './IconPicker';
@@ -73,7 +74,7 @@ export default function Editor(props: EditorProps) {
   if (error) {
     return (
       <div className="editor-error">
-        <p>This page could not be loaded.</p>
+        <p>{t('This page could not be loaded.')}</p>
         <button className="btn" onClick={() => props.onMissing(props.pageId)}>
           Back to workspace
         </button>
@@ -153,20 +154,23 @@ function coverStyle(cover: string): React.CSSProperties {
   return { backgroundImage: `url(${cover})`, backgroundSize: 'cover', backgroundPosition: 'center' };
 }
 
-const TAG_COLOR_LABELS: Record<string, string> = {
-  gray: 'Grau',
-  brown: 'Braun',
-  orange: 'Orange',
-  yellow: 'Gelb',
-  green: 'Grün',
-  blue: 'Blau',
-  purple: 'Lila',
-  pink: 'Rosa',
-  red: 'Rot',
-};
+// A function, not a constant: a constant would resolve t() once at import time
+// and keep whatever language happened to be active then.
+const tagColorLabel = (c: string): string =>
+  ({
+    gray: t('Gray'),
+    brown: t('Brown'),
+    orange: t('Orange'),
+    yellow: t('Yellow'),
+    green: t('Green'),
+    blue: t('Blue'),
+    purple: t('Purple'),
+    pink: t('Pink'),
+    red: t('Red'),
+  })[c] ?? c;
 
 // A tag chip with a Notion-style colour picker: click the label to choose a
-// colour (or "Standard" = automatic), the × removes the tag.
+// colour (or "Default" = automatic), the × removes the tag.
 function TagChip({
   tag,
   colors,
@@ -189,15 +193,15 @@ function TagChip({
       <button
         className="page-tag-label"
         onClick={() => canEdit && setOpen((o) => !o)}
-        title={canEdit ? 'Farbe ändern' : undefined}
+        title={canEdit ? t('Change colour') : undefined}
       >
         #{tag}
       </button>
       {canEdit && (
         <button
           className="page-tag-x"
-          title="Tag entfernen"
-          aria-label={`Tag ${tag} entfernen`}
+          title={t('Remove tag')}
+          aria-label={t('Remove tag {tag}', { tag })}
           onClick={onRemove}
         >
           ×
@@ -205,7 +209,7 @@ function TagChip({
       )}
       {open && (
         <div className="menu tag-color-menu">
-          <div className="menu-label">Farbe</div>
+          <div className="menu-label">{t('Colour')}</div>
           <button
             className="tag-color-opt"
             onClick={() => {
@@ -214,7 +218,7 @@ function TagChip({
             }}
           >
             <span className="tag-swatch tag-gray" />
-            <span className="tag-color-name">Standard</span>
+            <span className="tag-color-name">{t('Default')}</span>
             {!current && <Check size={14} />}
           </button>
           {TAG_PALETTE.map((c) => (
@@ -227,7 +231,7 @@ function TagChip({
               }}
             >
               <span className={'tag-swatch tag-' + c} />
-              <span className="tag-color-name">{TAG_COLOR_LABELS[c]}</span>
+              <span className="tag-color-name">{tagColorLabel(c)}</span>
               {current === c && <Check size={14} />}
             </button>
           ))}
@@ -239,7 +243,7 @@ function TagChip({
 
 // RowProperties renders a database row's typed properties as a Notion-style
 // panel under the title (label · value), so a row's page shows its Status,
-// Priorität, etc. as real fields — not as text dumped into the body. Shown only
+// Priority, etc. as real fields — not as text dumped into the body. Shown only
 // when the page is a child of a collection. Reuses the same PropertyValue cells
 // (and inline option editing) as the table/board.
 function RowProperties({
@@ -278,7 +282,7 @@ function RowProperties({
     try {
       await api.updatePage(pageId, { propsPatch: { [propId]: value } });
     } catch {
-      toast('Eigenschaft nicht gespeichert');
+      toast(t('Property not saved'));
     }
   };
   const setOptions = async (propId: string, options: PropOption[]) => {
@@ -290,7 +294,7 @@ function RowProperties({
     try {
       await api.putCollection(parentId, next);
     } catch {
-      toast('Optionen nicht gespeichert');
+      toast(t('Options not saved'));
     }
   };
 
@@ -439,7 +443,7 @@ function PageHeader({
   const togglePrivate = () => {
     const next = visibility === 'private' ? 'workspace' : 'private';
     setVisibility(next);
-    api.updatePage(pageId, { visibility: next }).catch(() => toast('Sichtbarkeit nicht gespeichert'));
+    api.updatePage(pageId, { visibility: next }).catch(() => toast(t('Visibility not saved')));
   };
 
   const createShare = async (days: number, password: string) => {
@@ -482,7 +486,7 @@ function PageHeader({
       pendingMeta.current = {};
       api.updatePage(pageId, merged).catch(() => {
         Object.assign(pendingMeta.current, merged); // keep for a later retry
-        toast('Titel/Icon nicht gespeichert');
+        toast(t('Title/icon not saved'));
       });
     }, 500);
   };
@@ -514,8 +518,8 @@ function PageHeader({
   };
   const removeTag = (t: string) => commitTags(tags.filter((x) => x !== t));
 
-  // Alle bereits vergebenen Tags stecken schon in den Seiten-Metadaten — dafür
-  // braucht es keinen zusätzlichen Request.
+  // Every tag already in use is in the page metadata — no extra request needed
+  // for this.
   const allTags = useMemo(() => collectTags(pagesById.values()), [pagesById]);
   const tagHits = useMemo(
     () => (tagSuggestOpen ? suggestTags(allTags, tagDraft, tags) : []),
@@ -538,12 +542,15 @@ function PageHeader({
     try {
       if (file.name.toLowerCase().endsWith('.zip')) {
         const r = await api.importZip(file);
-        toast(`Import: ${r.created} Seiten${r.skipped ? `, ${r.skipped} übersprungen` : ''}`);
+        toast(
+          t('Imported {pages}', { pages: plural(r.created, '{n} page', '{n} pages') }) +
+            (r.skipped ? ', ' + t('{n} skipped', { n: r.skipped }) : ''),
+        );
         onPagesChanged();
       } else {
         const text = await file.text();
         const r = await api.importMarkdown(null, '', text);
-        toast('Seite importiert');
+        toast(t('Page imported'));
         onPagesChanged();
         onNavigate(r.id);
       }
@@ -583,7 +590,7 @@ function PageHeader({
   return (
     <>
       <header className="topbar">
-        <button className="menu-btn topbar-menu" title="Menu" onClick={onMenu}>
+        <button className="menu-btn topbar-menu" title={t('Menu')} onClick={onMenu}>
           <Menu size={18} />
         </button>
         <nav className="breadcrumbs">
@@ -625,7 +632,7 @@ function PageHeader({
           )}
           <button
             className="icon-btn"
-            title="Zu den Kommentaren springen"
+            title={t('Jump to the comments')}
             onClick={() =>
               document.getElementById('kommentare')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
             }
@@ -648,7 +655,7 @@ function PageHeader({
             {visibility === 'private' ? <Lock size={17} /> : <LockOpen size={17} />}
           </button>
           <div className="share-wrap" ref={shareWrapRef}>
-            <button className="icon-btn" title="Share to web (read-only link)" onClick={openShare}>
+            <button className="icon-btn" title={t('Share to web (read-only link)')} onClick={openShare}>
               <Globe size={17} />
             </button>
             {shareOpen && (
@@ -662,16 +669,16 @@ function PageHeader({
                     value={shareExpiry}
                     onChange={(e) => void changeExpiry(Number(e.target.value))}
                   >
-                    <option value={0}>Never</option>
-                    <option value={1}>In 1 day</option>
-                    <option value={7}>In 7 days</option>
-                    <option value={30}>In 30 days</option>
+                    <option value={0}>{t('Never')}</option>
+                    <option value={1}>{t('In 1 day')}</option>
+                    <option value={7}>{t('In 7 days')}</option>
+                    <option value={30}>{t('In 30 days')}</option>
                   </select>
                 </label>
                 <input
                   className="share-input"
                   type="password"
-                  placeholder="Passwort (optional)"
+                  placeholder={t('Password (optional)')}
                   value={sharePassword}
                   onChange={(e) => setSharePassword(e.target.value)}
                   onBlur={() => void createShare(shareExpiry, sharePassword)}
@@ -693,8 +700,8 @@ function PageHeader({
           <div className="share-wrap" ref={overflowWrapRef}>
             <button
               className="icon-btn"
-              title="Mehr"
-              aria-label="Weitere Aktionen"
+              title={t('More')}
+              aria-label={t('More actions')}
               onClick={() => setOverflowOpen((o) => !o)}
             >
               <MoreHorizontal size={17} />
@@ -716,7 +723,7 @@ function PageHeader({
                       setShowDesc(true);
                     }}
                   >
-                    <AlignLeft size={15} /> Beschreibung hinzufügen
+                    <AlignLeft size={15} /> {t('Add a description')}
                   </button>
                 )}
                 {canEdit && (showDesc || description) && (
@@ -760,7 +767,7 @@ function PageHeader({
                   </button>
                 )}
                 <div className="menu-sep" />
-                <div className="menu-label">Exportieren</div>
+                <div className="menu-label">{t('Export')}</div>
                 <button
                   className="menu-item"
                   onClick={() => {
@@ -868,7 +875,7 @@ function PageHeader({
           ref={titleRef}
           className="page-title"
           value={title}
-          placeholder="Untitled"
+          placeholder={t('Untitled')}
           rows={1}
           onChange={(e) => {
             setTitle(e.target.value);
@@ -883,9 +890,10 @@ function PageHeader({
             }
           }}
         />
-        {/* Immer sichtbare Anlege-Zeile UNTER dem Titel (statt hover-versteckter
-            Buttons — auf Touch-Geräten unerreichbar, sobald ein Cover da war).
-            Zeigt nur, was noch fehlt: Emoji, Cover, Beschreibung. */}
+        {/* A permanently visible add row BELOW the title (rather than buttons
+            hidden behind hover — unreachable on touch devices as soon as there
+            was a cover). Shows only what is still missing: emoji, cover,
+            description. */}
         {canEdit && (!icon || !cover || (!showDesc && !description)) && (
           <div className="head-adders">
             <input
@@ -907,12 +915,12 @@ function PageHeader({
             )}
             {!showDesc && !description && (
               <button className="add-btn" onClick={() => setShowDesc(true)}>
-                <AlignLeft size={14} /> Beschreibung
+                <AlignLeft size={14} /> {t('Description')}
               </button>
             )}
-            {/* Cover-Menü nur hier, solange KEIN Cover existiert — mit Cover
-                rendert der "Change cover"-Button oben rechts (W32c: zwei
-                Instanzen am selben State fressen sich gegenseitig die Klicks). */}
+            {/* Cover menu only here while NO cover exists — with one, the
+                "Change cover" button top right renders it (W32c: two instances
+                on the same state eat each other's clicks). */}
             {!cover && coverMenuOpen && (
               <CoverMenu
                 onGradient={setCoverValue}
@@ -927,7 +935,7 @@ function PageHeader({
             {canEdit ? (
               <textarea
                 value={description}
-                placeholder="Beschreibung hinzufügen…"
+                placeholder={t('Add a description…')}
                 rows={1}
                 autoFocus={showDesc && !description}
                 onChange={(e) => {
@@ -967,7 +975,7 @@ function PageHeader({
                 <input
                   className="page-tag-input"
                   value={tagDraft}
-                  placeholder={tags.length ? '+ Tag' : '+ Tag hinzufügen'}
+                  placeholder={tags.length ? t('+ Tag') : t('+ Add a tag')}
                   onChange={(e) => {
                     setTagDraft(e.target.value);
                     setTagSuggestOpen(true);
@@ -1013,7 +1021,7 @@ function PageHeader({
                       >
                         <span className={'tag-chip ' + tagColorClass(s.tag, tagColors)}>#{s.tag}</span>
                         <span className="tag-suggest-count">{s.count}</span>
-                        {s.similar && <span className="tag-suggest-hint">ähnlich</span>}
+                        {s.similar && <span className="tag-suggest-hint">{t('similar')}</span>}
                       </button>
                     ))}
                   </div>
@@ -1105,12 +1113,12 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
   const [provider, setProvider] = useState<SaltProvider | null>(null);
   const seedRef = useRef<unknown[] | null>(null);
 
-  // Der Provider lebt im Effekt, nicht im Render. Der frühere useMemo-Ansatz
-  // brach unter StrictMode doppelt: der Doppel-Render leakte eine
-  // Geister-Verbindung samt Presence (useRef ist im zweiten Durchlauf frisch,
-  // der Guard sah nie etwas), und der setup→cleanup→setup-Zyklus zerstörte
-  // den committeten Provider endgültig — dev hing an einem toten Y.Doc.
-  // setup→cleanup→setup erzeugt hier schlicht einen zweiten Provider.
+  // The provider lives in the effect, not in the render. The earlier useMemo
+  // approach broke twice over under StrictMode: the double render leaked one
+  // ghost connection along with its presence (useRef is fresh on the second
+  // pass, so the guard never saw anything), and the setup→cleanup→setup cycle
+  // destroyed the committed provider for good — dev hung on a dead Y.Doc.
+  // Here, setup→cleanup→setup simply produces a second provider.
   useEffect(() => {
     const p = new SaltProvider(
       page.id,
@@ -1124,12 +1132,12 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
       onReset,
     );
 
-    // Presence heißt "schaut gerade auf diese Seite": ein Tab im versteckten
-    // Fenster darf nicht stundenlang als Peer auftauchen. Doc-Sync bleibt
-    // verbunden; nur der Awareness-State wird zurückgezogen. WICHTIG:
-    // setLocalState statt setLocalStateField — Letzteres ist nach
-    // setLocalState(null) ein stilles No-Op (y-protocols prüft state !== null),
-    // die Presence käme nach dem Tab-Wechsel nie wieder zurück.
+    // Presence means "is looking at this page right now": a tab in a hidden
+    // window must not show up as a peer for hours. Doc sync stays connected;
+    // only the awareness state is withdrawn. IMPORTANT: setLocalState, not
+    // setLocalStateField — after setLocalState(null) the latter is a silent
+    // no-op (y-protocols checks state !== null), and presence would never come
+    // back after switching tabs.
     const applyPresence = () => {
       if (document.visibilityState === 'hidden') {
         p.awareness.setLocalState(null);
@@ -1161,10 +1169,10 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
     return () => {
       document.removeEventListener('visibilitychange', applyPresence);
       clearPeers(page.id);
-      setReady(false); // der nächste Provider (StrictMode) gated selbst neu
+      setReady(false); // the next provider (StrictMode) gates itself again
       p.destroy();
     };
-    // page.id ist über die Lebensdauer konstant (key={currentId} remountet)
+    // page.id is constant over the lifetime (key={currentId} remounts)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page.id]);
 
@@ -1250,8 +1258,8 @@ function BlockContent({
           insertOrUpdateBlockForSlashMenu(editor, { type: 'bookmark' } as never),
       },
       {
-        title: 'Datenbank einbetten',
-        subtext: 'Eine vorhandene Datenbank mitten im Dokument anzeigen',
+        title: t('Embed a database'),
+        subtext: t('Show an existing database inside the document'),
         aliases: ['datenbank', 'database', 'db', 'tabelle', 'board', 'kanban'],
         group: 'Basic blocks',
         icon: <span>▦</span>,
@@ -1260,7 +1268,7 @@ function BlockContent({
       },
       {
         title: 'Inhaltsverzeichnis',
-        subtext: 'Auto-Liste aller Überschriften',
+        subtext: t('Auto-generated list of every heading'),
         aliases: ['toc', 'inhalt', 'inhaltsverzeichnis', 'outline'],
         group: 'Basic blocks',
         icon: <span>📑</span>,
@@ -1365,7 +1373,7 @@ function BlockContent({
       } else {
         api.updatePage(provider.pageId, { content: doc }, { materialize: true }).catch(() => {
           dirty.current = true; // retry on next change / unmount flush
-          toast('Seiteninhalt nicht gespeichert');
+          toast(t('Page content not saved'));
         });
       }
     };

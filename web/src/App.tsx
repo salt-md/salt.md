@@ -36,7 +36,7 @@ const mailOauthMsg = (() => {
   return v;
 })();
 if (mailOauthMsg) {
-  setTimeout(() => toast(mailOauthMsg === 'ok' ? 'Mail-Versand verbunden ✓' : 'Mail-Verbindung: ' + mailOauthMsg), 400);
+  setTimeout(() => toast(mailOauthMsg === 'ok' ? t('Mail sending connected ✓') : t('Mail connection: {detail}', { detail: mailOauthMsg })), 400);
 }
 
 // Kept in sync with server.Version. A stale open tab after a deploy sees a
@@ -181,7 +181,7 @@ export default function App() {
   // jemand sie einschaltet: die mitgelieferten Schriftdateien laedt der
   // Browser erst, wenn sie tatsaechlich verwendet werden.
   // Voreinstellung 'brand'. Wer ausdruecklich 'system' gewaehlt hat, behaelt
-  // es — nur das Fehlen des Schluessels bedeutet "noch nicht entschieden" und
+  // es — nur das Fehlen des Schluessels bedeutet "not decided yet" und
   // faellt damit auf die mitgelieferten Schriften.
   const [fontPref, setFontPref] = useState<FontPref>(() =>
     localStorage.getItem('salt-font') === 'system' ? 'system' : 'brand',

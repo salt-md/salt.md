@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import type { PropDef, PropOption } from '../types';
 import Portal from './Portal';
-import { OPTION_PALETTE, optionSlug } from '../selectOptions';
+import { OPTION_HEXES, optionPalette, optionSlug } from '../selectOptions';
 import { daysUntil, formatDay, formatNumber } from '../format';
 import { Check, Link2 as LinkIcon, Plus, Trash2 } from 'lucide-react';
+import { t } from '../i18n';
 
 interface Props {
   def: PropDef;
@@ -43,11 +44,11 @@ function SelectCell({
   onChange: (v: unknown) => void;
   onOptionsChange?: (options: PropOption[]) => void;
 }) {
-  // Robust gegen fehlerhaft geschriebene Schemata: kommt eine Option als reine
-  // Zeichenkette (statt {id, name}), riss `o.name.toLowerCase()` bisher die
-  // GANZE Ansicht in den Fehlerzustand — eine kaputte Spalte machte die
-  // Datenbank unbenutzbar. Der Server normalisiert das inzwischen beim
-  // Schreiben; hier steht der Gürtel zum Hosenträger, auch für Altbestand.
+  // Robust against badly written schemas: when an option arrives as a bare
+  // string (rather than {id, name}), `o.name.toLowerCase()` used to throw the
+  // WHOLE view into its error state — one broken column made the database
+  // unusable. The server normalises this on write now; this is the belt to go
+  // with those braces, and it covers older data too.
   const options: PropOption[] = (def.options ?? [])
     .map((o) =>
       typeof o === 'string'
@@ -113,7 +114,7 @@ function SelectCell({
   const create = () => {
     if (!query || !onOptionsChange) return;
     const oid = optionSlug(query, options);
-    const color = OPTION_PALETTE[options.length % OPTION_PALETTE.length].hex;
+    const color = OPTION_HEXES[options.length % OPTION_HEXES.length];
     onOptionsChange([...options, { id: oid, name: query, color }]);
     if (multi) {
       onChange([...vals, oid]);
@@ -163,7 +164,7 @@ function SelectCell({
               /* Colour / delete panel for a single option (keeps everything on-screen). */
               <>
                 <button className="select-back" onClick={() => setColorFor(null)}>
-                  ‹ Zurück
+                  ‹ {t('Back')}
                 </button>
                 <div className="select-editing-name">
                   <span className="prop-chip" style={{ background: editing.color + '2e', color: editing.color }}>
@@ -171,11 +172,11 @@ function SelectCell({
                   </span>
                 </div>
                 <button className="tag-color-opt danger" onClick={() => remove(editing.id)}>
-                  <Trash2 size={14} /> Option löschen
+                  <Trash2 size={14} /> {t('Delete option')}
                 </button>
-                <div className="menu-label">Farben</div>
+                <div className="menu-label">{t('Colours')}</div>
                 <div className="select-options">
-                  {OPTION_PALETTE.map((c) => (
+                  {optionPalette().map((c) => (
                     <button key={c.hex} className="tag-color-opt" onClick={() => setColor(editing.id, c.hex)}>
                       <span className="tag-swatch" style={{ background: c.hex }} />
                       <span className="tag-color-name">{c.name}</span>
@@ -189,7 +190,7 @@ function SelectCell({
                 <input
                   className="select-search"
                   autoFocus
-                  placeholder="Suchen oder anlegen…"
+                  placeholder={t('Search or create…')}
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   onKeyDown={(e) => {
@@ -212,7 +213,7 @@ function SelectCell({
                       {onOptionsChange && (
                         <button
                           className="select-option-more"
-                          title="Farbe / löschen"
+                          title={t('Colour / delete')}
                           onClick={() => setColorFor(o.id)}
                         >
                           ⋯
@@ -226,7 +227,7 @@ function SelectCell({
                     </button>
                   )}
                   {filtered.length === 0 && !query && (
-                    <div className="select-empty">Keine Optionen — tippe, um eine anzulegen.</div>
+                    <div className="select-empty">{t('No options — type to create one.')}</div>
                   )}
                 </div>
               </>
@@ -358,7 +359,7 @@ function RelationValue({ def, value, onChange, readOnly, compact }: Props) {
   const titleOf = (id: string) => options.find((o) => o.id === id)?.title || 'Untitled';
   const iconOf = (id: string) => options.find((o) => o.id === id)?.icon || '';
 
-  if (!targetId) return <span className="prop-empty">No target</span>;
+  if (!targetId) return <span className="prop-empty">{t('No target')}</span>;
 
   const chips = (
     <span className="prop-multi">
@@ -391,19 +392,19 @@ function RelationValue({ def, value, onChange, readOnly, compact }: Props) {
           setOpen((v) => !v);
         }}
       >
-        {ids.length ? chips : <span className="prop-empty">＋ Link</span>}
+        {ids.length ? chips : <span className="prop-empty">{t('＋ Link')}</span>}
       </button>
       {open && (
         <div className="menu relation-menu">
           <input
             className="prop-input"
             autoFocus
-            placeholder="Search…"
+            placeholder={t('Search…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
           <div className="relation-options">
-            {filtered.length === 0 && <div className="relation-empty">No rows</div>}
+            {filtered.length === 0 && <div className="relation-empty">{t('No rows')}</div>}
             {filtered.map((o) => (
               <button
                 key={o.id}

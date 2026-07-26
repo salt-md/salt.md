@@ -10,6 +10,7 @@ import Portal from './Portal';
 import IconPicker from './IconPicker';
 import { PageIcon } from '../pageIcon';
 import { compare } from '../format';
+import { plural, t } from '../i18n';
 import AgentConnectModal from './AgentConnect';
 import BreakGlassLog from './BreakGlassLog';
 import StrandedWorkspaces from './StrandedWorkspaces';
@@ -122,8 +123,8 @@ function DbRows({
     };
   }, [collectionId]);
   const pad = { paddingLeft: 6 + depth * 14 };
-  if (rows === null) return <div className="tree-db-empty" style={pad}>Lädt…</div>;
-  if (rows.length === 0) return <div className="tree-db-empty" style={pad}>Keine Einträge</div>;
+  if (rows === null) return <div className="tree-db-empty" style={pad}>{t('Loading…')}</div>;
+  if (rows.length === 0) return <div className="tree-db-empty" style={pad}>{t('No entries')}</div>;
   return (
     <div className="tree-db-rows">
       {rows.map((r) => (
@@ -177,9 +178,9 @@ function SidebarSection({
   return (
     <div className={'sb-section' + (open ? ' open' : '')}>
       <div className="sb-section-head">
-        {/* Ein Topic sieht aus wie eine Zeile, nur kräftiger: Icon links, Titel,
-            Anzahl, Chevron rechts. Keine Mikro-Überschrift mehr — eine einzige
-            Zeilensprache für die ganze Seitenleiste. */}
+        {/* A topic looks like a row, only bolder: icon on the left, title,
+            count, chevron on the right. No more micro-heading — one single row
+            language for the whole sidebar. */}
         <button className="sb-section-toggle" onClick={toggle} aria-expanded={open}>
           <span className="sb-section-icon">{icon}</span>
           <span className="sb-section-label">{label}</span>
@@ -298,11 +299,11 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
         <span className="tree-icon"><PageIcon icon={p.icon} size={15} fallback={p.type === 'collection' ? <Table2 size={15} /> : <FileText size={15} />} /></span>
         <span className="tree-title">{p.title || 'Untitled'}</span>
         <span className="tree-actions" onClick={(e) => e.stopPropagation()} ref={actionsRef}>
-          <button title="Add sub-page" onClick={() => ctx.onCreateChild(p.id)}>
+          <button title={t('Add sub-page')} onClick={() => ctx.onCreateChild(p.id)}>
             +
           </button>
           <button
-            title="More"
+            title={t('More')}
             onClick={() => ctx.setMenuFor(ctx.menuFor === p.id ? null : p.id)}
           >
             ⋯
@@ -327,7 +328,7 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
               </button>
               {ctx.workspaces.length > 1 && (
                 <div className="menu-sub">
-                  <div className="menu-label">In Workspace verschieben</div>
+                  <div className="menu-label">{t('Move to workspace')}</div>
                   {ctx.workspaces
                     .filter((w) => w.id !== p.workspaceId)
                     .map((w) => (
@@ -494,7 +495,7 @@ export default function Sidebar({
       const r = await api.duplicatePage(id, true);
       onNavigate(r.id);
     } catch {
-      toast('Template konnte nicht verwendet werden');
+      toast(t('The template could not be used'));
     }
   };
 
@@ -596,13 +597,13 @@ export default function Sidebar({
     workspaces,
     onMoveToWorkspace: (pageId, wsId, wsName) => {
       // Der Umzug nimmt den ganzen Unterbaum mit und legt die Seite im Ziel
-      // auf oberster Ebene ab — der bisherige Elternteil bleibt zurück.
+      // at the top level — the previous parent stays behind.
       void api
         .updatePage(pageId, { workspaceId: wsId })
         .then(() => {
           toast(`Nach „${wsName}" verschoben`);
-          // Der Seitenbaum aktualisiert sich über den Änderungs-Feed des
-          // Servers (pagesChanged); hier nur die Workspace-Zähler nachziehen.
+          // The page tree updates itself through the server's change feed
+          // (pagesChanged); only the workspace counters need catching up here.
           onWorkspacesChanged();
         })
         .catch((e: Error) => toast(e.message || 'Verschieben fehlgeschlagen'));
@@ -659,7 +660,7 @@ export default function Sidebar({
     if (!activeWs) return;
     const name = await promptText('Workspace umbenennen', {
       defaultValue: activeWs.name,
-      placeholder: 'Neuer Name',
+      placeholder: t('New name'),
       confirmText: 'Umbenennen',
     });
     if (!name?.trim() || name.trim() === activeWs.name) return;
@@ -677,23 +678,25 @@ export default function Sidebar({
   const deleteWorkspace = async () => {
     if (!activeWs) return;
     const typed = await promptText(
-      `„${activeWs.name}" und ALLE Seiten darin unwiderruflich löschen?\n\nTippe zur Bestätigung den Namen des Workspace ein:`,
-      { placeholder: activeWs.name, confirmText: 'Endgültig löschen' },
+      t('Irrevocably delete “{name}” and EVERY page in it?', { name: activeWs.name }) +
+        '\n\n' +
+        t('Type the workspace name to confirm:'),
+      { placeholder: activeWs.name, confirmText: t('Delete permanently') },
     );
     if (typed === null) return;
     try {
       await api.deleteWorkspace(activeWs.id, typed.trim());
-      toast('Workspace gelöscht');
+      toast(t('Workspace deleted'));
       const next = workspaces.find((w) => w.id !== activeWs.id);
       onWorkspacesChanged();
       if (next) onSwitchWorkspace(next.id);
     } catch (e) {
-      toast((e as Error).message || 'Löschen fehlgeschlagen');
+      toast((e as Error).message || t('Deleting failed'));
     }
   };
 
   const newWorkspace = async () => {
-    const name = await promptText('Name des neuen Workspace?', { placeholder: 'z.B. Team' });
+    const name = await promptText(t('Name for the new workspace?'), { placeholder: t('e.g. Team') });
     if (!name?.trim()) return;
     try {
       const ws = await api.createWorkspace(name.trim());
@@ -701,15 +704,14 @@ export default function Sidebar({
       onSwitchWorkspace(ws.id);
       setWsMenuOpen(false);
     } catch {
-      toast('Workspace konnte nicht erstellt werden');
+      toast(t('The workspace could not be created'));
     }
   };
 
   const [bgLogOpen, setBgLogOpen] = useState(false);
   const [strandedOpen, setStrandedOpen] = useState(false);
-  // "Für alle öffnen": neue Konten treten diesem Workspace automatisch bei.
-  // Ersetzt die alte stille Regel, nach der jeder Neuzugang im ältesten
-  // Workspace landete.
+  // "Open to everyone": new accounts join this workspace automatically. Replaces
+  // the old silent rule that dropped every newcomer into the oldest workspace.
   const toggleAutoJoin = async () => {
     if (!activeWs) return;
     const next = !activeWs.autoJoin;
@@ -718,34 +720,34 @@ export default function Sidebar({
       onWorkspacesChanged();
       toast(
         next
-          ? `„${activeWs.name}" steht ab jetzt jedem neuen Konto offen.`
-          : `„${activeWs.name}" wird neuen Konten nicht mehr zugewiesen.`,
+          ? t('“{name}” is now open to every new account.', { name: activeWs.name })
+          : t('“{name}” is no longer assigned to new accounts.', { name: activeWs.name }),
       );
     } catch (e) {
-      toast((e as Error).message || 'Konnte nicht geändert werden');
+      toast((e as Error).message || t('Could not be changed'));
     }
   };
 
   const wsImportRef = useRef<HTMLInputElement | null>(null);
   const importWorkspace = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    e.target.value = ''; // gleiche Datei erneut wählbar
+    e.target.value = ''; // so the same file can be picked again
     if (!file) return;
-    toast('Workspace wird importiert…');
+    toast(t('Importing workspace…'));
     try {
       const fd = new FormData();
       fd.append('file', file);
       const res = await fetch('/api/workspaces/import', { method: 'POST', body: fd });
       if (!res.ok) {
         const err = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(err?.error || `Import fehlgeschlagen (HTTP ${res.status})`);
+        throw new Error(err?.error || t('Import failed (HTTP {status})', { status: res.status }));
       }
       const out = (await res.json()) as { workspaceId: string; name: string; pages: number };
-      toast(`„${out.name}" importiert — ${out.pages} Seiten`);
+      toast(t('Imported “{name}” — {pages}', { name: out.name, pages: plural(out.pages, '{n} page', '{n} pages') }));
       onWorkspacesChanged();
       onSwitchWorkspace(out.workspaceId);
     } catch (err) {
-      toast((err as Error).message || 'Import fehlgeschlagen');
+      toast((err as Error).message || t('Import failed'));
     }
   };
 
@@ -771,81 +773,81 @@ export default function Sidebar({
                 >
                   <WorkspaceAvatar ws={w} />
                   <span className="ws-menu-name">{w.name}</span>
-                  {w.personal && <span className="ws-tag">eigener Bereich</span>}
-                  {w.autoJoin && !w.personal && <span className="ws-tag">für alle</span>}
+                  {w.personal && <span className="ws-tag">{t('own space')}</span>}
+                  {w.autoJoin && !w.personal && <span className="ws-tag">{t('open to all')}</span>}
                   {w.id === currentWs && <Check size={14} />}
                 </button>
               ))}
               <div className="menu-sep" />
               {activeWs?.role === 'admin' && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); void renameWorkspace(); }}>
-                  <Pencil size={15} /> Workspace umbenennen
+                  <Pencil size={15} /> {t('Rename workspace')}
                 </button>
               )}
               {activeWs?.role === 'admin' && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); setWsImageOpen(true); }}>
-                  <Image size={15} /> Workspace-Bild
+                  <Image size={15} /> {t('Workspace picture')}
                 </button>
               )}
               {currentWs && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); setMembersOpen(true); }}>
-                  <Users size={15} /> Mitglieder
+                  <Users size={15} /> {t('Members')}
                 </button>
               )}
               {user.orgRole === 'owner' && activeWs && !activeWs.personal && (
                 <button
                   className="menu-item"
-                  title="Jedes neu angelegte Konto wird automatisch Mitglied dieses Workspace"
+                  title={t('Every newly created account automatically becomes a member of this workspace')}
                   onClick={() => { setWsMenuOpen(false); void toggleAutoJoin(); }}
                 >
                   <Users size={15} />
-                  {activeWs.autoJoin ? 'Nicht mehr für alle öffnen' : 'Für alle neuen Nutzer öffnen'}
+                  {activeWs.autoJoin ? t('Stop opening it to everyone') : t('Open to every new user')}
                 </button>
               )}
               {activeWs?.role === 'admin' && (
                 <button
                   className="menu-item"
-                  title="Wer hat sich als Instanz-Owner Einsicht verschafft — und warum"
+                  title={t('Who looked in as the instance owner — and why')}
                   onClick={() => { setWsMenuOpen(false); setBgLogOpen(true); }}
                 >
-                  <ShieldAlert size={15} /> Notfallzugriffe
+                  <ShieldAlert size={15} /> {t('Emergency access log')}
                 </button>
               )}
               {currentWs && (
                 <button
                   className="menu-item"
-                  title="Natives Archiv: Seiten, Datenbanken, Dateien & Tags — 1:1 in einer anderen Instanz importierbar"
+                  title={t('Native archive: pages, databases, files and tags — importable one-to-one into another instance')}
                   onClick={() => { setWsMenuOpen(false); api.download(`/api/workspaces/${currentWs}/export`); }}
                 >
-                  <Download size={15} /> Workspace exportieren
+                  <Download size={15} /> {t('Export workspace')}
                 </button>
               )}
               {currentWs && (
                 <button
                   className="menu-item"
-                  title="Nur die Inhalte dieses Workspace als Markdown-Dateien"
+                  title={t('Just this workspace’s content, as Markdown files')}
                   onClick={() => { setWsMenuOpen(false); api.download(`/api/export?workspace=${currentWs}`); }}
                 >
-                  <FileText size={15} /> Als Markdown exportieren
+                  <FileText size={15} /> {t('Export as Markdown')}
                 </button>
               )}
               {canCreateWorkspace && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); wsImportRef.current?.click(); }}>
-                  <Upload size={15} /> Workspace importieren…
+                  <Upload size={15} /> {t('Import workspace…')}
                 </button>
               )}
               {canCreateWorkspace && (
                 <button className="menu-item" onClick={newWorkspace}>
-                  <Plus size={15} /> Neuer Workspace
+                  <Plus size={15} /> {t('New workspace')}
                 </button>
               )}
               {user.orgRole === 'owner' && (
                 <button
                   className="menu-item"
-                  title="Workspaces, um die sich niemand mehr kümmern kann"
+                  title={t('Workspaces nobody can look after any more')}
                   onClick={() => { setWsMenuOpen(false); setStrandedOpen(true); }}
                 >
-                  <ShieldAlert size={15} /> Ohne Verantwortlichen…
+                  <ShieldAlert size={15} /> {t('With nobody in charge…')}
                 </button>
               )}
               {activeWs?.role === 'admin' && workspaces.length > 1 && (
@@ -853,7 +855,7 @@ export default function Sidebar({
                   className="menu-item danger"
                   onClick={() => { setWsMenuOpen(false); void deleteWorkspace(); }}
                 >
-                  <Trash2 size={15} /> Workspace löschen
+                  <Trash2 size={15} /> {t('Delete workspace')}
                 </button>
               )}
             </div>
@@ -867,13 +869,13 @@ export default function Sidebar({
           />
         </div>
         <div className="sidebar-header-actions">
-          <button className="icon-btn" title="Index — alle Seiten & Links" onClick={onOpenIndex}>
+          <button className="icon-btn" title={t('Index — every page and link')} onClick={onOpenIndex}>
             <Network size={17} />
           </button>
           {collapsed ? (
             <button
               className="icon-btn collapse-btn pin-btn"
-              title="Seitenleiste anpinnen"
+              title={t('Pin the sidebar')}
               onClick={() => onExpand?.()}
             >
               <PanelLeftOpen size={17} />
@@ -881,7 +883,7 @@ export default function Sidebar({
           ) : (
             <button
               className="icon-btn collapse-btn"
-              title="Seitenleiste einklappen"
+              title={t('Collapse the sidebar')}
               onClick={(e) => {
                 // This button lives inside the sidebar, so after the click it keeps
                 // focus and the collapsed sidebar would stay revealed via the
@@ -896,11 +898,11 @@ export default function Sidebar({
         </div>
       </div>
       <button className="sidebar-search" onClick={onOpenSearch}>
-        <span className="sidebar-item-label"><Search size={15} /> Search</span>
+        <span className="sidebar-item-label"><Search size={15} /> {t('Search')}</span>
         <span className="kbd">⌘K</span>
       </button>
       {favPages.length > 0 && (
-        <SidebarSection id="fav" label="Favoriten" icon={<Star size={17} />} count={favPages.length}>
+        <SidebarSection id="fav" label={t('Favourites')} icon={<Star size={17} />} count={favPages.length}>
           {favPages.map((p) => (
               <FlatRow
                 key={p.id}
@@ -908,7 +910,7 @@ export default function Sidebar({
                 active={p.id === currentId}
                 onNavigate={onNavigate}
                 action={
-                  <button title="Aus Favoriten entfernen" onClick={() => onToggleFavorite(p.id)}>
+                  <button title={t('Remove from favourites')} onClick={() => onToggleFavorite(p.id)}>
                     ★
                   </button>
                 }
@@ -933,7 +935,7 @@ export default function Sidebar({
                       ? onSelectTag?.(activeTag === t ? null : t)
                       : setTagFilter((cur) => (cur === t ? null : t))
                   }
-                  title={`${n} Seite${n === 1 ? '' : 'n'}`}
+                  title={plural(n, '{n} page', '{n} pages')}
                 >
                   #{t} <span className="tag-chip-count">{n}</span>
                 </button>
@@ -951,7 +953,7 @@ export default function Sidebar({
               Filter aufheben ×
             </button>
           </div>
-          {taggedPages.length === 0 && <div className="section-label">Keine Seiten.</div>}
+          {taggedPages.length === 0 && <div className="section-label">{t('No pages.')}</div>}
           {taggedPages.map((p) => (
             <div
               key={p.id}
@@ -974,37 +976,37 @@ export default function Sidebar({
           {!notesMode && (
             <SidebarSection
               id="docs"
-              label="Dokumente"
+              label={t('Documents')}
               icon={<FileText size={17} />}
               count={allDocs.length}
-              createTitle="Neue Seite"
+              createTitle={t('New page')}
               onCreate={() => onCreate(null)}
             >
               {topDocs.length ? (
                 topDocs.map((p) => <TreeItem key={p.id} p={p} depth={0} ctx={ctx} />)
               ) : (
-                <div className="sb-empty">Noch keine Seiten</div>
+                <div className="sb-empty">{t('No pages yet')}</div>
               )}
             </SidebarSection>
           )}
           <SidebarSection
             id="dbs"
-            label="Datenbanken"
+            label={t('Databases')}
             icon={<Table2 size={17} />}
             count={allDbs.length}
-            createTitle="Neue Datenbank"
+            createTitle={t('New database')}
             onCreate={() => onCreate(null, 'collection')}
           >
             {topDbs.length ? (
               topDbs.map((p) => <TreeItem key={p.id} p={p} depth={0} ctx={ctx} />)
             ) : (
-              <div className="sb-empty">Noch keine Datenbank</div>
+              <div className="sb-empty">{t('No database yet')}</div>
             )}
           </SidebarSection>
         </div>
       )}
       {templatePages.length > 0 && (
-        <SidebarSection id="tpl" label="Vorlagen" icon={<LayoutTemplate size={17} />} count={templatePages.length} defaultOpen={false}>
+        <SidebarSection id="tpl" label={t('Templates')} icon={<LayoutTemplate size={17} />} count={templatePages.length} defaultOpen={false}>
           {templatePages.map((p) => (
               <div
                 key={p.id}
@@ -1017,7 +1019,7 @@ export default function Sidebar({
                 </span>
                 <span className="tree-title">{p.title || 'Untitled'}</span>
                 <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
-                  <button title="Neue Seite aus dieser Vorlage" onClick={() => void instantiateTemplate(p.id)}>
+                  <button title={t('New page from this template')} onClick={() => void instantiateTemplate(p.id)}>
                     ＋
                   </button>
                 </span>
@@ -1029,18 +1031,18 @@ export default function Sidebar({
       {trashRoots.length > 0 && (
         <div className="trash-section">
           <button className="trash-toggle" onClick={() => setTrashOpen(!trashOpen)}>
-            <span className="sidebar-item-label"><Trash2 size={15} /> Trash</span> <span className="trash-count">{trashRoots.length}</span>
+            <span className="sidebar-item-label"><Trash2 size={15} /> {t('Trash')}</span> <span className="trash-count">{trashRoots.length}</span>
           </button>
           {trashOpen &&
             trashRoots.map((p) => (
               <div key={p.id} className="trash-item">
                 <span className="tree-icon"><PageIcon icon={p.icon} size={15} fallback={<FileText size={15} />} /></span>
                 <span className="tree-title">{p.title || 'Untitled'}</span>
-                <button title="Restore" onClick={() => onRestore(p.id)}>
+                <button title={t('Restore')} onClick={() => onRestore(p.id)}>
                   ↩
                 </button>
                 <button
-                  title="Delete forever"
+                  title={t('Delete forever')}
                   className="danger"
                   onClick={() => onDeleteForever(p.id)}
                 >
@@ -1169,23 +1171,23 @@ function WorkspaceImageModal({
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog" role="dialog" aria-modal="true" aria-label="Workspace-Bild">
-          <h2>Workspace-Bild</h2>
-          <p className="dialog-hint">Wähle ein Emoji oder lade ein Logo (z.&nbsp;B. Firmen- oder Projekt-Logo) hoch.</p>
-          <label className="dialog-hint">Emoji</label>
+        <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Workspace picture')}>
+          <h2>{t('Workspace picture')}</h2>
+          <p className="dialog-hint">{t('Pick an emoji or upload a logo (a company or project logo, say).')}</p>
+          <label className="dialog-hint">{t('Emoji')}</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
             <button className="btn" onClick={() => setPickerOpen((o) => !o)}>
-              {emoji || '🙂'} Auswählen…
+              {emoji || '🙂'} {t('Choose…')}
             </button>
             <input
               className="prop-input"
               style={{ width: 90, textAlign: 'center', fontSize: 20 }}
               value={emoji}
-              placeholder="oder tippen"
+              placeholder={t('or type one')}
               maxLength={4}
               onChange={(e) => setEmoji(e.target.value)}
             />
-            <button className="btn primary" disabled={busy || !emoji.trim()} onClick={() => void saveEmoji()}>Speichern</button>
+            <button className="btn primary" disabled={busy || !emoji.trim()} onClick={() => void saveEmoji()}>{t('Save')}</button>
             {pickerOpen && (
               <IconPicker
                 onPick={(e) => {
@@ -1202,15 +1204,15 @@ function WorkspaceImageModal({
             )}
           </div>
           <div className="menu-sep" style={{ margin: '12px 0' }} />
-          <label className="dialog-hint">Logo hochladen</label>
+          <label className="dialog-hint">{t('Upload a logo')}</label>
           <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => void uploadImage(e)} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>Bild wählen…</button>
+            <button className="btn" disabled={busy} onClick={() => fileRef.current?.click()}>{t('Choose a picture…')}</button>
             {(ws.icon || ws.image) && (
-              <button className="btn danger" disabled={busy} onClick={() => void clear()}>Entfernen</button>
+              <button className="btn danger" disabled={busy} onClick={() => void clear()}>{t('Remove')}</button>
             )}
           </div>
-          <button className="btn dialog-close" onClick={onClose}>Schließen</button>
+          <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
         </div>
       </div>
     </Portal>

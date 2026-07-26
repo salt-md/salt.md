@@ -4,6 +4,7 @@ import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
 import { formatBytes } from '../format';
+import { t } from '../i18n';
 
 type Info = Awaited<ReturnType<typeof api.adminInfo>>;
 
@@ -26,10 +27,10 @@ function ConfBlock({ title, text }: { title: string; text: string }) {
           className="btn-sm"
           onClick={() => {
             void navigator.clipboard?.writeText(text);
-            toast('Kopiert');
+            toast(t('Copied'));
           }}
         >
-          Kopieren
+          {t('Copy')}
         </button>
       </div>
       <pre>
@@ -50,7 +51,7 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
   const [passSet, setPassSet] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<'allgemein' | 'zugang' | 'email' | 'proxy' | 'wartung'>('allgemein');
+  const [tab, setTab] = useState<'general' | 'access' | 'email' | 'proxy' | 'maintenance'>('general');
   const [info, setInfo] = useState<Info | null>(null);
   const [upstream, setUpstream] = useState(window.location.host || '127.0.0.1:80');
   const [httpsEnabled, setHttpsEnabled] = useState(false);
@@ -93,18 +94,18 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
         setPassSet(v.smtpPassSet);
         setLoaded(true);
       })
-      .catch((e) => setLoadErr((e as Error).message || 'Laden fehlgeschlagen'));
+      .catch((e) => setLoadErr((e as Error).message || t('Loading failed')));
   }, []);
 
-  // Instance info lazily when the Wartung tab opens.
+  // Instance info lazily when the maintenance tab opens.
   useEffect(() => {
-    if (tab === 'wartung' && !info) void api.adminInfo().then(setInfo).catch(() => {});
+    if (tab === 'maintenance' && !info) void api.adminInfo().then(setInfo).catch(() => {});
   }, [tab, info]);
 
-  // Live tunnel status while the Domain & Proxy or Zugang tab is open (the
-  // OAuth cards derive the public redirect URI from a running tunnel).
+  // Live tunnel status while the proxy or access tab is open (the OAuth cards
+  // derive the public redirect URI from a running tunnel).
   useEffect(() => {
-    if (tab !== 'proxy' && tab !== 'zugang') return;
+    if (tab !== 'proxy' && tab !== 'access') return;
     let alive = true;
     const load = () => void api.publicAccess().then((v) => alive && setPa(v)).catch(() => {});
     load();
@@ -122,7 +123,7 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
       setPa(await api.publicAccess());
       if (action === 'start-token') setTunnelToken('');
     } catch (e) {
-      toast((e as Error).message || 'Tunnel-Aktion fehlgeschlagen');
+      toast((e as Error).message || t('Tunnel action failed'));
     } finally {
       setTunnelBusy(false);
     }
@@ -133,9 +134,9 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
     setMailBusy(true);
     try {
       const r = await api.mailTest();
-      toast('Test-Mail an ' + r.to + ' verschickt ✓');
+      toast(t('Test mail sent to {address} ✓', { address: r.to }));
     } catch (e) {
-      toast((e as Error).message || 'Test fehlgeschlagen');
+      toast((e as Error).message || t('Test failed'));
     } finally {
       setMailBusy(false);
     }
@@ -144,9 +145,9 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
     try {
       await api.mailDisconnect();
       setMail({ provider: '', address: '' });
-      toast('Mail-Verbindung getrennt');
+      toast(t('Mail connection disconnected'));
     } catch (e) {
-      toast((e as Error).message || 'Trennen fehlgeschlagen');
+      toast((e as Error).message || t('Disconnecting failed'));
     }
   };
   const save = async () => {
@@ -178,10 +179,10 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
         msClientId: s.msClientId,
         msClientSecret: s.msClientSecret,
       });
-      toast('Einstellungen gespeichert');
+      toast(t('Settings saved'));
       onClose();
     } catch (e) {
-      toast((e as Error).message || 'Speichern fehlgeschlagen');
+      toast((e as Error).message || t('Saving failed'));
     }
   };
 
@@ -198,7 +199,11 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
 	reverse_proxy ${upstream}
 }`;
 
-  const cloudflaredConf = `# 1) Tunnel anlegen (einmalig):
+  // The comments inside the generated configs stay English regardless of the
+  // interface language: this text is pasted into a server's config file, where
+  // the next reader is as likely to be a colleague or a search engine as the
+  // person who copied it.
+  const cloudflaredConf = `# 1) Create the tunnel (once):
 #    cloudflared tunnel login
 #    cloudflared tunnel create salt
 #    cloudflared tunnel route dns salt ${domain}
@@ -209,9 +214,9 @@ ingress:
   - hostname: ${domain}
     service: http://${upstream}
   - service: http_status:404
-# 3) Starten / als Dienst:
+# 3) Run it / install as a service:
 #    cloudflared tunnel run salt
-#    (oder: cloudflared service install)`;
+#    (or: cloudflared service install)`;
 
   const nginxConf = `server {
 	listen 443 ssl http2;
@@ -223,7 +228,7 @@ ingress:
 		proxy_set_header Host $host;
 		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 		proxy_set_header X-Forwarded-Proto $scheme;
-		# WebSockets (Live-Collaboration):
+		# WebSockets (live collaboration):
 		proxy_http_version 1.1;
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection "upgrade";
@@ -232,63 +237,67 @@ ingress:
 }`;
 
   const TABS: { id: typeof tab; label: string }[] = [
-    { id: 'allgemein', label: 'Allgemein' },
-    { id: 'zugang', label: 'Zugang' },
-    { id: 'email', label: 'E-Mail' },
-    { id: 'proxy', label: 'Domain & Proxy' },
-    { id: 'wartung', label: 'Wartung' },
+    { id: 'general', label: t('General') },
+    { id: 'access', label: t('Access') },
+    { id: 'email', label: t('Email') },
+    { id: 'proxy', label: t('Domain & proxy') },
+    { id: 'maintenance', label: t('Maintenance') },
   ];
 
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog wide settings-dialog" role="dialog" aria-modal="true" aria-label="Instanz-Einstellungen">
-          <h2>Instanz-Einstellungen</h2>
+        <div className="dialog wide settings-dialog" role="dialog" aria-modal="true" aria-label={t('Instance settings')}>
+          <h2>{t('Instance settings')}</h2>
           {loadErr ? (
             <div className="login-error">{loadErr}</div>
           ) : !loaded ? (
-            <div className="dialog-hint">Lädt…</div>
+            <div className="dialog-hint">{t('Loading…')}</div>
           ) : (
             <>
               <div className="settings-tabs">
-                {TABS.map((t) => (
-                  <button key={t.id} className={'view-tab' + (tab === t.id ? ' active' : '')} onClick={() => setTab(t.id)}>
-                    {t.label}
+                {/* `tb`, not `t` — the tab object would shadow the translate
+                    function and every label below it would break. */}
+                {TABS.map((tb) => (
+                  <button key={tb.id} className={'view-tab' + (tab === tb.id ? ' active' : '')} onClick={() => setTab(tb.id)}>
+                    {tb.label}
                   </button>
                 ))}
               </div>
               <div className="settings-grid settings-body">
-                {tab === 'allgemein' && (
+                {tab === 'general' && (
                   <>
-                    <label>Name der Instanz (Login-Seite & Titel)</label>
-                    <input className="prop-input" placeholder="z. B. VIICO Notes" value={s.instanceName} onChange={(e) => set('instanceName', e.target.value)} />
-                    <label>Öffentliche Basis-URL (für Links, Mails, Kalender)</label>
-                    <input className="prop-input" placeholder="https://notes.firma.de" value={s.publicBaseUrl} onChange={(e) => set('publicBaseUrl', e.target.value)} />
-                    <label>Max. Dateigröße pro Upload (MB)</label>
+                    <label>{t('Instance name (sign-in page & title)')}</label>
+                    <input className="prop-input" placeholder={t('e.g. VIICO Notes')} value={s.instanceName} onChange={(e) => set('instanceName', e.target.value)} />
+                    <label>{t('Public base URL (for links, mail, calendars)')}</label>
+                    <input className="prop-input" placeholder="https://notes.example.com" value={s.publicBaseUrl} onChange={(e) => set('publicBaseUrl', e.target.value)} />
+                    <label>{t('Max. file size per upload (MB)')}</label>
                     <input className="prop-input" type="number" min={1} max={2048} value={s.maxUploadMb} onChange={(e) => set('maxUploadMb', e.target.value)} />
-                    <label>Papierkorb automatisch leeren nach (Tagen, 0 = nie)</label>
+                    <label>{t('Empty the trash automatically after (days, 0 = never)')}</label>
                     <input className="prop-input" type="number" min={0} max={3650} value={s.trashDays} onChange={(e) => set('trashDays', e.target.value)} />
-                    <label>Login-Sitzungsdauer (Tage)</label>
+                    <label>{t('Sign-in session length (days)')}</label>
                     <input className="prop-input" type="number" min={1} max={365} value={s.sessionDays} onChange={(e) => set('sessionDays', e.target.value)} />
                   </>
                 )}
 
-                {tab === 'zugang' && (
+                {tab === 'access' && (
                   <>
-                    <label>Wer darf sich registrieren?</label>
+                    <label>{t('Who may register?')}</label>
                     <select className="prop-select" value={s.signupMode} onChange={(e) => set('signupMode', e.target.value)}>
-                      <option value="invite">Nur per Einladung</option>
-                      <option value="domain">E-Mail-Domain freigegeben</option>
-                      <option value="open">Offen (jeder)</option>
+                      <option value="invite">{t('By invitation only')}</option>
+                      <option value="domain">{t('Email domain allowed')}</option>
+                      <option value="open">{t('Open (anyone)')}</option>
                     </select>
                     {s.signupMode === 'domain' && (
                       <>
-                        <label>Erlaubte Domains (Komma-getrennt)</label>
-                        <input className="prop-input" placeholder="salt.md, firma.de" value={s.allowedDomains} onChange={(e) => set('allowedDomains', e.target.value)} />
+                        <label>{t('Allowed domains (comma separated)')}</label>
+                        <input className="prop-input" placeholder="salt.md, example.com" value={s.allowedDomains} onChange={(e) => set('allowedDomains', e.target.value)} /> {/* i18n-ok: example domains, not prose */}
                       </>
                     )}
                     <p className="dialog-hint settings-hint">
-                      Einladungen verschickst du über „Mitglieder" im Workspace-Menü. Für Mail-Versand SMTP im Tab „E-Mail" konfigurieren.
+                      {t(
+                        'Invitations go out through “Members” in the workspace menu. For sending mail, configure SMTP on the “Email” tab.',
+                      )}
                     </p>
 
                     <label className="check-label" style={{ marginTop: 10 }}>
@@ -297,20 +306,19 @@ ingress:
                         checked={allowUserWs}
                         onChange={(e) => setAllowUserWs(e.target.checked)}
                       />
-                      Nutzer dürfen eigene Workspaces anlegen
+                      {t('Users may create their own workspaces')}
                     </label>
                     <p className="dialog-hint settings-hint">
-                      Aus: nur Admins legen Workspaces an. An (Standard): jeder kann einen eigenen
-                      Workspace erstellen und wird dessen Admin — er verwaltet dann nur die
-                      Mitglieder SEINES Workspace, nicht die Instanz.
+                      {t(
+                        'Off: only admins create workspaces. On (default): anyone can create one of their own and becomes its admin — they then manage the members of THEIR workspace only, not the instance.',
+                      )}
                     </p>
 
-                    <h3>Login mit Google / Microsoft (OAuth)</h3>
+                    <h3>{t('Sign in with Google / Microsoft (OAuth)')}</h3>
                     <p className="dialog-hint settings-hint">
-                      Sobald Client-ID und Secret gespeichert sind, zeigt die Login-Seite automatisch den
-                      Button. Neue Konten folgen der Registrierungs-Richtlinie oben (bei „nur per Einladung"
-                      können sich nur bestehende Konten per OAuth anmelden). Redirect-URIs für die
-                      Provider-Konsole:
+                      {t(
+                        'Once client ID and secret are stored, the sign-in page shows the button automatically. New accounts follow the registration policy above (under “by invitation only”, OAuth signs in existing accounts and nothing else). Redirect URIs for the provider console:',
+                      )}
                     </p>
                     {(() => {
                       const quickUrl = pa && pa.status === 'running' && pa.mode === 'quick' ? pa.url : '';
@@ -324,16 +332,16 @@ ingress:
                           <input className="prop-input" readOnly value={base + '/api/oauth/microsoft/callback'} onFocus={(e) => e.currentTarget.select()} />
                           {insecure && (
                             <p className="dialog-hint settings-hint pa-warn">
-                              ⚠ Google & Microsoft akzeptieren nur <strong>HTTPS</strong>-Redirect-URIs (außer localhost).
-                              Starte einen Tunnel (Tab „Domain &amp; Proxy") oder trage unter „Allgemein" eine
-                              öffentliche HTTPS-Basis-URL ein — dann erscheint sie hier automatisch.
+                              {t(
+                                '⚠ Google and Microsoft accept HTTPS redirect URIs only (localhost aside). Start a tunnel (the “Domain & proxy” tab) or enter a public HTTPS base URL under “General” — it then appears here on its own.',
+                              )}
                             </p>
                           )}
                           {!s.publicBaseUrl && quickUrl && (
                             <p className="dialog-hint settings-hint pa-warn">
-                              ⚠ Das ist die URL des laufenden <strong>Quick-Tunnels</strong> — sie wechselt bei jedem
-                              Start. Für dauerhaftes OAuth einen benannten Tunnel oder eine eigene Domain nutzen und
-                              als Basis-URL eintragen.
+                              {t(
+                                '⚠ This is the URL of the running quick tunnel — it changes on every start. For OAuth that lasts, use a named tunnel or your own domain and enter it as the base URL.',
+                              )}
                             </p>
                           )}
                         </>
@@ -342,140 +350,143 @@ ingress:
                     <div className="pa-card">
                       <strong>Google</strong>
                       <p className="dialog-hint settings-hint">
-                        console.cloud.google.com → APIs &amp; Services → Credentials → „OAuth client ID"
-                        (Web application) → obige Redirect-URI eintragen.
+                        {t(
+                          'console.cloud.google.com → APIs & Services → Credentials → “OAuth client ID” (Web application) → enter the redirect URI above.',
+                        )}
                       </p>
-                      <label>Client-ID</label>
+                      <label>{t('Client ID')}</label>
                       <input className="prop-input" placeholder="…apps.googleusercontent.com" value={s.googleClientId} onChange={(e) => set('googleClientId', e.target.value)} />
-                      <label>Client-Secret</label>
-                      <input className="prop-input" type="password" placeholder={oauthSet.google ? '•••••• (gespeichert)' : 'GOCSPX-…'} value={s.googleClientSecret} onChange={(e) => set('googleClientSecret', e.target.value)} />
+                      <label>{t('Client secret')}</label>
+                      <input className="prop-input" type="password" placeholder={oauthSet.google ? t('•••••• (stored)') : 'GOCSPX-…'} value={s.googleClientSecret} onChange={(e) => set('googleClientSecret', e.target.value)} />
                     </div>
                     <div className="pa-card">
                       <strong>Microsoft</strong>
                       <p className="dialog-hint settings-hint">
-                        portal.azure.com → App registrations → New (unterstützte Kontotypen: „Any org +
-                        personal accounts") → Redirect-URI (Web): wie oben, nur mit{' '}
-                        <code>/api/oauth/microsoft/callback</code> → Zertifikate &amp; Geheimnisse → Client-Secret.
+                        {t(
+                          'portal.azure.com → App registrations → New (supported account types: “Any org + personal accounts”) → Redirect URI (Web): as above but with',
+                        )}{' '}
+                        <code>/api/oauth/microsoft/callback</code>{' '}
+                        {t('→ Certificates & secrets → client secret.')}
                       </p>
-                      <label>Client-ID (Application-ID)</label>
+                      <label>{t('Client ID (application ID)')}</label>
                       <input className="prop-input" placeholder="00000000-0000-…" value={s.msClientId} onChange={(e) => set('msClientId', e.target.value)} />
-                      <label>Client-Secret</label>
-                      <input className="prop-input" type="password" placeholder={oauthSet.ms ? '•••••• (gespeichert)' : 'Secret-Wert'} value={s.msClientSecret} onChange={(e) => set('msClientSecret', e.target.value)} />
+                      <label>{t('Client secret')}</label>
+                      <input className="prop-input" type="password" placeholder={oauthSet.ms ? t('•••••• (stored)') : t('secret value')} value={s.msClientSecret} onChange={(e) => set('msClientSecret', e.target.value)} />
                     </div>
                   </>
                 )}
 
                 {tab === 'email' && (
                   <>
-                    <h3>Versand über Google / Microsoft — ohne SMTP</h3>
+                    <h3>{t('Sending through Google / Microsoft — no SMTP')}</h3>
                     {mail.provider ? (
                       <>
                         <div className="pa-status pa-running">
                           <span className="pa-dot" />
-                          Verbunden: sendet als <strong>{s.mailFrom || mail.address || mail.provider}</strong>
+                          {t('Connected: sends as')}{' '}
+                          <strong>{s.mailFrom || mail.address || mail.provider}</strong>
                           {' '}({mail.provider === 'google' ? 'Gmail' : 'Microsoft'})
-                          <button className="btn-sm" disabled={mailBusy} onClick={() => void mailTest()}>Test-Mail senden</button>
-                          <button className="btn-sm" onClick={() => void mailDisconnect()}>Trennen</button>
+                          <button className="btn-sm" disabled={mailBusy} onClick={() => void mailTest()}>{t('Send test mail')}</button>
+                          <button className="btn-sm" onClick={() => void mailDisconnect()}>{t('Disconnect')}</button>
                         </div>
-                        <label>Absender-Adresse überschreiben (optional, Alias)</label>
+                        <label>{t('Override the sender address (optional, alias)')}</label>
                         <input
                           className="prop-input"
-                          placeholder={mail.address || 'noreply@firma.de'}
+                          placeholder={mail.address || 'noreply@example.com'}
                           value={s.mailFrom}
                           onChange={(e) => set('mailFrom', e.target.value)}
                         />
                         <p className="dialog-hint settings-hint">
-                          Nur nötig, wenn nicht als <code>{mail.address}</code> gesendet werden soll. Die
-                          Adresse muss ein Alias des verbundenen Postfachs sein (Gmail: „Senden als" in den
-                          Gmail-Einstellungen verifizieren; Microsoft: Alias/Send-As-Recht). Anderes Postfach
-                          komplett? „Trennen" und beim Neu-Verbinden im Kontowahl-Dialog das gewünschte Konto
-                          wählen.
+                          {t('Only needed if mail should not be sent as')} <code>{mail.address}</code>.{' '}
+                          {t(
+                            'The address has to be an alias of the connected mailbox (Gmail: verify it under “Send mail as” in the Gmail settings; Microsoft: alias or send-as permission). Want a different mailbox entirely? “Disconnect”, then pick the account you want in the sign-in dialog when reconnecting.',
+                          )}
                         </p>
                       </>
                     ) : (
                       <div className="pa-card">
                         <p className="dialog-hint settings-hint" style={{ margin: 0 }}>
-                          Nutzt die OAuth-Apps aus dem Zugang-Tab: einmal verbinden und Einladungen gehen
-                          über das gewählte Postfach — kein SMTP nötig. Erst dort Client-ID/-Secret hinterlegen
-                          und speichern, dann hier verbinden. Im Anmeldefenster kannst du <strong>jedes
-                          beliebige Konto wählen</strong> — auch ein eigenes Versand-Postfach wie{' '}
-                          <code>noreply@firma.de</code>, es muss nicht dein Login-Konto sein.
+                          {t(
+                            'Uses the OAuth apps from the Access tab: connect once and invitations go out through the chosen mailbox — no SMTP needed. Store and save the client ID and secret there first, then connect here. In the sign-in window you may pick any account at all — including a dedicated sending mailbox such as noreply@example.com; it does not have to be the account you sign in with.',
+                          )}
                         </p>
                         <div className="settings-row">
                           <a
                             className={'btn' + (oauthSet.google ? '' : ' btn-disabled')}
                             href={oauthSet.google ? '/api/admin/mail-oauth/google/start' : undefined}
-                            onClick={(e) => { if (!oauthSet.google) { e.preventDefault(); toast('Zuerst Google-OAuth im Zugang-Tab einrichten'); } }}
+                            onClick={(e) => { if (!oauthSet.google) { e.preventDefault(); toast(t('Set up Google OAuth on the Access tab first')); } }}
                           >
-                            Mit Google verbinden
+                            {t('Connect with Google')}
                           </a>
                           <a
                             className={'btn' + (oauthSet.ms ? '' : ' btn-disabled')}
                             href={oauthSet.ms ? '/api/admin/mail-oauth/microsoft/start' : undefined}
-                            onClick={(e) => { if (!oauthSet.ms) { e.preventDefault(); toast('Zuerst Microsoft-OAuth im Zugang-Tab einrichten'); } }}
+                            onClick={(e) => { if (!oauthSet.ms) { e.preventDefault(); toast(t('Set up Microsoft OAuth on the Access tab first')); } }}
                           >
-                            Mit Microsoft verbinden
+                            {t('Connect with Microsoft')}
                           </a>
                         </div>
                         <p className="dialog-hint settings-hint" style={{ margin: 0 }}>
-                          Google: In der Cloud Console zusätzlich die <strong>Gmail API aktivieren</strong>{' '}
-                          (APIs &amp; Services → Library) und die OAuth-App auf „In Produktion" stellen,
-                          sonst läuft die Verbindung nach 7 Tagen ab.
+                          {t(
+                            'Google: in the Cloud Console also enable the Gmail API (APIs & Services → Library) and move the OAuth app to “In production”, or the connection expires after 7 days.',
+                          )}
                         </p>
                       </div>
                     )}
 
-                    <h3>Oder klassisch: SMTP</h3>
+                    <h3>{t('Or the classic way: SMTP')}</h3>
                     <div className="settings-row" style={{ justifyContent: 'flex-start' }}>
-                      <button className="btn-sm" disabled={mailBusy} onClick={() => void mailTest()}>Test-Mail senden</button>
+                      <button className="btn-sm" disabled={mailBusy} onClick={() => void mailTest()}>{t('Send test mail')}</button>
                     </div>
-                    <label>Host</label>
+                    <label>{t('Host')}</label>
                     <input className="prop-input" placeholder="smtp.example.com" value={s.smtpHost} onChange={(e) => set('smtpHost', e.target.value)} />
-                    <label>Port</label>
+                    <label>{t('Port')}</label>
                     <input className="prop-input" placeholder="587 / 465" value={s.smtpPort} onChange={(e) => set('smtpPort', e.target.value)} />
-                    <label>Benutzer</label>
+                    <label>{t('User')}</label>
                     <input className="prop-input" value={s.smtpUser} onChange={(e) => set('smtpUser', e.target.value)} />
-                    <label>Passwort</label>
-                    <input className="prop-input" type="password" placeholder={passSet ? '•••••• (unverändert)' : 'nicht gesetzt'} value={s.smtpPass} onChange={(e) => set('smtpPass', e.target.value)} />
-                    <label>Absender (From)</label>
-                    <input className="prop-input" placeholder="salt@firma.de" value={s.smtpFrom} onChange={(e) => set('smtpFrom', e.target.value)} />
+                    <label>{t('Password')}</label>
+                    <input className="prop-input" type="password" placeholder={passSet ? t('•••••• (unchanged)') : t('not set')} value={s.smtpPass} onChange={(e) => set('smtpPass', e.target.value)} />
+                    <label>{t('Sender (From)')}</label>
+                    <input className="prop-input" placeholder="salt@example.com" value={s.smtpFrom} onChange={(e) => set('smtpFrom', e.target.value)} />
                   </>
                 )}
 
                 {tab === 'proxy' && (
                   <>
-                    <h3>Öffentlicher Zugang — eingebaut, ohne eigenen Proxy</h3>
+                    <h3>{t('Public access — built in, no proxy of your own')}</h3>
                     {pa && (pa.status === 'running' || pa.status === 'starting') && (
                       <div className={'pa-status pa-' + pa.status}>
                         <span className="pa-dot" />
-                        {pa.status === 'starting' && 'Tunnel startet…'}
+                        {pa.status === 'starting' && t('Tunnel starting…')}
                         {pa.status === 'running' && pa.mode === 'quick' && (
                           <>
-                            Öffentlich erreichbar:&nbsp;
+                            {t('Publicly reachable:')}&nbsp;
                             <a href={pa.url} target="_blank" rel="noreferrer">{pa.url}</a>
-                            <button className="btn-sm" onClick={() => { void navigator.clipboard?.writeText(pa.url); toast('Link kopiert'); }}>Kopieren</button>
+                            <button className="btn-sm" onClick={() => { void navigator.clipboard?.writeText(pa.url); toast(t('Link copied')); }}>{t('Copy')}</button>
                           </>
                         )}
                         {pa.status === 'running' && pa.mode === 'token' && (
-                          <>Tunnel verbunden — erreichbar unter dem im Cloudflare-Dashboard festgelegten Hostname.</>
+                          <>{t('Tunnel connected — reachable under the hostname set in the Cloudflare dashboard.')}</>
                         )}
-                        <button className="btn-sm" disabled={tunnelBusy} onClick={() => void tunnel('stop')}>Stoppen</button>
+                        <button className="btn-sm" disabled={tunnelBusy} onClick={() => void tunnel('stop')}>{t('Stop')}</button>
                       </div>
                     )}
                     {pa && pa.status === 'error' && (
                       <div className="pa-status pa-error">
                         <span className="pa-dot" />
-                        {pa.lastError || 'Tunnel-Fehler'}
-                        <button className="btn-sm" disabled={tunnelBusy} onClick={() => void tunnel('stop')}>Zurücksetzen</button>
+                        {pa.lastError || t('Tunnel error')}
+                        <button className="btn-sm" disabled={tunnelBusy} onClick={() => void tunnel('stop')}>{t('Reset')}</button>
                       </div>
                     )}
 
                     <div className="pa-card">
-                      <strong>1 · Sofort testen (Quick-Tunnel)</strong>
+                      <strong>{t('1 · Try it right away (quick tunnel)')}</strong>
                       <p className="dialog-hint settings-hint">
-                        Ein Klick, kein Account: erzeugt eine temporäre <code>trycloudflare.com</code>-URL,
-                        die auf diese Instanz zeigt. Die URL wechselt bei jedem Start — ideal zum Ausprobieren
-                        und schnellen Teilen. {!pa?.cloudflaredHere && 'Beim ersten Start lädt Salt.md das offizielle cloudflared automatisch herunter.'}
+                        {t('One click, no account: creates a temporary')} <code>trycloudflare.com</code>{' '}
+                        {t(
+                          'URL pointing at this instance. The URL changes on every start — ideal for trying things out and sharing quickly.',
+                        )}{' '}
+                        {!pa?.cloudflaredHere && t('On first start Salt.md downloads the official cloudflared automatically.')}
                       </p>
                       <div className="settings-row">
                         <button
@@ -483,25 +494,28 @@ ingress:
                           disabled={tunnelBusy || pa?.status === 'running' || pa?.status === 'starting'}
                           onClick={() => void tunnel('start-quick')}
                         >
-                          {tunnelBusy ? 'Bitte warten…' : 'Quick-Tunnel starten'}
+                          {tunnelBusy ? t('Please wait…') : t('Start quick tunnel')}
                         </button>
                       </div>
                     </div>
 
                     <div className="pa-card">
-                      <strong>2 · Dauerhaft mit eigener Domain (Cloudflare Tunnel)</strong>
+                      <strong>{t('2 · Permanently, with your own domain (Cloudflare Tunnel)')}</strong>
                       <p className="dialog-hint settings-hint">
-                        Kostenloser Cloudflare-Account nötig: Dashboard → <em>Zero Trust → Networks → Tunnels →
-                        Create tunnel</em> → Token kopieren und hier einfügen. Hostname (z.&nbsp;B.{' '}
-                        <code>{domain}</code> → <code>http://localhost:80</code>) legst du im Dashboard fest.
-                        Salt.md hält den Tunnel am Laufen — auch nach Neustarts. Keine Portfreigaben nötig.
+                        {t('A free Cloudflare account is required: dashboard →')}{' '}
+                        <em>Zero Trust → Networks → Tunnels → Create tunnel</em>{' '}{/* i18n-ok: the Cloudflare dashboard is English whatever we render in */}
+                        {t('→ copy the token and paste it here. You set the hostname (e.g.')}{' '}
+                        <code>{domain}</code> → <code>http://localhost:80</code>){' '}
+                        {t(
+                          'in the dashboard. Salt.md keeps the tunnel running, restarts included. No port forwarding needed.',
+                        )}
                       </p>
                       <div className="settings-row">
                         <input
                           className="prop-input"
                           style={{ flex: 1 }}
                           type="password"
-                          placeholder={pa?.tokenSet ? '•••••• (Token gespeichert)' : 'eyJhIjoi… (Tunnel-Token)'}
+                          placeholder={pa?.tokenSet ? t('•••••• (token stored)') : t('eyJhIjoi… (tunnel token)')}
                           value={tunnelToken}
                           onChange={(e) => setTunnelToken(e.target.value)}
                         />
@@ -510,86 +524,89 @@ ingress:
                           disabled={tunnelBusy || pa?.status === 'running' || pa?.status === 'starting' || (!tunnelToken.trim() && !pa?.tokenSet)}
                           onClick={() => void tunnel('start-token', tunnelToken.trim() || undefined)}
                         >
-                          Verbinden
+                          {t('Connect')}
                         </button>
                       </div>
                     </div>
 
                     <div className="pa-card">
-                      <strong>3 · Direkt mit HTTPS (ohne Cloudflare, z.&nbsp;B. VPS)</strong>
+                      <strong>{t('3 · Straight to HTTPS (no Cloudflare, e.g. a VPS)')}</strong>
                       <p className="dialog-hint settings-hint">
-                        Salt.md holt sich selbst ein Let's-Encrypt-Zertifikat und lauscht auf 80/443 —
-                        kein Caddy/nginx nötig. Voraussetzung: DNS-A-Record der Domain zeigt auf diesen
-                        Server und die Ports 80+443 sind erreichbar. Nach dem Speichern: Neustart.
+                        {t(
+                          'Salt.md fetches its own Let’s Encrypt certificate and listens on 80/443 — no Caddy or nginx needed. Requirements: the domain’s DNS A record points at this server and ports 80 and 443 are reachable. Restart after saving.',
+                        )}
                       </p>
                       <div className="settings-row">
                         <input
                           className="prop-input"
                           style={{ flex: 1 }}
-                          placeholder="notes.firma.de"
+                          placeholder="notes.example.com"
                           value={s.httpsDomain}
                           onChange={(e) => set('httpsDomain', e.target.value)}
                         />
                         <label className="settings-check" style={{ whiteSpace: 'nowrap' }}>
                           <input type="checkbox" checked={httpsEnabled} onChange={(e) => setHttpsEnabled(e.target.checked)} />
-                          <span>Aktiv</span>
+                          <span>{t('Active')}</span>
                         </label>
                       </div>
                     </div>
 
-                    <h3>Manuell — eigener Reverse-Proxy</h3>
+                    <h3>{t('Manual — your own reverse proxy')}</h3>
                     <label className="settings-check">
                       <input type="checkbox" checked={trustProxy} onChange={(e) => setTrustProxy(e.target.checked)} />
                       <span>
-                        Hinter Reverse-Proxy betreiben (<code>X-Forwarded-For</code> vertrauen)
+                        {t('Run behind a reverse proxy (trust')} <code>X-Forwarded-For</code>)
                       </span>
                     </label>
                     <p className="dialog-hint settings-hint">
-                      Nur aktivieren, wenn Salt.md hinter Caddy, nginx oder einem Cloudflare-Tunnel läuft — dann sieht die Instanz
-                      echte Client-IPs (Login-Schutz, Audit-Log). Ohne Proxy ausgeschaltet lassen, sonst könnten Angreifer ihre IP fälschen.
+                      {t(
+                        'Only switch this on when Salt.md runs behind Caddy, nginx or a Cloudflare tunnel — the instance then sees real client IPs (sign-in protection, audit log). Leave it off without a proxy, or an attacker could forge their IP.',
+                      )}
                     </p>
-                    <label>Interne Adresse der Instanz (Upstream)</label>
+                    <label>{t('Internal address of the instance (upstream)')}</label>
                     <input className="prop-input" value={upstream} onChange={(e) => setUpstream(e.target.value)} />
                     <p className="dialog-hint settings-hint">
-                      Die Domain für die Beispiele kommt aus der öffentlichen Basis-URL (Tab „Allgemein"):{' '}
+                      {t('The domain in the examples comes from the public base URL (the “General” tab):')}{' '}
                       <strong>{domain}</strong>
                     </p>
-                    <ConfBlock title="Caddy (automatisches HTTPS)" text={caddyConf} />
-                    <ConfBlock title="Cloudflare Tunnel (kein offener Port nötig)" text={cloudflaredConf} />
+                    <ConfBlock title={t('Caddy (automatic HTTPS)')} text={caddyConf} />
+                    <ConfBlock title={t('Cloudflare Tunnel (no open port needed)')} text={cloudflaredConf} />
                     <ConfBlock title="nginx" text={nginxConf} />
                     <p className="dialog-hint settings-hint">
-                      Cloudflare: DNS-Eintrag „Proxied" (orange Wolke) lassen, WebSockets sind standardmäßig aktiv. Caddy
-                      kümmert sich selbst um Zertifikate und WebSockets. Alternativ direktes TLS ohne Proxy via{' '}
+                      {t(
+                        'Cloudflare: leave the DNS record “Proxied” (orange cloud); WebSockets are on by default. Caddy handles certificates and WebSockets by itself. Alternatively, direct TLS without a proxy via',
+                      )}{' '}
                       <code>SALT_TLS_CERT</code>/<code>SALT_TLS_KEY</code>.
                     </p>
                   </>
                 )}
 
-                {tab === 'wartung' && (
+                {tab === 'maintenance' && (
                   <>
-                    <label>Backup</label>
+                    <label>{t('Backup')}</label>
                     <div className="settings-row">
                       <button className="btn primary" onClick={() => api.download('/api/admin/backup')}>
-                        Backup herunterladen (.tar.gz)
+                        {t('Download backup (.tar.gz)')}
                       </button>
                     </div>
                     <p className="dialog-hint settings-hint">
-                      Enthält die komplette Datenbank (konsistenter Snapshot) und alle Uploads. Wiederherstellen:{' '}
-                      <code>./salt restore backup.tar.gz</code>. Für automatische Backups: <code>./salt backup</code> per Cron.
+                      {t('Contains the whole database (a consistent snapshot) and every upload. To restore:')}{' '}
+                      <code>./salt restore backup.tar.gz</code>.{' '}
+                      {t('For automatic backups, run')} <code>./salt backup</code> {t('from cron.')}
                     </p>
-                    <label>Instanz</label>
+                    <label>{t('Instance')}</label>
                     {!info ? (
-                      <p className="dialog-hint">Lädt…</p>
+                      <p className="dialog-hint">{t('Loading…')}</p>
                     ) : (
                       <div className="info-grid">
-                        <span>Version</span><strong>{info.version} · {info.goVersion} · {info.os}</strong>
-                        <span>Laufzeit</span><strong>{fmtUptime(info.uptimeSec)}</strong>
-                        <span>Nutzer / Workspaces</span><strong>{info.users} / {info.workspaces}</strong>
-                        <span>Seiten (Papierkorb)</span><strong>{info.pages} ({info.trashed})</strong>
-                        <span>Datenbank</span><strong>{fmtBytes(info.dbSize)}</strong>
-                        <span>Uploads</span><strong>{fmtBytes(info.uploadsSize)}</strong>
-                        <span>Datenverzeichnis</span><strong>{info.dataDir}</strong>
-                        <span>Deine IP (Server-Sicht)</span><strong>{info.yourIp}{info.trustProxy ? ' · Proxy-Header aktiv' : ''}</strong>
+                        <span>{t('Version')}</span><strong>{info.version} · {info.goVersion} · {info.os}</strong>
+                        <span>{t('Uptime')}</span><strong>{fmtUptime(info.uptimeSec)}</strong>
+                        <span>{t('Users / workspaces')}</span><strong>{info.users} / {info.workspaces}</strong>
+                        <span>{t('Pages (trashed)')}</span><strong>{info.pages} ({info.trashed})</strong>
+                        <span>{t('Database')}</span><strong>{fmtBytes(info.dbSize)}</strong>
+                        <span>{t('Uploads')}</span><strong>{fmtBytes(info.uploadsSize)}</strong>
+                        <span>{t('Data directory')}</span><strong>{info.dataDir}</strong>
+                        <span>{t('Your IP (as the server sees it)')}</span><strong>{info.yourIp}{info.trustProxy ? ' · ' + t('proxy headers active') : ''}</strong>
                       </div>
                     )}
                   </>
@@ -598,8 +615,8 @@ ingress:
             </>
           )}
           <div className="dialog-buttons">
-            <button className="btn" onClick={onClose}>Abbrechen</button>
-            <button className="btn primary" onClick={() => void save()}>Speichern</button>
+            <button className="btn" onClick={onClose}>{t('Cancel')}</button>
+            <button className="btn primary" onClick={() => void save()}>{t('Save')}</button>
           </div>
         </div>
       </div>
@@ -613,37 +630,38 @@ export function CalendarSubModal({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<{ url: string; webcal: string } | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
   useEffect(() => {
-    void api.icsInfo().then(setInfo).catch((e) => setLoadErr((e as Error).message || 'Laden fehlgeschlagen'));
+    void api.icsInfo().then(setInfo).catch((e) => setLoadErr((e as Error).message || t('Loading failed')));
   }, []);
   const rotate = async () => {
     setInfo(await api.icsInfo(true));
-    toast('Neuer Kalender-Link erzeugt (alter ist ungültig)');
+    toast(t('New calendar link created (the old one no longer works)'));
   };
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog" role="dialog" aria-modal="true" aria-label="Kalender abonnieren">
-          <h2>Kalender abonnieren</h2>
+        <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Subscribe to calendar')}>
+          <h2>{t('Subscribe to calendar')}</h2>
           <p className="dialog-hint">
-            Abonniere alle Datums-Eigenschaften deiner Datenbanken in Apple Kalender, Google
-            Calendar oder Outlook. Der Link ist privat — teile ihn nicht.
+            {t(
+              'Subscribe to every date property in your databases from Apple Calendar, Google Calendar or Outlook. The link is private — do not share it.',
+            )}
           </p>
           {loadErr ? (
             <div className="login-error">{loadErr}</div>
           ) : !info ? (
-            <div className="dialog-hint">Lädt…</div>
+            <div className="dialog-hint">{t('Loading…')}</div>
           ) : (
             <>
-              <label className="dialog-hint">Abo-Link (webcal):</label>
+              <label className="dialog-hint">{t('Subscription link (webcal):')}</label>
               <input className="prop-input invite-input" readOnly value={info.webcal} onFocus={(e) => e.currentTarget.select()} />
               <div className="dialog-buttons" style={{ justifyContent: 'flex-start', gap: 8 }}>
-                <a className="btn primary" href={info.webcal}>In Kalender öffnen</a>
-                <button className="btn" onClick={() => void navigator.clipboard?.writeText(info.url)}>URL kopieren</button>
-                <button className="btn" onClick={() => void rotate()}>Link zurücksetzen</button>
+                <a className="btn primary" href={info.webcal}>{t('Open in calendar')}</a>
+                <button className="btn" onClick={() => void navigator.clipboard?.writeText(info.url)}>{t('Copy URL')}</button>
+                <button className="btn" onClick={() => void rotate()}>{t('Reset the link')}</button>
               </div>
             </>
           )}
-          <button className="btn dialog-close" onClick={onClose}>Schließen</button>
+          <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
         </div>
       </div>
     </Portal>
@@ -667,7 +685,7 @@ export function TwoFAModal({ onClose }: { onClose: () => void }) {
     try {
       setSetup(await api.twoFASetup());
     } catch (e) {
-      setError((e as Error).message || '2FA-Setup fehlgeschlagen');
+      setError((e as Error).message || t('2FA setup failed'));
     }
   };
   const enable = async () => {
@@ -677,9 +695,9 @@ export function TwoFAModal({ onClose }: { onClose: () => void }) {
       setStatus(true);
       setSetup(null);
       setCode('');
-      toast('2FA aktiviert');
+      toast(t('2FA enabled'));
     } catch {
-      setError('Falscher Code');
+      setError(t('Wrong code'));
     }
   };
   const disable = async () => {
@@ -688,54 +706,54 @@ export function TwoFAModal({ onClose }: { onClose: () => void }) {
       await api.twoFADisable(code);
       setStatus(false);
       setCode('');
-      toast('2FA deaktiviert');
+      toast(t('2FA disabled'));
     } catch {
-      setError('Falscher Code');
+      setError(t('Wrong code'));
     }
   };
 
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog" role="dialog" aria-modal="true" aria-label="Zwei-Faktor-Authentifizierung">
-          <h2>Zwei-Faktor-Authentifizierung</h2>
-          {status === null && <div className="dialog-hint">Lädt…</div>}
+        <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Two-factor authentication')}>
+          <h2>{t('Two-factor authentication')}</h2>
+          {status === null && <div className="dialog-hint">{t('Loading…')}</div>}
 
           {status === true && !setup && (
             <>
-              <p className="dialog-hint">2FA ist <strong>aktiv</strong>. Zum Deaktivieren einen aktuellen Code eingeben.</p>
-              <input className="prop-input" inputMode="numeric" placeholder="6-stelliger Code" value={code} onChange={(e) => setCode(e.target.value)} />
+              <p className="dialog-hint">{t('2FA is active. Enter a current code to switch it off.')}</p>
+              <input className="prop-input" inputMode="numeric" placeholder={t('6-digit code')} value={code} onChange={(e) => setCode(e.target.value)} />
               {error && <div className="login-error">{error}</div>}
-              <button className="btn danger" onClick={() => void disable()}>2FA deaktivieren</button>
+              <button className="btn danger" onClick={() => void disable()}>{t('Disable 2FA')}</button>
             </>
           )}
 
           {status === false && !setup && (
             <>
-              <p className="dialog-hint">Schütze dein Konto mit einer Authenticator-App (Google Authenticator, 1Password, …).</p>
-              <button className="btn primary" onClick={() => void begin()}>2FA einrichten</button>
+              <p className="dialog-hint">{t('Protect your account with an authenticator app (Google Authenticator, 1Password, …).')}</p>
+              <button className="btn primary" onClick={() => void begin()}>{t('Set up 2FA')}</button>
             </>
           )}
 
           {setup && (
             <>
               <p className="dialog-hint">
-                Scanne den QR-Code mit deiner Authenticator-App (Google Authenticator, 1Password, …)
-                und bestätige mit einem generierten Code. QR und Schlüssel entstehen auf der Instanz
-                und verlassen sie nicht.
+                {t(
+                  'Scan the QR code with your authenticator app (Google Authenticator, 1Password, …) and confirm with a generated code. The QR code and the key are created on the instance and never leave it.',
+                )}
               </p>
-              {setup.qr && <img className="totp-qr" src={setup.qr} alt="QR-Code für die Authenticator-App" />}
-              <p className="dialog-hint totp-manual-hint">Kein Scanner? Schlüssel manuell eintippen:</p>
+              {setup.qr && <img className="totp-qr" src={setup.qr} alt={t('QR code for the authenticator app')} />}
+              <p className="dialog-hint totp-manual-hint">{t('No scanner? Type the key in by hand:')}</p>
               <code className="totp-secret" onClick={() => void navigator.clipboard?.writeText(setup.secret)}>
                 {setup.secret.replace(/(.{4})/g, '$1 ').trim()}
               </code>
-              <input className="prop-input" inputMode="numeric" placeholder="6-stelliger Code" value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
+              <input className="prop-input" inputMode="numeric" placeholder={t('6-digit code')} value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
               {error && <div className="login-error">{error}</div>}
-              <button className="btn primary" onClick={() => void enable()}>Aktivieren</button>
+              <button className="btn primary" onClick={() => void enable()}>{t('Enable')}</button>
             </>
           )}
 
-          <button className="btn dialog-close" onClick={onClose}>Schließen</button>
+          <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
         </div>
       </div>
     </Portal>

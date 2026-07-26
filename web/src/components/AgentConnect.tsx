@@ -5,64 +5,76 @@ import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
 import type { Workspace } from '../types';
 import { Bot, Check, Copy } from 'lucide-react';
+import { t } from '../i18n';
 
-// „Agent verbinden" (Welle 44): Salt.md ist AI-nativ — jeder Agent spricht
-// über den eingebauten MCP-Server mit dem Workspace. Dieses Modal macht das
-// Verbinden zum Ein-Minuten-Setup: Token mit einem Klick erzeugen, Agent in
-// der Galerie wählen, fertigen Config-Schnipsel kopieren.
+// "Connect an agent" (wave 44): Salt.md is AI-native — every agent talks to the
+// workspace through the built-in MCP server. This modal turns connecting into a
+// one-minute job: create a token with one click, pick an agent from the
+// gallery, copy a ready-made config snippet.
 
 interface AgentDef {
   id: string;
   name: string;
   logo: React.ReactNode;
-  hint: string;
   snippet: (url: string, token: string) => string;
 }
 
-const TOKEN_PH = '<DEIN-TOKEN>';
+const TOKEN_PH = '<YOUR-TOKEN>';
 
-// Ein Link für alles: der Token steckt in der URL (…/mcp/<token>). Damit
-// funktionieren auch Clients, die NUR ein URL-Feld haben und keine Header
-// setzen können (claude.ai/Desktop-Connectors, ChatGPT, …).
+// One link for everything: the token sits inside the URL (…/mcp/<token>). That
+// also works for clients with nothing but a URL field, which cannot set headers
+// (claude.ai / desktop connectors, ChatGPT, …).
 const mcpURL = (url: string, token: string) => `${url}/mcp/${token}`;
 
-// Generischer mcpServers-Block — dank Token-in-URL ohne headers-Gefrickel.
+// A generic mcpServers block — no fiddling with headers, thanks to the token
+// living in the URL.
 const mcpJSON = (url: string, token: string) =>
   JSON.stringify({ mcpServers: { salt: { url: mcpURL(url, token) } } }, null, 2);
 
-// Echte Logos von selfh.st/icons, lokal gebündelt (web/public/agents/).
-// mono = schwarzes Logo → im Dark Mode invertiert.
+// Real logos from selfh.st/icons, bundled locally (web/public/agents/).
+// mono = black logo → inverted in dark mode.
 const img = (file: string, mono = false) => (
   <img className={'agent-img' + (mono ? ' agent-img--mono' : '')} src={'/agents/' + file} alt="" />
 );
+
+// Hints live apart from the agent table so that t() runs at render time —
+// a module-level constant would freeze whatever language was active at import.
+const agentHint = (id: string): string =>
+  ({
+    'claude-app': t('Settings → Connectors → “Add custom connector” — paste the URL, nothing else.'),
+    'claude-code': t('One command in the terminal and you are done.'),
+    chatgpt: t('Settings → Connectors (Developer Mode) — paste the URL.'),
+    codex: t('Add it to ~/.codex/config.toml.'),
+    cursor: t('In .cursor/mcp.json (project) or ~/.cursor/mcp.json (global).'),
+    openclaw: t('Register it as an MCP server in the OpenClaw configuration.'),
+    hermes: t('A standard mcpServers entry in the agent configuration.'),
+    gemini: t('Add it to ~/.gemini/settings.json.'),
+    other: t('Any MCP-capable client (streamable HTTP).'),
+  })[id] ?? '';
 
 const AGENTS: AgentDef[] = [
   {
     id: 'claude-app',
     name: 'Claude (App & Web)',
     logo: img('claude.svg'),
-    hint: 'Einstellungen → Connectors → „Add custom connector" — nur die URL einfügen.',
     snippet: (url, token) => mcpURL(url, token),
   },
   {
     id: 'claude-code',
     name: 'Claude Code',
     logo: img('claude.svg'),
-    hint: 'Ein Befehl im Terminal — fertig.',
     snippet: (url, token) => `claude mcp add --transport http salt ${mcpURL(url, token)}`,
   },
   {
     id: 'chatgpt',
     name: 'ChatGPT',
     logo: img('chatgpt.svg'),
-    hint: 'Settings → Connectors (Developer Mode) — URL einfügen.',
     snippet: (url, token) => mcpURL(url, token),
   },
   {
     id: 'codex',
     name: 'OpenAI Codex',
     logo: img('openai.svg', true),
-    hint: 'In ~/.codex/config.toml eintragen.',
     snippet: (url, token) => `[mcp_servers.salt]
 url = "${mcpURL(url, token)}"`,
   },
@@ -70,49 +82,44 @@ url = "${mcpURL(url, token)}"`,
     id: 'cursor',
     name: 'Cursor',
     logo: (
-      // Kein selfh.st-Icon vorhanden — neutraler Würfel in currentColor.
+      // No selfh.st icon for this one — a neutral cube in currentColor.
       <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
         <path fill="currentColor" d="M12 2l9 5v10l-9 5-9-5V7z" opacity="0.9" />
         <path fill="var(--bg)" d="M12 6.2L17.5 9 12 11.8 6.5 9z" opacity="0.85" />
       </svg>
     ),
-    hint: 'In .cursor/mcp.json (Projekt) oder ~/.cursor/mcp.json (global).',
     snippet: (url, token) => mcpJSON(url, token),
   },
   {
     id: 'openclaw',
     name: 'OpenClaw',
     logo: img('openclaw.svg'),
-    hint: 'Als MCP-Server in der OpenClaw-Konfiguration hinterlegen.',
     snippet: (url, token) => mcpJSON(url, token),
   },
   {
     id: 'hermes',
     name: 'Hermes Agent',
     logo: img('hermes-agent.png'),
-    hint: 'Standard-mcpServers-Eintrag in der Agent-Konfiguration.',
     snippet: (url, token) => mcpJSON(url, token),
   },
   {
     id: 'gemini',
     name: 'Gemini CLI',
     logo: img('google-gemini.svg'),
-    hint: 'In ~/.gemini/settings.json eintragen.',
     snippet: (url, token) =>
       JSON.stringify({ mcpServers: { salt: { httpUrl: mcpURL(url, token) } } }, null, 2),
   },
   {
     id: 'other',
-    name: 'Anderer Agent',
+    name: 'Other agent',
     logo: <Bot size={26} />,
-    hint: 'Jeder MCP-fähige Client (Streamable HTTP).',
-    snippet: (url, token) => `MCP-URL (Token integriert):  ${mcpURL(url, token)}
+    snippet: (url, token) => `MCP URL (token included):  ${mcpURL(url, token)}
 
-Alternativ klassisch mit Header:
+Or the classic way, with a header:
   Endpoint:  ${url}/mcp
   Header:    Authorization: Bearer ${token}
 
-REST-API:  ${url}/api  (gleicher Bearer-Token)`,
+REST API:  ${url}/api  (same bearer token)`,
   },
 ];
 
@@ -144,7 +151,7 @@ export default function AgentConnectModal({
       .catch(() => {});
   }, []);
   const effToken = token || manual.trim() || TOKEN_PH;
-  const wsName = workspaces.find((w) => w.id === currentWs)?.name ?? 'diesem Workspace';
+  const wsName = workspaces.find((w) => w.id === currentWs)?.name ?? t('this workspace');
 
   const createToken = async () => {
     setBusy(true);
@@ -152,9 +159,9 @@ export default function AgentConnectModal({
       const chosen = wsScope === 'current' && currentWs ? [currentWs] : [];
       const res = await api.createToken('agent', scope, chosen);
       setToken(res.token);
-      toast('Token erstellt — wird nur einmal angezeigt');
+      toast(t('Token created — shown only once'));
     } catch (e) {
-      toast((e as Error).message || 'Token konnte nicht erstellt werden');
+      toast((e as Error).message || t('The token could not be created'));
     } finally {
       setBusy(false);
     }
@@ -164,48 +171,47 @@ export default function AgentConnectModal({
   const copy = () => {
     void navigator.clipboard?.writeText(snippet);
     setCopied(true);
-    toast('Setup kopiert');
+    toast(t('Setup copied'));
     setTimeout(() => setCopied(false), 1500);
   };
 
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog wide agent-dialog" role="dialog" aria-modal="true" aria-label="Agent verbinden">
+        <div className="dialog wide agent-dialog" role="dialog" aria-modal="true" aria-label={t('Connect an agent')}>
           <h2>
-            <Bot size={22} style={{ verticalAlign: '-4px' }} /> Agent verbinden
+            <Bot size={22} style={{ verticalAlign: '-4px' }} /> {t('Connect an agent')}
           </h2>
           <p className="dialog-hint">
-            Salt.md ist AI-nativ: Der eingebaute MCP-Server lässt jeden Agenten Seiten lesen,
-            schreiben, durchsuchen und Datenbanken pflegen. <b>Ein Link reicht</b> — der Token
-            steckt in der URL, Header-Konfiguration braucht es nicht mehr. Behandle den Link
-            deshalb wie ein Passwort.
+            {t(
+              'Salt.md is AI-native: the built-in MCP server lets any agent read, write and search pages and maintain databases. One link is all it takes — the token sits inside the URL, so there is no header configuration any more. Treat the link like a password.',
+            )}
           </p>
 
           <div className="agent-token">
             {token ? (
               <div className="agent-token-fresh">
-                <code onClick={() => { void navigator.clipboard?.writeText(token); toast('Token kopiert'); }}>{token}</code>
-                <span className="dialog-hint">Nur jetzt sichtbar — ist unten schon eingesetzt.</span>
+                <code onClick={() => { void navigator.clipboard?.writeText(token); toast(t('Token copied')); }}>{token}</code>
+                <span className="dialog-hint">{t('Visible only now — already filled into the snippet below.')}</span>
               </div>
             ) : (
               <>
                 <div className="agent-token-row">
                   <select className="prop-select" value={scope} onChange={(e) => setScope(e.target.value as 'write' | 'read')}>
-                    <option value="write">Lesen &amp; Schreiben</option>
-                    <option value="read">Nur lesen</option>
+                    <option value="write">{t('Read & write')}</option>
+                    <option value="read">{t('Read only')}</option>
                   </select>
                   <select className="prop-select" value={wsScope} onChange={(e) => setWsScope(e.target.value as 'current' | 'all')}>
-                    <option value="current">Nur „{wsName}"</option>
-                    <option value="all">Alle Workspaces</option>
+                    <option value="current">{t('Only “{name}”', { name: wsName })}</option>
+                    <option value="all">{t('All workspaces')}</option>
                   </select>
                   <button className="btn primary" disabled={busy} onClick={() => void createToken()}>
-                    Token erstellen
+                    {t('Create token')}
                   </button>
                 </div>
                 <input
                   className="prop-input"
-                  placeholder="… oder vorhandenen Token hier einsetzen"
+                  placeholder={t('… or paste an existing token here')}
                   value={manual}
                   onChange={(e) => setManual(e.target.value)}
                 />
@@ -228,9 +234,9 @@ export default function AgentConnectModal({
 
           <div className="conf-block agent-snippet">
             <div className="conf-head">
-              <span>{agent.name} — {agent.hint}</span>
+              <span>{agent.name} — {agentHint(agent.id)}</span>
               <button className="btn-sm" onClick={copy}>
-                {copied ? <Check size={13} /> : <Copy size={13} />} Kopieren
+                {copied ? <Check size={13} /> : <Copy size={13} />} {t('Copy')}
               </button>
             </div>
             <pre>
@@ -240,18 +246,19 @@ export default function AgentConnectModal({
 
           {effToken === TOKEN_PH && (
             <p className="dialog-hint settings-hint">
-              Oben Token erstellen (oder einsetzen) — er wird automatisch in den Schnipsel übernommen.
+              {t('Create a token above (or paste one) — it is filled into the snippet automatically.')}
             </p>
           )}
           {url.startsWith('http://') && !/^http:\/\/(localhost|127\.)/.test(url) && (
             <p className="dialog-hint settings-hint pa-warn">
-              ⚠ Cloud-Agents (z.&nbsp;B. claude.ai) erreichen <code>{url}</code> nicht — dafür die
-              Instanz öffentlich machen (Instanz-Einstellungen → Domain &amp; Proxy) und über die
-              öffentliche URL verbinden. Lokale CLIs im selben Netz funktionieren direkt.
+              {t('⚠ Cloud agents (claude.ai, say) cannot reach')} <code>{url}</code>{' '}
+              {t(
+                '— make the instance public for that (Instance settings → Domain & proxy) and connect through the public URL. Local CLIs on the same network work directly.',
+              )}
             </p>
           )}
 
-          <button className="btn dialog-close" onClick={onClose}>Schließen</button>
+          <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
         </div>
       </div>
     </Portal>

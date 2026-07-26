@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api';
 import type { User } from '../types';
 import Logo from '../Logo';
+import { t } from '../i18n';
 
 // Rendered when the URL is /invite/<token>.
 //  - Signed-out visitor → a small sign-up/sign-in form that joins the workspace.
@@ -78,9 +79,9 @@ export default function InviteAccept({
       <div className="login-wrap">
         <div className="login-card ring">
           <div className="login-logo"><Logo size={56} /></div>
-          <h1>Einladung ungültig</h1>
-          <p>Dieser Einladungslink ist ungültig oder abgelaufen.</p>
-          <a className="btn" href="/">Zum Login</a>
+          <h1>{t('Invitation not valid')}</h1>
+          <p>{t('This invitation link is not valid or has expired.')}</p>
+          <a className="btn" href="/">{t('To sign-in')}</a>
         </div>
       </div>
     );
@@ -94,7 +95,7 @@ export default function InviteAccept({
       <div className="login-wrap">
         <div className="login-card ring">
           <div className="login-logo"><Logo size={56} /></div>
-          <h1>Workspace beitreten</h1>
+          <h1>{t('Join the workspace')}</h1>
           <p>
             {info?.workspace
               ? `Du wurdest zum Workspace „${info.workspace}" eingeladen.`
@@ -116,9 +117,9 @@ export default function InviteAccept({
               {error && <div className="login-error">{error}</div>}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn primary" onClick={joinAsCurrent} disabled={busy}>
-                  Beitreten
+                  {t('Join')}
                 </button>
-                <a className="btn" href="/">Abbrechen</a>
+                <a className="btn" href="/">{t('Cancel')}</a>
               </div>
             </>
           )}
@@ -131,7 +132,7 @@ export default function InviteAccept({
     <div className="login-wrap">
       <form className="login-card ring" onSubmit={submit}>
         <div className="login-logo"><Logo size={56} /></div>
-        <h1>Beitreten</h1>
+        <h1>{t('Join')}</h1>
         <p>
           {info?.workspace
             ? `Du wurdest zum Workspace „${info.workspace}" eingeladen.`
@@ -140,26 +141,26 @@ export default function InviteAccept({
         <input
           autoFocus
           value={name}
-          placeholder="Dein Name"
+          placeholder={t('Your name')}
           onChange={(e) => setName(e.target.value)}
         />
         <input
           type="email"
           value={email}
-          placeholder="Email"
+          placeholder={t('Email')}
           readOnly={!!info?.email}
           onChange={(e) => setEmail(e.target.value)}
         />
         <input
           type="password"
           value={password}
-          placeholder="Passwort (min. 8 Zeichen)"
+          placeholder={t('Password (min. 8 characters)')}
           onChange={(e) => setPassword(e.target.value)}
         />
         {needCode && (
           <input
             value={code}
-            placeholder="2FA-Code"
+            placeholder={t('2FA code')}
             inputMode="numeric"
             autoComplete="one-time-code"
             onChange={(e) => setCode(e.target.value)}
@@ -167,7 +168,7 @@ export default function InviteAccept({
         )}
         {error && <div className="login-error">{error}</div>}
         <button className="btn primary" type="submit" disabled={busy}>
-          Beitreten
+          {t('Join')}
         </button>
       </form>
     </div>

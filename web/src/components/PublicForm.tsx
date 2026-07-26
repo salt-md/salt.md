@@ -5,6 +5,7 @@ import { formField } from './CollectionView';
 import { PageIcon } from '../pageIcon';
 import { PublicFormConfig, PropDef } from '../types';
 import { toast } from '../toast';
+import { t } from '../i18n';
 
 // Standalone, unauthenticated form page served at /form/{token}. Reuses the
 // exact same field renderer as the in-app form view, but posts to the public
@@ -52,7 +53,7 @@ export default function PublicForm({ token }: { token: string }) {
   if (state === 'loading') {
     return (
       <div className="public-form-page">
-        <div className="form-card public-form-loading">Lädt…</div>
+        <div className="form-card public-form-loading">{t('Loading…')}</div>
       </div>
     );
   }
@@ -60,8 +61,8 @@ export default function PublicForm({ token }: { token: string }) {
     return (
       <div className="public-form-page">
         <div className="form-card form-done">
-          <h2>Formular nicht gefunden</h2>
-          <p>Dieser Link ist ungültig oder wurde deaktiviert.</p>
+          <h2>{t('Form not found')}</h2>
+          <p>{t('This link is not valid or has been switched off.')}</p>
         </div>
       </div>
     );
@@ -74,8 +75,8 @@ export default function PublicForm({ token }: { token: string }) {
           <div className="form-done-ic">
             <Check size={30} />
           </div>
-          <h2>Danke!</h2>
-          <p>Deine Antwort wurde übermittelt.</p>
+          <h2>{t('Thank you!')}</h2>
+          <p>{t('Your answer has been submitted.')}</p>
           <button
             className="btn-sm primary"
             onClick={() => {
@@ -96,7 +97,7 @@ export default function PublicForm({ token }: { token: string }) {
       <div className="form-card">
         <div className="public-form-head">
           {cfg.icon && <PageIcon icon={cfg.icon} size={42} />}
-          <h1 className="form-heading form-heading-static">{cfg.formTitle || cfg.title || 'Formular'}</h1>
+          <h1 className="form-heading form-heading-static">{cfg.formTitle || cfg.title || t('Form')}</h1>
         </div>
         {cfg.formDesc && <p className="form-desc form-desc-static">{cfg.formDesc}</p>}
         <div className="form-fields">
@@ -107,7 +108,7 @@ export default function PublicForm({ token }: { token: string }) {
             <input
               className="form-input"
               value={title}
-              placeholder="Name des Eintrags"
+              placeholder={t('Name of the entry')}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submit();

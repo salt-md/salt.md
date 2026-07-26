@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { t } from '../i18n';
 
 interface Toast {
   id: number;
@@ -25,7 +26,7 @@ export default function Toaster() {
   // screen readers. assertive: a failed save is worth interrupting for.
   if (toasts.length === 0) return null;
   return (
-    <div className="toaster" role="region" aria-label="Benachrichtigungen" aria-live="assertive" aria-atomic="false">
+    <div className="toaster" role="region" aria-label={t('Notifications')} aria-live="assertive" aria-atomic="false">
       {toasts.map((t) => (
         <div key={t.id} className="toast">
           ⚠ {t.message}

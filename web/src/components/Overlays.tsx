@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Portal from './Portal';
+import { t } from '../i18n';
 
 // A slim top progress bar shown while any file uploads (driven by the
 // salt:upload-progress / salt:upload-done events from api.upload).
@@ -25,7 +26,7 @@ export function UploadBar() {
   if (progress === null) return null;
   return (
     <Portal>
-      <div className="upload-bar" role="progressbar" aria-label="Datei-Upload">
+      <div className="upload-bar" role="progressbar" aria-label={t('File upload')}>
         <div className="upload-bar-fill" style={{ width: `${Math.max(4, progress * 100)}%` }} />
       </div>
     </Portal>

@@ -4,16 +4,16 @@ import { toast } from '../toast';
 import type { Comment } from '../types';
 import { Check, Trash2 } from 'lucide-react';
 import { formatRelative } from '../format';
+import { t } from '../i18n';
 
 // Kommentare als Abschnitt am Ende des Dokuments — so wie Notion es macht.
 //
-// Zwei Fassungen davor waren falsch. Erst ein Dialog (drei Ebenen tief, legt
-// sich über den Text). Dann eine angedockte Spalte, die Breite beanspruchte
-// und bei einer Seite ohne Kommentare bloß „Noch keine Kommentare" anzeigte —
-// ein leeres Fenster neben einem vollen Dokument. Beim genauen Hinsehen macht
-// Notion gar keine Spalte: dort stehen die Kommentare unten im Fluss, direkt
-// unter dem Inhalt. Genau dort gehören sie hin — immer sichtbar, ohne Schalter,
-// und sie nehmen nur so viel Platz, wie sie brauchen.
+// Two earlier versions got it wrong. First a dialog (three levels deep, laid
+// over the text). Then a docked column that claimed width and, on a page with
+// no comments, showed nothing but "No comments yet" — an empty pane beside a
+// full document. Look closely and Notion has no column at all: the comments sit
+// at the bottom of the flow, directly under the content. That is where they
+// belong — always visible, no toggle, and taking only the room they need.
 
 const when = (iso: string) => formatRelative(iso);
 
@@ -68,7 +68,7 @@ export default function CommentsSection({
       requestAnimationFrame(() => listRef.current?.scrollTo({ top: 1e6, behavior: 'smooth' }));
     } catch (err) {
       setBody(text); // nichts verschlucken, wenn das Senden scheitert
-      toast((err as Error).message || 'Kommentar fehlgeschlagen');
+      toast((err as Error).message || t('Could not post the comment'));
     }
   };
 
@@ -86,9 +86,9 @@ export default function CommentsSection({
   const visible = showResolved ? comments : open;
 
   return (
-    <section className="comments-section" id="kommentare" aria-label="Kommentare">
+    <section className="comments-section" id="kommentare" aria-label={t('Comments')}>
       <h2 className="cp-title">
-        Kommentare
+        {t('Comments')}
         {open.length > 0 && <span className="cp-count">{open.length}</span>}
       </h2>
 
@@ -99,13 +99,13 @@ export default function CommentsSection({
             checked={showResolved}
             onChange={(e) => setShowResolved(e.target.checked)}
           />
-          {resolved.length} erledigte anzeigen
+          {t('Show {n} resolved', { n: resolved.length })}
         </label>
       )}
 
       <div className="cp-list" ref={listRef}>
         {visible.map((c) => {
-          const name = c.authorName || 'unbekannt';
+          const name = c.authorName || t('unknown');
           return (
             <article key={c.id} className={'cp-item' + (c.resolvedAt ? ' is-resolved' : '')}>
               <div className="cp-item-head">
@@ -125,13 +125,13 @@ export default function CommentsSection({
               <div className="cp-actions">
                 <button
                   className="cp-act"
-                  title={c.resolvedAt ? 'Wieder öffnen' : 'Als erledigt markieren'}
+                  title={c.resolvedAt ? t('Reopen') : t('Mark as resolved')}
                   onClick={() => void toggleResolve(c)}
                 >
-                  <Check size={13} /> {c.resolvedAt ? 'Wieder öffnen' : 'Erledigt'}
+                  <Check size={13} /> {c.resolvedAt ? t('Reopen') : t('Resolved')}
                 </button>
                 {c.authorId === myUserId && (
-                  <button className="cp-act danger" title="Löschen" onClick={() => void remove(c)}>
+                  <button className="cp-act danger" title={t('Delete')} onClick={() => void remove(c)}>
                     <Trash2 size={13} />
                   </button>
                 )}
@@ -147,7 +147,7 @@ export default function CommentsSection({
         <textarea
           value={body}
           rows={2}
-          placeholder="Kommentar schreiben…"
+          placeholder={t('Write a comment…')}
           onChange={(e) => setBody(e.target.value)}
           onKeyDown={(e) => {
             // ⌘/Strg+Enter sendet — Enter selbst macht einen Absatz, weil
@@ -156,7 +156,7 @@ export default function CommentsSection({
           }}
         />
         <button className="btn primary cp-send" type="submit" disabled={!body.trim()}>
-          Senden
+          {t('Send')}
         </button>
       </form>
     </section>

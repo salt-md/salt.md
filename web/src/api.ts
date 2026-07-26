@@ -513,7 +513,7 @@ export const api = {
       };
       xhr.onerror = () => {
         finish();
-        reject(new ApiError('Upload fehlgeschlagen — keine Verbindung zum Server.', 0));
+        reject(new ApiError(t('Upload failed — no connection to the server.'), 0));
       };
       xhr.send(fd);
     }),

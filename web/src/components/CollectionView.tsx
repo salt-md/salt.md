@@ -4,6 +4,7 @@ import Portal from './Portal';
 import { useBoardDrag } from '../boardDrag';
 import { tagColorClass } from '../tags';
 import { compare, firstWeekday, formatMonth, toDayString, weekdayNames } from '../format';
+import { t } from '../i18n';
 import type {
   CollectionConfig,
   Filter,
@@ -308,7 +309,7 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     try {
       await api.updatePage(rowId, { propsPatch: { [propId]: value } });
     } catch {
-      toast('Änderung nicht gespeichert');
+      toast(t('Change not saved'));
     }
   };
 
@@ -335,13 +336,13 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
 
   const addView = (type: ViewDef['type']) => {
     const labels: Record<ViewDef['type'], string> = {
-      table: 'Tabelle',
-      board: 'Board',
-      gallery: 'Galerie',
-      calendar: 'Kalender',
-      list: 'Liste',
-      form: 'Formular',
-      timeline: 'Timeline',
+      table: t('Table'),
+      board: t('Board'),
+      gallery: t('Gallery'),
+      calendar: t('Calendar'),
+      list: t('List'),
+      form: t('Form'),
+      timeline: t('Timeline'),
     };
     const nv: ViewDef = { id: 'v' + Math.random().toString(36).slice(2, 9), name: labels[type], type };
     if (type === 'board') nv.groupBy = schema.find((p) => p.type === 'select' || p.type === 'multiselect')?.id;
@@ -397,7 +398,7 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
         <button
           ref={addViewBtnRef}
           className="view-add"
-          title="Ansicht hinzufügen"
+          title={t('Add view')}
           onClick={() => setAddViewOpen((o) => !o)}
         >
           <Plus size={15} />
@@ -407,10 +408,20 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
         <Portal>
           <div className="fs-backdrop" onClick={() => setAddViewOpen(false)} />
           <div className="menu view-add-menu" style={addViewPos}>
-            {(['table', 'board', 'gallery', 'calendar', 'timeline', 'list', 'form'] as const).map((t) => (
-              <button key={t} onClick={() => addView(t)}>
-                <span className="view-tab-ic">{tabIcon(t)}</span>
-                {{ table: 'Tabelle', board: 'Board', gallery: 'Galerie', calendar: 'Kalender', timeline: 'Timeline', list: 'Liste', form: 'Formular' }[t]}
+            {/* `vt`, not `t` — the loop variable would shadow the translate
+                function used in the labels right below it. */}
+            {(['table', 'board', 'gallery', 'calendar', 'timeline', 'list', 'form'] as const).map((vt) => (
+              <button key={vt} onClick={() => addView(vt)}>
+                <span className="view-tab-ic">{tabIcon(vt)}</span>
+                {{
+                  table: t('Table'),
+                  board: t('Board'),
+                  gallery: t('Gallery'),
+                  calendar: t('Calendar'),
+                  timeline: t('Timeline'),
+                  list: t('List'),
+                  form: t('Form'),
+                }[vt]}
               </button>
             ))}
           </div>
@@ -421,27 +432,27 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
           <>
             <select
               className="subitems-select"
-              title="Startdatum der Balken"
+              title={t('Start date for the bars')}
               value={view.dateProp ?? ''}
               onChange={(e) => updateView({ dateProp: e.target.value || undefined })}
             >
-              <option value="">Start: —</option>
+              <option value="">{t('Start: —')}</option>
               {dateProps.map((p) => (
                 <option key={p.id} value={p.id}>
-                  Start: {p.name}
+                  {t('Start:')} {p.name}
                 </option>
               ))}
             </select>
             <select
               className="subitems-select"
-              title="Enddatum der Balken (leer = 1-Tag-Balken)"
+              title={t('End date for the bars (blank = one-day bars)')}
               value={view.endDateProp ?? ''}
               onChange={(e) => updateView({ endDateProp: e.target.value || undefined })}
             >
-              <option value="">Ende: (keins)</option>
+              <option value="">{t('End: (none)')}</option>
               {dateProps.map((p) => (
                 <option key={p.id} value={p.id}>
-                  Ende: {p.name}
+                  {t('End:')} {p.name}
                 </option>
               ))}
             </select>
@@ -450,11 +461,11 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
         {view.type === 'table' && selfRelProps.length > 0 && (
           <select
             className="subitems-select"
-            title="Unteraufgaben-Relation für die Baum-Ansicht"
+            title={t('Sub-item relation for the tree view')}
             value={view.subItemProp ?? ''}
             onChange={(e) => updateView({ subItemProp: e.target.value || undefined })}
           >
-            <option value="">Keine Unteraufgaben</option>
+            <option value="">{t('No sub-items')}</option>
             {selfRelProps.map((p) => (
               <option key={p.id} value={p.id}>
                 ⿴ {p.name}
@@ -612,9 +623,9 @@ function FormView({
       setShared(true);
       try {
         await navigator.clipboard?.writeText(full);
-        toast('Öffentlicher Link kopiert');
+        toast(t('Public link copied'));
       } catch {
-        toast('Öffentlicher Link erstellt');
+        toast(t('Public link created'));
       }
     } catch {
       toast('Teilen fehlgeschlagen');
@@ -629,7 +640,7 @@ function FormView({
       await api.deleteFormShare(collectionId);
       setShared(false);
       setShareUrl(null);
-      toast('Öffentlicher Link aufgehoben');
+      toast(t('Public link revoked'));
     } catch {
       toast('Fehlgeschlagen');
     } finally {
@@ -672,10 +683,10 @@ function FormView({
           <div className="form-done-ic">
             <Check size={30} />
           </div>
-          <h2>Gesendet</h2>
-          <p>Deine Antwort wurde gespeichert.</p>
+          <h2>{t('Sent')}</h2>
+          <p>{t('Your answer has been saved.')}</p>
           <button className="btn-sm primary" onClick={reset}>
-            Noch eine Antwort senden
+            {t('Send another answer')}
           </button>
         </div>
       </div>
@@ -715,25 +726,25 @@ function FormView({
         <input
           className="form-heading"
           value={view.formTitle ?? ''}
-          placeholder="Formular"
+          placeholder={t('Form')}
           onChange={(e) => onUpdateView({ formTitle: e.target.value })}
         />
         <textarea
           className="form-desc"
           value={view.formDesc ?? ''}
-          placeholder="Beschreibung (optional) — erklärt, wofür das Formular ist."
+          placeholder={t('Description (optional) — explains what the form is for.')}
           rows={2}
           onChange={(e) => onUpdateView({ formDesc: e.target.value })}
         />
         <div className="form-fields">
           <label className="form-field">
             <span className="form-label">
-              Titel <b className="form-req">*</b>
+              {t('Title')} <b className="form-req">*</b>
             </span>
             <input
               className="form-input"
               value={title}
-              placeholder="Name des Eintrags"
+              placeholder={t('Name of the entry')}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') void submit();
@@ -799,7 +810,7 @@ export function formField(def: PropDef, value: unknown, onChange: (v: unknown) =
       );
     case 'multiselect': {
       const vals = Array.isArray(value) ? (value as string[]) : [];
-      if (!def.options?.length) return <span className="form-hint">Keine Optionen angelegt</span>;
+      if (!def.options?.length) return <span className="form-hint">{t('No options defined')}</span>;
       return (
         <div className="form-chips">
           {def.options.map((o) => {
@@ -961,7 +972,7 @@ function FilterSortControls({
                     <input
                       className="prop-input"
                       value={f.value}
-                      placeholder="value"
+                      placeholder={t('value')}
                       onChange={(e) => patch({ value: e.target.value })}
                     />
                   ))}
@@ -982,7 +993,7 @@ function FilterSortControls({
               onChange({ filters: [...filters, { property: e.target.value, op: 'is', value: '' }] });
             }}
           >
-            <option value="">+ Add filter…</option>
+            <option value="">{t('+ Add filter…')}</option>
             {schema.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -1003,7 +1014,7 @@ function FilterSortControls({
                 })
               }
             >
-              <option value="">No sort</option>
+              <option value="">{t('No sort')}</option>
               {schema.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -1018,8 +1029,8 @@ function FilterSortControls({
                   onChange({ sort: { ...sort, dir: e.target.value as Sort['dir'] } })
                 }
               >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
+                <option value="asc">{t('Ascending')}</option>
+                <option value="desc">{t('Descending')}</option>
               </select>
             )}
           </div>
@@ -1076,7 +1087,7 @@ function BoardView({
   if (!prop || (prop.type !== 'select' && prop.type !== 'multiselect')) {
     return (
       <div className="board-empty">
-        This board needs a <b>Select</b> property to group by. Open ⚙ Properties to add one.
+        This board needs a <b>{t('Select')}</b> property to group by. Open ⚙ Properties to add one.
       </div>
     );
   }
@@ -1150,7 +1161,7 @@ function BoardView({
                   <div className="card-move" onClick={(e) => e.stopPropagation()}>
                     <button
                       className="card-move-btn"
-                      title="Move to…"
+                      title={t('Move to…')}
                       onClick={() =>
                         setMoveMenu(moveMenu === `${col.id}:${r.id}` ? null : `${col.id}:${r.id}`)
                       }
@@ -1184,7 +1195,7 @@ function BoardView({
                   </div>
                 )}
                 {!!commentCounts[r.id] && (
-                  <div className="card-comments" title={commentCounts[r.id] + ' offene Kommentare'}>
+                  <div className="card-comments" title={commentCounts[r.id] + t(' open comments')}>
                     <MessageSquare size={11} /> {commentCounts[r.id]}
                   </div>
                 )}
@@ -1335,7 +1346,7 @@ function TableView({
       if (Array.isArray(v)) return v.length > 0;
       return v !== undefined && v !== '' && v !== null && v !== false;
     }).length;
-    return filled ? `${filled} gefüllt` : '';
+    return filled ? t('{n} filled', { n: filled }) : '';
   };
 
   return (
@@ -1343,7 +1354,7 @@ function TableView({
       <table className="db-table">
         <thead>
           <tr>
-            <th className="db-title-col">Name</th>
+            <th className="db-title-col">{t('Name')}</th>
             {schema.map((p) => (
               <th key={p.id}>{p.name}</th>
             ))}
@@ -1480,25 +1491,25 @@ function ColumnsControl({
           <div className="fs-backdrop" onClick={() => setOpen(false)} />
           <div className="fs-popover col-popover" style={pos}>
             <div className="col-section-head">
-              <span>Angezeigt</span>
+              <span>{t('Shown')}</span>
               {shown.length > 0 && (
                 <button className="col-bulk" onClick={() => onChange({ hidden: schema.map((p) => p.id) })}>
-                  Alle ausblenden
+                  {t('Hide all')}
                 </button>
               )}
             </div>
             {shown.map((p) => propRow(p, false))}
-            {shown.length === 0 && <div className="col-empty">Nichts angezeigt</div>}
+            {shown.length === 0 && <div className="col-empty">{t('Nothing shown')}</div>}
             <div className="col-section-head">
-              <span>Ausgeblendet</span>
+              <span>{t('Hidden')}</span>
               {hiddenProps.length > 0 && (
                 <button className="col-bulk" onClick={() => onChange({ hidden: [] })}>
-                  Alle anzeigen
+                  {t('Show all')}
                 </button>
               )}
             </div>
             {hiddenProps.map((p) => propRow(p, true))}
-            {hiddenProps.length === 0 && <div className="col-empty">Nichts ausgeblendet</div>}
+            {hiddenProps.length === 0 && <div className="col-empty">{t('Nothing hidden')}</div>}
           </div>
         </Portal>
       )}
@@ -1531,7 +1542,7 @@ function TimelineView({
   if (!startProp || !schema.some((p) => p.id === startProp && p.type === 'date')) {
     return (
       <div className="board-empty">
-        Diese Timeline braucht eine <b>Datums</b>-Eigenschaft als Start. Öffne ⚙ Properties, um eine anzulegen.
+        Diese Timeline braucht eine <b>{t('Date')}</b>-Eigenschaft als Start. Öffne ⚙ Properties, um eine anzulegen.
       </div>
     );
   }
@@ -1601,7 +1612,7 @@ function TimelineView({
                   {m.label}
                 </div>
               ))}
-              <div className="tl-today-tick" style={{ left: todayLeft }} title="Heute" />
+              <div className="tl-today-tick" style={{ left: todayLeft }} title={t('Today')} />
             </div>
           </div>
           <div className="tl-body">
@@ -1665,7 +1676,7 @@ function CalendarView({
   if (!dateProp || !schema.some((p) => p.id === dateProp && p.type === 'date')) {
     return (
       <div className="board-empty">
-        This calendar needs a <b>Date</b> property. Open ⚙ Properties to add one.
+        This calendar needs a <b>{t('Date')}</b> property. Open ⚙ Properties to add one.
       </div>
     );
   }
@@ -1697,10 +1708,10 @@ function CalendarView({
   return (
     <div className="calendar">
       <div className="calendar-head">
-        <button className="btn-sm" onClick={() => step(-1)} aria-label="Previous month">‹</button>
+        <button className="btn-sm" onClick={() => step(-1)} aria-label={t('Previous month')}>‹</button>
         <span className="calendar-title">{monthLabel}</span>
-        <button className="btn-sm" onClick={() => step(1)} aria-label="Next month">›</button>
-        <button className="btn-sm" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>Today</button>
+        <button className="btn-sm" onClick={() => step(1)} aria-label={t('Next month')}>›</button>
+        <button className="btn-sm" onClick={() => setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1))}>{t('Today')}</button>
       </div>
       <div className="calendar-grid">
         {weekdayNames().map((d) => (

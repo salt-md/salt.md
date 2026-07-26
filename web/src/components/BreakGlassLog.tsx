@@ -3,12 +3,13 @@ import { api } from '../api';
 import Portal from './Portal';
 import { toast } from '../toast';
 import { formatMoment } from '../format';
+import { t } from '../i18n';
 
-// Notfallzugriffe auf einen Workspace — für dessen Verantwortliche.
+// Emergency access to a workspace — for the people in charge of it.
 //
-// Ein Zugriff, den man nur per E-Mail mitgeteilt bekommt, ist eine Mitteilung
-// ohne Handhabe. Hier steht, wer wann mit welcher Begründung Einsicht genommen
-// hat — und ein laufender Zugriff lässt sich sofort beenden.
+// Access you only hear about by email is a notification with no handle on it.
+// This is where it says who looked in, when, and with what reason — and a
+// running access can be ended on the spot.
 
 interface Grant {
   id: string;
@@ -59,16 +60,16 @@ export default function BreakGlassLog({
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog" role="dialog" aria-modal="true" aria-label="Notfallzugriffe">
-          <h2>Notfallzugriffe</h2>
+        <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Emergency access log')}>
+          <h2>{t('Emergency access log')}</h2>
           <p className="dialog-hint">
             Einsicht in „{workspaceName}" durch den Instanz-Owner. Notfallzugriff erlaubt nur Lesen,
             läuft nach zwei Stunden ab und lässt sich jederzeit vorzeitig beenden.
           </p>
           {error && <div className="login-error">{error}</div>}
-          {grants === null && <div className="dialog-hint">Wird geladen…</div>}
+          {grants === null && <div className="dialog-hint">{t('Loading…')}</div>}
           {grants?.length === 0 && (
-            <div className="dialog-hint">Bisher gab es keinen Notfallzugriff auf diesen Workspace.</div>
+            <div className="dialog-hint">{t('There has been no emergency access to this workspace so far.')}</div>
           )}
           {grants && grants.length > 0 && (
             <div className="bg-list">
@@ -79,16 +80,16 @@ export default function BreakGlassLog({
                     <span className="bg-when">
                       {when(g.createdAt)}
                       {g.active
-                        ? ` · läuft bis ${when(g.expiresAt)}`
+                        ? ' · ' + t('runs until {time}', { time: when(g.expiresAt) })
                         : g.revokedAt
-                          ? ' · vorzeitig beendet'
-                          : ' · abgelaufen'}
+                          ? ' · ' + t('ended early')
+                          : ' · ' + t('expired')}
                     </span>
                     <span className="bg-reason">{g.reason}</span>
                   </div>
                   {g.active && (
                     <button className="btn-sm danger" onClick={() => void revoke(g)}>
-                      Jetzt beenden
+                      {t('End it now')}
                     </button>
                   )}
                 </div>
@@ -96,7 +97,7 @@ export default function BreakGlassLog({
             </div>
           )}
           <div className="dialog-actions">
-            <button className="btn" onClick={onClose}>Schließen</button>
+            <button className="btn" onClick={onClose}>{t('Close')}</button>
           </div>
         </div>
       </div>

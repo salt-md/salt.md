@@ -6,6 +6,7 @@ import { api } from '../api';
 import { toast } from '../toast';
 import { makeLucide, makeMdi } from '../pageIcon';
 import { mdiNames, mdiPath, useMdi } from '../mdiLoader';
+import { t } from '../i18n';
 
 // Notion-style icon colours; '' = default (adapts to light/dark theme).
 const ICON_COLORS = [
@@ -14,8 +15,8 @@ const ICON_COLORS = [
   { name: 'Rot', hex: '#e03131' },
   { name: 'Orange', hex: '#e8590c' },
   { name: 'Gelb', hex: '#f2b100' },
-  { name: 'Grün', hex: '#2f9e44' },
-  { name: 'Türkis', hex: '#0c8599' },
+  { name: 'Green', hex: '#2f9e44' },
+  { name: 'Teal', hex: '#0c8599' },
   { name: 'Blau', hex: '#1971c2' },
   { name: 'Lila', hex: '#7048e8' },
   { name: 'Pink', hex: '#c2255c' },
@@ -97,7 +98,7 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
         <button type="button" className={tab === 'upload' ? 'on' : ''} onClick={() => { setTab('upload'); setQ(''); }}>
           Upload
         </button>
-        <button type="button" className="icon-picker-remove" onClick={onRemove} title="Icon entfernen">
+        <button type="button" className="icon-picker-remove" onClick={onRemove} title={t('Remove icon')}>
           <Trash2 size={15} />
         </button>
       </div>
@@ -152,7 +153,7 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
               </div>
             </div>
           ))}
-        {tab === 'emoji' && emojiResults.length === 0 && <div className="icon-empty">Keine Treffer</div>}
+        {tab === 'emoji' && emojiResults.length === 0 && <div className="icon-empty">{t('No matches')}</div>}
 
         {tab === 'icon' && (
           <div className="icon-grid lucide-grid">
@@ -189,10 +190,10 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
           </div>
         )}
         {tab === 'icon' && lib === 'mdi' && !mdiReady && (
-          <div className="icon-empty">Material-Icons werden geladen…</div>
+          <div className="icon-empty">{t('Loading Material icons…')}</div>
         )}
         {tab === 'icon' && (lib !== 'mdi' || mdiReady) && iconResults.length === 0 && (
-          <div className="icon-empty">Keine Treffer</div>
+          <div className="icon-empty">{t('No matches')}</div>
         )}
 
         {tab === 'upload' && (
@@ -205,9 +206,9 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
               onChange={(e) => doUpload(e.target.files?.[0])}
             />
             <button type="button" className="icon-upload-btn" disabled={uploading} onClick={() => fileRef.current?.click()}>
-              <UploadIcon size={16} /> {uploading ? 'Lädt…' : 'Bild hochladen'}
+              <UploadIcon size={16} /> {uploading ? t('Loading…') : t('Upload picture')}
             </button>
-            <p className="icon-upload-hint">PNG, JPG, GIF oder SVG — wird quadratisch als Icon angezeigt.</p>
+            <p className="icon-upload-hint">{t('PNG, JPG, GIF or SVG — shown square, as an icon.')}</p>
           </div>
         )}
       </div>

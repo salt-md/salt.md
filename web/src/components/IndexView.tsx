@@ -4,6 +4,7 @@ import { toast } from '../toast';
 import type { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
 import { compare } from '../format';
+import { t } from '../i18n';
 
 type SortKey = 'title' | 'in' | 'out' | 'updated';
 type Mode = 'liste' | 'baum';
@@ -120,7 +121,7 @@ export default function IndexView({
             {isDb && <span className="index-badge">DB</span>}
           </button>
           <code className="idx-node-id">{p.id.slice(0, 8)}</code>
-          <button className="idx-md" title="Markdown-Link kopieren" onClick={() => copyMd(p.id)}>md</button>
+          <button className="idx-md" title={t('Copy Markdown link')} onClick={() => copyMd(p.id)}>md</button>
         </div>,
       );
     }
@@ -131,27 +132,27 @@ export default function IndexView({
   return (
     <div className="index-view">
       <div className="index-head">
-        <h1>📑 Index — alle Seiten</h1>
-        <button className="btn-sm" onClick={onClose}>Schließen</button>
+        <h1>{t('📑 Index — every page')}</h1>
+        <button className="btn-sm" onClick={onClose}>{t('Close')}</button>
       </div>
       <div className="index-controls">
         <div className="index-modes">
-          <button className={'index-mode' + (mode === 'liste' ? ' active' : '')} onClick={() => setMode('liste')}>Liste</button>
-          <button className={'index-mode' + (mode === 'baum' ? ' active' : '')} onClick={() => setMode('baum')}>Baum · Agent-Sicht</button>
+          <button className={'index-mode' + (mode === 'liste' ? ' active' : '')} onClick={() => setMode('liste')}>{t('List')}</button>
+          <button className={'index-mode' + (mode === 'baum' ? ' active' : '')} onClick={() => setMode('baum')}>{t('Tree · agent view')}</button>
         </div>
         <input
           className="prop-input index-search"
-          placeholder="Seiten filtern…"
+          placeholder={t('Filter pages…')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          aria-label="Seiten filtern"
+          aria-label={t('Filter pages')}
         />
         {mode === 'liste' && (
-          <select className="prop-select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Sortieren">
+          <select className="prop-select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label={t('Sort')}>
             <option value="title">Name (A–Z)</option>
-            <option value="in">Meiste Backlinks</option>
-            <option value="out">Meiste ausgehende Links</option>
-            <option value="updated">Zuletzt geändert</option>
+            <option value="in">{t('Most backlinks')}</option>
+            <option value="out">{t('Most outgoing links')}</option>
+            <option value="updated">{t('Recently changed')}</option>
           </select>
         )}
         <span className="index-stat">{rows.length} Seiten · {orphans} ohne Links</span>
@@ -162,9 +163,9 @@ export default function IndexView({
           <table className="db-table index-table">
             <thead>
               <tr>
-                <th>Seite</th>
-                <th title="Ausgehende @-Links">→ Links</th>
-                <th title="Eingehende Links (Backlinks)">← Backlinks</th>
+                <th>{t('Page')}</th>
+                <th title={t('Outgoing @-links')}>{t('→ Links')}</th>
+                <th title={t('Incoming links (backlinks)')}>{t('← Backlinks')}</th>
               </tr>
             </thead>
             <tbody>
@@ -183,7 +184,7 @@ export default function IndexView({
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="db-empty">Keine Seiten.</td>
+                  <td colSpan={3} className="db-empty">{t('No pages.')}</td>
                 </tr>
               )}
             </tbody>
@@ -197,7 +198,7 @@ export default function IndexView({
             Markdown, egal wo es liegt.
           </p>
           <div className="idx-tree">
-            {treeRows.length ? treeRows : <div className="db-empty">Keine Seiten.</div>}
+            {treeRows.length ? treeRows : <div className="db-empty">{t('No pages.')}</div>}
           </div>
         </div>
       )}

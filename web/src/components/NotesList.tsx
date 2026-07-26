@@ -4,6 +4,7 @@ import { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
 import { tagColorClass } from '../tags';
 import { formatRelative } from '../format';
+import { t } from '../i18n';
 
 // Bear-style middle column: a flat, recency-sorted list of note cards with
 // snippet + thumbnail previews. Documents only — databases and their rows keep
@@ -46,10 +47,10 @@ export default function NotesList({ pages, currentWs, activeId, tagColors, tagFi
   return (
     <div className="notes-list">
       <div className="notes-head">
-        <span className="notes-title">Notizen</span>
+        <span className="notes-title">{t('Notes')}</span>
         <span className="notes-count">{notes.length}</span>
         <div className="notes-head-actions">
-          <button className="notes-ic-btn" title="Neue Notiz (⌥N)" onClick={onCreate}>
+          <button className="notes-ic-btn" title={t('New note (⌥N)')} onClick={onCreate}>
             <SquarePen size={16} />
           </button>
         </div>
@@ -63,10 +64,10 @@ export default function NotesList({ pages, currentWs, activeId, tagColors, tagFi
       ) : (
         <div className="notes-filters">
           <button className={list === 'all' ? 'on' : ''} onClick={() => setList('all')}>
-            Alle
+            {t('All')}
           </button>
           <button className={list === 'untagged' ? 'on' : ''} onClick={() => setList('untagged')}>
-            Ohne Tag
+            {t('Untagged')}
           </button>
         </div>
       )}
@@ -84,7 +85,7 @@ export default function NotesList({ pages, currentWs, activeId, tagColors, tagFi
                     <PageIcon icon={n.icon} size={15} />
                   </span>
                 )}
-                {n.title || 'Ohne Titel'}
+                {n.title || t('Untitled')}
               </span>
               {n.snippet && <span className="note-card-snippet">{n.snippet}</span>}
               <span className="note-card-meta">
@@ -102,10 +103,10 @@ export default function NotesList({ pages, currentWs, activeId, tagColors, tagFi
         {notes.length === 0 && (
           <div className="notes-empty">
             {tagFilter
-              ? `Keine Notizen mit #${tagFilter}.`
+              ? t('No notes tagged #{tag}.', { tag: tagFilter })
               : list === 'untagged'
-                ? 'Alles ist getaggt. 🎉'
-                : 'Noch keine Notizen — leg die erste an.'}
+                ? t('Everything is tagged. 🎉')
+                : t('No notes yet — write the first one.')}
           </div>
         )}
       </div>

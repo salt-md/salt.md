@@ -6,7 +6,7 @@ import Portal from './Portal';
 import { confirm, promptText } from '../dialog';
 import { toast } from '../toast';
 import { useExclusiveModal } from '../modal';
-import { formatMoment } from '../format';
+import { formatDay, formatMoment } from '../format';
 import { plural, t } from '../i18n';
 import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSettings';
 import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type } from 'lucide-react';
@@ -370,7 +370,7 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
           {entries.map((e) => (
             <div key={e.id} className="user-row">
               <span className={'badge ' + (e.actorType === 'agent' ? 'agent-badge' : '')}>
-                {e.actorType === 'agent' ? <><Bot size={12} /> agent</> : <><UserIcon size={12} /> human</>}
+                {e.actorType === 'agent' ? <><Bot size={12} /> {t('agent')}</> : <><UserIcon size={12} /> {t('human')}</>}
               </span>
               <span className="user-row-name">
                 {e.actorName} {label[e.action] ?? e.action}
@@ -398,11 +398,13 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
 
 type WsRef = { id: string; name: string };
 type Membership = { userId: string; workspaceId: string; role: string };
-const ROLES = [
-  { v: 'none', label: 'Kein Zugriff' },
-  { v: 'viewer', label: 'Betrachter' },
-  { v: 'member', label: 'Mitglied' },
-  { v: 'admin', label: 'Admin' },
+// A function, not a constant: a constant resolves t() once at import time and
+// then holds that language for good.
+const roleOptions = () => [
+  { v: 'none', label: t('No access') },
+  { v: 'viewer', label: t('Viewer') },
+  { v: 'member', label: t('Member') },
+  { v: 'admin', label: t('Admin') },
 ];
 
 // Vollwertige Nutzerverwaltung (W98): links die Liste, rechts das Detail —
@@ -610,17 +612,17 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog users-dialog" role="dialog" aria-modal="true" aria-label="Nutzerverwaltung">
+        <div className="dialog users-dialog" role="dialog" aria-modal="true" aria-label={t('Manage users')}>
           <div className="users-head">
-            <h2>Nutzerverwaltung</h2>
-            <button className="btn-sm" onClick={() => { setInviting(true); setSelId(null); }}>+ Nutzer</button>
+            <h2>{t('Manage users')}</h2>
+            <button className="btn-sm" onClick={() => { setInviting(true); setSelId(null); }}>{t('+ User')}</button>
           </div>
           {error && <div className="login-error">{error}</div>}
           <div className="users-body">
             <aside className="users-list-pane">
               <input
                 className="users-search"
-                placeholder="Suchen…"
+                placeholder={t('Search…')}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -635,16 +637,16 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                     <span className="users-li-text">
                       <span className="users-li-name">
                         {u.name}
-                        {u.disabled && <span className="badge">stillgelegt</span>}
+                        {u.disabled && <span className="badge">{t('deactivated')}</span>}
                         {u.orgRole === 'owner'
-                          ? <span className="badge">owner</span>
-                          : u.isAdmin && <span className="badge">admin</span>}
+                          ? <span className="badge">{t('owner')}</span>
+                          : u.isAdmin && <span className="badge">{t('admin')}</span>}
                       </span>
                       <span className="users-li-email">{u.email}</span>
                     </span>
                   </button>
                 ))}
-                {filtered.length === 0 && <div className="dialog-hint">Niemand gefunden.</div>}
+                {filtered.length === 0 && <div className="dialog-hint">{t('Nobody found.')}</div>}
               </div>
             </aside>
 
@@ -743,7 +745,7 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                             </button>
                           )}
                           <div className="ws-role-seg">
-                            {ROLES.map((r) => (
+                            {roleOptions().map((r) => (
                               <button
                                 key={r.v}
                                 className={'ws-role-btn' + (role === r.v ? ' active' : '')}
@@ -825,22 +827,22 @@ function InvitePanel({
       <div className="users-detail-head">
         <div className="invite-avatar-placeholder">+</div>
         <div className="users-detail-id">
-          <div className="users-detail-name">Neuen Nutzer anlegen</div>
-          <div className="users-detail-email">Legt sofort ein Konto an — kein E-Mail-Versand.</div>
+          <div className="users-detail-name">{t('Create a new user')}</div>
+          <div className="users-detail-email">{t('Creates the account straight away — no email is sent.')}</div>
         </div>
       </div>
-      <label className="profile-label">Name</label>
+      <label className="profile-label">{t('Name')}</label>
       <input className="prop-input profile-input" value={name} onChange={(e) => setName(e.target.value)} />
-      <label className="profile-label">E-Mail</label>
+      <label className="profile-label">{t('Email')}</label>
       <input className="prop-input profile-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <label className="profile-label">Startpasswort (mind. 8 Zeichen)</label>
+      <label className="profile-label">{t('Initial password (min. 8 characters)')}</label>
       <input className="prop-input profile-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
       <label className="check-label" style={{ marginTop: 10 }}>
         <input type="checkbox" checked={isAdmin} onChange={(e) => setIsAdmin(e.target.checked)} />
-        Instanz-Admin (darf alles verwalten)
+        {t('Instance admin (may manage everything)')}
       </label>
 
-      <h3 className="users-section-title">Workspace-Zugriff</h3>
+      <h3 className="users-section-title">{t('Workspace access')}</h3>
       <div className="ws-access-list">
         {workspaces.map((ws) => {
           const role = roles[ws.id] ?? 'none';
@@ -848,7 +850,7 @@ function InvitePanel({
             <div key={ws.id} className={'ws-access-row' + (role !== 'none' ? ' has-access' : '')}>
               <span className="ws-access-name">{ws.name}</span>
               <div className="ws-role-seg">
-                {ROLES.map((r) => (
+                {roleOptions().map((r) => (
                   <button
                     type="button"
                     key={r.v}
@@ -867,8 +869,8 @@ function InvitePanel({
 
       {error && <div className="login-error">{error}</div>}
       <div className="invite-actions">
-        <button type="button" className="btn" onClick={onCancel}>Abbrechen</button>
-        <button className="btn primary" type="submit" disabled={busy}>Nutzer anlegen</button>
+        <button type="button" className="btn" onClick={onCancel}>{t('Cancel')}</button>
+        <button className="btn primary" type="submit" disabled={busy}>{t('Create user')}</button>
       </div>
     </form>
   );
@@ -930,14 +932,14 @@ function TokensModal({ onClose }: { onClose: () => void }) {
     <Portal>
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dialog">
-        <h2>API tokens</h2>
+        <h2>{t('API tokens')}</h2>
         <p className="dialog-hint">
-          Tokens let agents and scripts use the REST API and the MCP endpoint
-          (<code>/mcp</code>) with <code>Authorization: Bearer &lt;token&gt;</code>.
+          {t('Tokens let agents and scripts use the REST API and the MCP endpoint')}{' '}
+          (<code>/mcp</code>) {t('with')} <code>Authorization: Bearer &lt;token&gt;</code>.
         </p>
         {fresh && (
           <div className="token-fresh">
-            <div>Copy this token now — it won't be shown again:</div>
+            <div>{t('Copy this token now — it will not be shown again:')}</div>
             <code>{fresh}</code>
             <button
               className="btn"
@@ -946,10 +948,10 @@ function TokensModal({ onClose }: { onClose: () => void }) {
                 setCopied('token');
               }}
             >
-              {copied === 'token' ? 'Copied ✓' : 'Copy token'}
+              {copied === 'token' ? t('Copied ✓') : t('Copy token')}
             </button>
             <div style={{ marginTop: 10 }}>
-              Or connect an agent in one step — paste this into your terminal:
+              {t('Or connect an agent in one step — paste this into your terminal:')}
             </div>
             <code style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{mcpCommand}</code>
             <button
@@ -959,31 +961,34 @@ function TokensModal({ onClose }: { onClose: () => void }) {
                 setCopied('cmd');
               }}
             >
-              {copied === 'cmd' ? 'Copied ✓' : 'Copy MCP command'}
+              {copied === 'cmd' ? t('Copied ✓') : t('Copy MCP command')}
             </button>
           </div>
         )}
         <div className="user-list">
-          {tokens.map((t) => (
-            <div key={t.id} className="user-row">
+          {/* `tk`, not `t` — the loop variable would shadow the translate function. */}
+          {tokens.map((tk) => (
+            <div key={tk.id} className="user-row">
               <span className="user-row-name">
-                <Key size={13} /> {t.name}{' '}
-                <span className={'token-scope ' + (t.scope === 'read' ? 'read' : 'write')}>
-                  {t.scope === 'read' ? 'read-only' : 'read-write'}
+                <Key size={13} /> {tk.name}{' '}
+                <span className={'token-scope ' + (tk.scope === 'read' ? 'read' : 'write')}>
+                  {tk.scope === 'read' ? t('read-only') : t('read-write')}
                 </span>
               </span>
               <span className="user-row-email">
-                {t.workspaces.length === 0
-                  ? 'all workspaces'
-                  : t.workspaces.map(wsName).join(', ')}
+                {tk.workspaces.length === 0
+                  ? t('all workspaces')
+                  : tk.workspaces.map(wsName).join(', ')}
                 {' · '}
-                {t.lastUsedAt ? `used ${t.lastUsedAt.slice(0, 10)}` : 'never used'}
+                {tk.lastUsedAt
+                  ? t('used {date}', { date: formatDay(tk.lastUsedAt) })
+                  : t('never used')}
               </span>
               <button
                 className="icon-btn danger"
-                title="Revoke"
+                title={t('Revoke')}
                 onClick={async () => {
-                  await api.deleteToken(t.id);
+                  await api.deleteToken(tk.id);
                   load();
                 }}
               >
@@ -991,29 +996,29 @@ function TokensModal({ onClose }: { onClose: () => void }) {
               </button>
             </div>
           ))}
-          {tokens.length === 0 && <div className="dialog-hint">No tokens yet.</div>}
+          {tokens.length === 0 && <div className="dialog-hint">{t('No tokens yet.')}</div>}
         </div>
         <form className="user-add" onSubmit={create} style={{ flexWrap: 'wrap' }}>
-          <input value={name} placeholder="Token name (e.g. claude-code)" onChange={(e) => setName(e.target.value)} />
+          <input value={name} placeholder={t('Token name (e.g. claude-code)')} onChange={(e) => setName(e.target.value)} />
           <select
             className="prop-select"
             value={scope}
             onChange={(e) => setScope(e.target.value as 'read' | 'write')}
-            title="Read-only tokens cannot create, edit, delete or upload"
+            title={t('Read-only tokens cannot create, edit, delete or upload')}
           >
-            <option value="write">Read-write</option>
-            <option value="read">Read-only</option>
+            <option value="write">{t('Read-write')}</option>
+            <option value="read">{t('Read-only')}</option>
           </select>
           <select
             className="prop-select"
             value={wsMode}
             onChange={(e) => setWsMode(e.target.value as 'all' | 'some')}
-            title="Limit which workspaces this token can reach"
+            title={t('Limit which workspaces this token can reach')}
           >
-            <option value="all">All workspaces</option>
-            <option value="some">Specific workspaces…</option>
+            <option value="all">{t('All workspaces')}</option>
+            <option value="some">{t('Specific workspaces…')}</option>
           </select>
-          <button className="btn primary" type="submit">Create token</button>
+          <button className="btn primary" type="submit">{t('Create token')}</button>
           {wsMode === 'some' && (
             <div className="token-ws-picker" style={{ flexBasis: '100%', display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 6 }}>
               {workspaces.map((w) => (
@@ -1026,11 +1031,11 @@ function TokensModal({ onClose }: { onClose: () => void }) {
                   {w.name}
                 </label>
               ))}
-              {workspaces.length === 0 && <span className="dialog-hint">No workspaces.</span>}
+              {workspaces.length === 0 && <span className="dialog-hint">{t('No workspaces.')}</span>}
             </div>
           )}
         </form>
-        <button className="btn dialog-close" onClick={onClose}>Close</button>
+        <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
       </div>
     </div>
     </Portal>

@@ -3,8 +3,9 @@ import { api } from '../api';
 import type { CollectionConfig, PropDef, PropType, ViewDef } from '../types';
 import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
-import { OPTION_HEXES, OPTION_PALETTE } from '../selectOptions';
+import { OPTION_HEXES, optionPalette } from '../selectOptions';
 import { Check } from 'lucide-react';
+import { t } from '../i18n';
 
 const TYPES: { value: PropType; label: string }[] = [
   { value: 'text', label: 'Text' },
@@ -209,15 +210,15 @@ export default function SchemaEditor({
   // Config UI shown under a property row for the computed/linked types.
   const numberDisplayFields = (p: PropDef) => (
     <>
-      <label>Anzeige</label>
+      <label>{t('Display')}</label>
       <select
         className="prop-select"
         value={p.numberDisplay ?? 'plain'}
         onChange={(e) => updateProp(p.id, { numberDisplay: e.target.value as PropDef['numberDisplay'] })}
       >
-        <option value="plain">Zahl</option>
-        <option value="bar">Fortschrittsbalken</option>
-        <option value="ring">Ring</option>
+        <option value="plain">{t('Number')}</option>
+        <option value="bar">{t('Progress bar')}</option>
+        <option value="ring">{t('Ring')}</option>
       </select>
       {(p.numberDisplay === 'bar' || p.numberDisplay === 'ring') && (
         <>
@@ -242,13 +243,13 @@ export default function SchemaEditor({
     if (p.type === 'relation') {
       return (
         <div className="schema-config">
-          <label>Links to</label>
+          <label>{t('Links to')}</label>
           <select
             className="prop-select"
             value={p.relationCollection ?? ''}
             onChange={(e) => updateProp(p.id, { relationCollection: e.target.value })}
           >
-            <option value="">Select a database…</option>
+            <option value="">{t('Select a database…')}</option>
             {targets.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title || 'Untitled'}
@@ -263,20 +264,20 @@ export default function SchemaEditor({
       const targetSchema = rel?.relationCollection ? targetSchemas[rel.relationCollection] ?? [] : [];
       return (
         <div className="schema-config">
-          <label>Via relation</label>
+          <label>{t('Via relation')}</label>
           <select
             className="prop-select"
             value={p.rollupRelation ?? ''}
             onChange={(e) => updateProp(p.id, { rollupRelation: e.target.value, rollupTarget: '' })}
           >
-            <option value="">Select a relation…</option>
+            <option value="">{t('Select a relation…')}</option>
             {relationProps.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
             ))}
           </select>
-          <label>Of property</label>
+          <label>{t('Of property')}</label>
           <select
             className="prop-select"
             value={p.rollupTarget ?? ''}
@@ -292,7 +293,7 @@ export default function SchemaEditor({
                 </option>
               ))}
           </select>
-          <label>Calculate</label>
+          <label>{t('Calculate')}</label>
           <select
             className="prop-select"
             value={p.rollupAgg ?? 'sum'}
@@ -311,10 +312,10 @@ export default function SchemaEditor({
     if (p.type === 'formula') {
       return (
         <div className="schema-config formula-config">
-          <label>Expression</label>
+          <label>{t('Expression')}</label>
           <input
             className="prop-input formula-input"
-            placeholder="e.g. {price} * {qty} - {discount}"
+            placeholder={t('e.g. {price} * {qty} - {discount}')}
             value={p.formula ?? ''}
             onChange={(e) => updateProp(p.id, { formula: e.target.value })}
           />
@@ -340,7 +341,7 @@ export default function SchemaEditor({
     <Portal>
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dialog wide">
-        <h2>Database properties</h2>
+        <h2>{t('Database properties')}</h2>
         <div className="schema-list">
           {schema.map((p) => (
             <div key={p.id} className="schema-item">
@@ -361,7 +362,7 @@ export default function SchemaEditor({
                     </option>
                   ))}
                 </select>
-                <button className="icon-btn danger" title="Delete property" onClick={() => removeProp(p.id)}>
+                <button className="icon-btn danger" title={t('Delete property')} onClick={() => removeProp(p.id)}>
                   ✕
                 </button>
               </div>
@@ -379,7 +380,7 @@ export default function SchemaEditor({
                             type="button"
                             className="prop-chip opt-chip"
                             style={{ background: hex + '2e', color: hex }}
-                            title="Farbe ändern"
+                            title={t('Change colour')}
                             onClick={() => setColorPick(colorPick === key ? null : key)}
                           >
                             {o.name}
@@ -388,7 +389,7 @@ export default function SchemaEditor({
                             <>
                               <div className="opt-color-backdrop" onClick={() => setColorPick(null)} />
                               <div className="opt-color-pop">
-                                {OPTION_PALETTE.map((c) => (
+                                {optionPalette().map((c) => (
                                   <button
                                     key={c.hex}
                                     type="button"
@@ -411,7 +412,7 @@ export default function SchemaEditor({
                     })}
                   <input
                     className="opt-input"
-                    placeholder="+ Option"
+                    placeholder={t('+ Option')}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         addOption(p.id, (e.target as HTMLInputElement).value);
@@ -428,7 +429,7 @@ export default function SchemaEditor({
         <div className="schema-add">
           <input
             className="prop-input"
-            placeholder="New property name"
+            placeholder={t('New property name')}
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && addProp()}
@@ -472,8 +473,8 @@ export default function SchemaEditor({
           Show Calendar view {!schema.some((p) => p.type === 'date') && <span className="prop-empty">(needs a Date property)</span>}
         </label>
         <div className="dialog-buttons">
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn primary" onClick={save}>Save</button>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
+          <button className="btn primary" onClick={save}>{t('Save')}</button>
         </div>
       </div>
     </div>
