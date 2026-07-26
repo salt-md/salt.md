@@ -5,6 +5,12 @@ import (
 	"strings"
 )
 
+// i18n-ok-file: the German IS the subject here — this file implements folding
+// and stemming for German text, and the examples ("Verträge" → "vertrag") are
+// what the reasoning rests on. Translating them would delete the explanation.
+// The cost is real: new German prose in THIS file is not caught, so read it
+// with that in mind.
+//
 // The search index and its versions (W110).
 //
 // `pages_fts` was created without naming a tokenizer, so it ran on the default

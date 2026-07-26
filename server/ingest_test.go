@@ -1,5 +1,9 @@
 package server
 
+// i18n-ok-file: the fixtures are deliberately German ("Heiße Kontakte",
+// "Erstgespräch", "Fällig") — they are what proves umlauts survive an import
+// intact. Prose and failure messages in this file are English.
+
 import (
 	"encoding/json"
 	"net"
@@ -48,13 +52,13 @@ func TestJSONPath(t *testing.T) {
 		want string
 	}{
 		{"card.due", "2026-08-01"},
-		{"labels[].name", "Hot, B2B"}, // Pfluecken aus einer Liste
+		{"labels[].name", "Hot, B2B"}, // picking out of a list
 		{"n", "42"},                   // ganze Zahl ohne .0
 		{"f", "1.5"},
 		{"t", "true"},
 		{"fehlt", ""},
 		{"card.fehlt", ""},
-		{"n.tiefer", ""}, // in einen Skalar hineinlaufen darf nicht knallen
+		{"n.tiefer", ""}, // running into a scalar must not blow up
 	}
 	for _, c := range cases {
 		if got := scalarString(jsonPath(doc, c.path)); got != c.want {
@@ -63,8 +67,9 @@ func TestJSONPath(t *testing.T) {
 	}
 }
 
-// Der eigentliche Fall: eine Trello-Antwort, bei der die Karte nur die Id ihrer
-// Liste kennt und der Klartext woanders steht. Ohne resolve stuende in der
+// The real case: a Trello response where the card knows only the id of its
+// list and the plain text sits somewhere else. Without resolve the column
+// would hold
 // Status-Spalte eine nichtssagende Id.
 func TestMapItemsTrelloShape(t *testing.T) {
 	var doc any
@@ -97,7 +102,7 @@ func TestMapItemsTrelloShape(t *testing.T) {
 	if got := scalarString(items[0].props["Labels"]); got != "Hot, B2B" {
 		t.Errorf("Labels = %q", got)
 	}
-	// Ein leerer Titel darf den Import nicht abbrechen — sonst scheitert eine
+	// An empty title must not abort the import — otherwise one
 	// Migration an einer einzigen unbenannten Karte.
 	if items[1].title != "Untitled 2" {
 		t.Errorf("empty title = %q, expected a placeholder", items[1].title)

@@ -71,6 +71,16 @@ loop variables anything else.
 stray `toLocale*` or a catalog that has drifted. A line may opt out with
 `// i18n-ok: <reason>` — the reason is mandatory.
 
+**`go test ./...` enforces the same on the server** (`server/language_test.go`).
+It exists because twelve finished German sentences were sitting in login
+redirects and two whole emails went out in German — none of which a frontend
+check can see, because they never pass through `t()`. A `.go` line reading as
+German fails the build. Same escape hatch, same mandatory reason; whole files
+whose German IS the subject (the search-folding fixtures) carry
+`i18n-ok-file: <reason>`. `pendingTranslation` in that file is a debt list of
+files not converted yet — a second test fails if an entry on it is already
+clean, so it cannot quietly outlive the problem.
+
 **Server messages carry a code, not a language.** `httpErrorCode(w, status,
 "code", "English sentence")`. The English is for curl and MCP agents; browsers
 translate from the code via `serverErrors.ts`. Use `httpErrorData` when a value

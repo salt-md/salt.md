@@ -2,9 +2,9 @@ package server
 
 import "testing"
 
-// Die Endungsregel entscheidet, ob ein unbekannter Pfad 404 gibt oder die
-// Anwendung lädt. Fällt sie zu weit aus, ist die Navigation kaputt; fällt sie
-// zu eng aus, bekommen Bild-Abrufe wieder HTML mit Status 200.
+// The extension rule decides whether an unknown path 404s or loads the app.
+// Cast too wide and navigation breaks; cast too narrow and image requests get
+// HTML with status 200 again.
 func TestIsStaticFileName(t *testing.T) {
 	static := []string{
 		"favicon.ico", "icon-192.png", "logo.svg", "manifest.webmanifest",
@@ -17,7 +17,7 @@ func TestIsStaticFileName(t *testing.T) {
 	}
 	routes := []string{
 		"", "p/abc123", "t/urlaub", "settings", "index",
-		"t/version.2", "p/a.b.c", // Client-Routen dürfen Punkte enthalten
+		"t/version.2", "p/a.b.c", // client routes may contain dots
 	}
 	for _, p := range routes {
 		if isStaticFileName(p) {

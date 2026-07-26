@@ -5,7 +5,7 @@ import (
 	"net/http"
 )
 
-// Public share viewer (Welle 20): /public/{token} renders the shared page as a
+// Public share viewer (wave 20): /public/{token} renders the shared page as a
 // standalone HTML document — no SPA, no JS required. Previously only the JSON
 // API existed and the share URL fell through to the app shell, which showed a
 // login screen to anonymous visitors. Password-protected shares render a
@@ -14,13 +14,13 @@ import (
 func sharePasswordForm(token string, wrong bool) string {
 	msg := ""
 	if wrong {
-		msg = `<p style="color:#c4554d">Falsches Passwort.</p>`
+		msg = `<p style="color:#c4554d">Wrong password.</p>`
 	}
-	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salt.md — geschützte Seite</title><style>` + htmlDocStyle + `</style></head><body>` +
-		`<h1>🔒 Geschützte Seite</h1><p>Diese Seite ist mit einem Passwort geschützt.</p>` + msg +
+	return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Salt.md — protected page</title><style>` + htmlDocStyle + `</style></head><body>` +
+		`<h1>🔒 Protected page</h1><p>This page is protected by a password.</p>` + msg +
 		`<form method="post" action="/public/` + html.EscapeString(token) + `">` +
-		`<input type="password" name="pw" placeholder="Passwort" autofocus style="padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:15px"> ` +
-		`<button type="submit" style="padding:9px 14px;border:none;border-radius:8px;background:#2f7d4f;color:#fff;font-size:15px;cursor:pointer">Öffnen</button>` +
+		`<input type="password" name="pw" placeholder="Password" autofocus style="padding:9px 11px;border:1px solid #ddd;border-radius:8px;font-size:15px"> ` +
+		`<button type="submit" style="padding:9px 14px;border:none;border-radius:8px;background:#2f7d4f;color:#fff;font-size:15px;cursor:pointer">Open</button>` +
 		`</form></body></html>`
 }
 
@@ -39,7 +39,7 @@ func (s *Server) handlePublicView(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Robots-Tag", "noindex")
 	if !found {
 		w.WriteHeader(404)
-		w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>Salt.md</title><style>` + htmlDocStyle + `</style></head><body><h1>Nicht gefunden</h1><p>Dieser Link ist ungültig oder abgelaufen.</p></body></html>`))
+		w.Write([]byte(`<!doctype html><html><head><meta charset="utf-8"><title>Salt.md</title><style>` + htmlDocStyle + `</style></head><body><h1>Not found</h1><p>This link is invalid or has expired.</p></body></html>`))
 		return
 	}
 	if needPW && !pwOK {

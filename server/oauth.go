@@ -342,10 +342,10 @@ func (s *Server) oauthCreateUser(email, name string) (string, error) {
 		// erlaubt
 	case "domain":
 		if !s.domainAllowsSelfSignup(email) {
-			return "", fmt.Errorf("Für diese E-Mail ist keine Registrierung erlaubt — bitte einen Admin um eine Einladung.")
+			return "", fmt.Errorf("this email address may not register here — ask an admin for an invitation")
 		}
 	default:
-		return "", fmt.Errorf("Kein Konto für %s — die Registrierung ist einladungsbasiert.", email)
+		return "", fmt.Errorf("no account for %s — registration here is by invitation", email)
 	}
 	if name = strings.TrimSpace(name); name == "" {
 		name = strings.SplitN(email, "@", 2)[0]
@@ -358,7 +358,7 @@ func (s *Server) oauthCreateUser(email, name string) (string, error) {
 	uid := newID()
 	if _, err := s.db.Exec(`INSERT INTO users (id, email, name, color, password_hash, is_admin, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)`,
 		uid, email, name, s.nextColor(), hashPassword(hex.EncodeToString(randPw)), now()); err != nil {
-		return "", fmt.Errorf("Konto konnte nicht erstellt werden.")
+		return "", fmt.Errorf("the account could not be created")
 	}
 	s.addOrgMember(uid, false)
 	s.onboardUser(uid, name)

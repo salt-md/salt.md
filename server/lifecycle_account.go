@@ -57,7 +57,7 @@ func (s *Server) purgeWorkspace(wsID string) error {
 				refs[m[1]] = true
 			}
 		}
-		rows.Close() // erst leeren, dann weiter (eine DB-Verbindung)
+		rows.Close() // drain first, then carry on (one DB connection)
 	}
 
 	tx, err := s.db.Begin()
@@ -208,7 +208,7 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 			all = append(all, x)
 		}
 	}
-	rows.Close() // erst leeren, dann weiter abfragen (eine DB-Verbindung)
+	rows.Close() // drain first, then query again (one DB connection)
 
 	for _, x := range all {
 		iw := impactWorkspace{ID: x.id, Name: x.name, Pages: x.pages, Members: x.members}
@@ -240,7 +240,7 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 			WHERE m.workspace_id = ? AND m.role = 'admin' AND m.user_id != ? AND u.disabled = 0
 			ORDER BY u.created_at LIMIT 1`, x.id, userID).Scan(&heirID, &heirName)
 		if heirID != "" {
-			continue // hat einen Nachfolger, keine Folge zu melden
+			continue // has a successor, no consequence to report
 		}
 		// The owner only takes over when NOBODY else is a member any more.
 		// Otherwise the workspace still belongs to the people in it — and if

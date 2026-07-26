@@ -19,9 +19,10 @@ import (
 // its context with it. The same decision as in the neighbouring project, which
 // cuts per conversation turn so a hit points at the actual exchange.
 //
-// Every passage also remembers the headings above it
-// ("Vertrag › Kündigung › Fristen"). That is the information which lets an
-// agent place a paragraph without loading the page.
+// Every passage also remembers the headings above it, as a path:
+// "Vertrag › Kündigung › Fristen" — i18n-ok: German example, the compounds
+// are the point. That is the information which lets an agent place a
+// paragraph without loading the page.
 
 const (
 	// Target size of a passage. Big enough for one thought, small enough that a
@@ -34,7 +35,7 @@ const (
 
 type pageChunk struct {
 	Ord     int
-	Heading string // heading path, e.g. "Verträge › Kündigung"
+	Heading string // heading path, e.g. "Verträge › Kündigung" (i18n-ok: example)
 	Text    string
 }
 
@@ -181,9 +182,9 @@ func (s *Server) reindexChunks(pageID, workspaceID, title string, content []byte
 			VALUES (?, ?, ?, ?, ?, ?)`, id, pageID, workspaceID, c.Ord, c.Heading, c.Text); err != nil {
 			return err
 		}
-		// The title goes into every passage: otherwise "Vertrag Kündigung"
+		// The title goes into every passage: otherwise a two-word German query
 		// finds nothing when one word is in the title and the other in the
-		// paragraph.
+		// paragraph — i18n-ok: "Vertrag Kündigung" is the example that showed it.
 		if _, err := s.db.Exec(`INSERT INTO chunks_fts (chunk_id, title, heading, text) VALUES (?, ?, ?, ?)`,
 			id, title, c.Heading, c.Text); err != nil {
 			return err

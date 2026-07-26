@@ -1,5 +1,8 @@
 package server
 
+// i18n-ok-file: the CSV fixture is deliberately German ("Priorität") — it
+// tests that a non-ASCII column header survives the Notion import.
+
 import (
 	"archive/zip"
 	"bytes"
