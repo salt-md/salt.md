@@ -9,43 +9,41 @@ import (
 	"strings"
 )
 
-// Kontenlebenszyklus (W105).
+// Account lifecycle (W105).
 //
-// Bisher gab es nur "löschen", und das räumte still auf: die Mitgliedschaften
-// verschwanden per CASCADE, und war jemand das einzige Mitglied eines
-// Workspace, blieb der mit null Mitgliedern zurück — für niemanden mehr
-// sichtbar, aber mit allen Seiten, Dateien und Suchindex-Einträgen. Der Schutz
-// "letzter Admin" griff nur beim Verlassen eines Workspace, nicht beim Löschen
-// des Kontos.
+// There used to be only "delete", and it tidied up silently: memberships went
+// by CASCADE, and if somebody was a workspace's only member, that workspace
+// stayed behind with zero of them — invisible to everyone, but still holding
+// its pages, files and search index entries. The "last admin" guard only fired
+// when leaving a workspace, never when deleting the account.
 //
-// Drei Dinge ändern das:
+// Three things change that:
 //
-//	Stilllegen    der Normalfall beim Offboarding. Anmeldung zu, Sitzungen und
-//	              Token beendet, aber alles bleibt zurechenbar.
-//	Folgen zeigen wer löscht, sieht vorher, was daran hängt.
-//	Übergeben     geteilte Workspaces fallen an den dienstältesten verbliebenen
-//	              Admin, ersatzweise an den Owner. Nie ins Nichts.
+//	Deactivate       the normal case when somebody leaves. Sign-in closed,
+//	                 sessions and tokens ended, everything still attributable.
+//	Show the impact  whoever deletes sees first what hangs off the account.
+//	Hand over        shared workspaces go to the longest-serving remaining
+//	                 admin, failing that to the owner. Never into nothing.
 //
-// Der persönliche Bereich geht mit dem Menschen: ihn still an den Chef
-// weiterzureichen wäre genau das, was das Rechtemodell verhindern soll.
+// The personal space goes with the person: passing it quietly to the boss is
+// exactly what the permission model exists to prevent.
 
-// purgeWorkspace löscht einen Workspace samt Inhalt.
+// purgeWorkspace deletes a workspace and its content.
 //
-// `pages.workspace_id` wurde per ensureColumn nachgerüstet und hat KEINEN
-// Fremdschlüssel — an `workspaces` hängen per Kaskade nur workspace_members,
-// break_glass und tag_colors. Ein blankes `DELETE FROM workspaces` ließ die
-// Seiten also stehen: unsichtbar für jede Oberfläche (die Mitgliedschaft, über
-// die geprüft wird, ist weg), aber weiterhin in der Datenbank — und ein
-// vorhandener öffentlicher Freigabelink funktionierte weiter, ohne dass ihn
-// noch jemand hätte widerrufen können.
+// `pages.workspace_id` was added later via ensureColumn and has NO foreign
+// key — only workspace_members, break_glass and tag_colors cascade off
+// `workspaces`. A bare `DELETE FROM workspaces` therefore left the pages
+// standing: invisible to every interface (the membership it checks against is
+// gone) but still in the database — and any public share link kept working,
+// with nobody left who could revoke it.
 //
-// Alles in einer Transaktion, damit kein Halbzustand entsteht.
+// All in one transaction, so no half-state can survive.
 func (s *Server) purgeWorkspace(wsID string) error {
-	// Erst merken, welche Uploads an diesen Seiten hängen — nach dem DELETE
-	// steht es nirgends mehr. Eine Datei unter /files/<name> ist für jedes
-	// angemeldete Konto abrufbar; blieb sie liegen, war der Inhalt eines
-	// gelöschten persönlichen Bereichs weiter erreichbar, sobald jemand die URL
-	// hatte (aus einem Export, einer Kopie, dem Browserverlauf).
+	// Note first which uploads hang off these pages — after the DELETE nothing
+	// records it any more. A file under /files/<name> is fetchable by any
+	// signed-in account; left behind, the contents of a deleted personal space
+	// stayed reachable to anyone holding the URL (from an export, a copy, their
+	// browser history).
 	refs := map[string]bool{}
 	var pageIDs []string
 	if rows, err := s.db.Query(`SELECT id, COALESCE(content,''), COALESCE(props,''), COALESCE(cover,'') FROM pages WHERE workspace_id = ?`, wsID); err == nil {
@@ -67,14 +65,14 @@ func (s *Server) purgeWorkspace(wsID string) error {
 		return err
 	}
 	defer tx.Rollback()
-	// Freigabelinks und Kommentare hängen an pages und verschwinden mit ihnen;
-	// pages_fts ist eine virtuelle Tabelle ohne Fremdschlüssel und invites
-	// tragen die Workspace-Id ohne Verweis — beide von Hand.
+	// Share links and comments hang off pages and go with them; pages_fts is a
+	// virtual table without foreign keys, and invites carry the workspace id
+	// without a reference — both by hand.
 	if _, err := tx.Exec(`DELETE FROM pages_fts WHERE id IN (SELECT id FROM pages WHERE workspace_id = ?)`, wsID); err != nil {
 		return err
 	}
-	// chunks_fts ebenso von Hand: virtuelle Tabellen kennen keine Kaskade.
-	// page_chunks selbst haengt am Fremdschluessel und faellt mit den Seiten.
+	// chunks_fts by hand as well: virtual tables know no cascade. page_chunks
+	// itself hangs off a foreign key and falls with the pages.
 	if _, err := tx.Exec(`DELETE FROM chunks_fts WHERE chunk_id IN
 		(SELECT id FROM page_chunks WHERE workspace_id = ?)`, wsID); err != nil {
 		return err
@@ -92,9 +90,9 @@ func (s *Server) purgeWorkspace(wsID string) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
-	// Offene Editoren: wer die Seite gerade auf hat, tippt sonst weiter ins
-	// Leere — die yjs-Schreibvorgänge scheitern am Fremdschlüssel, der Fehler
-	// wird nur geloggt, und der Mensch merkt nichts, bis er neu lädt.
+	// Open editors: anyone with the page in front of them would otherwise keep
+	// typing into nothing — the yjs writes fail on the foreign key, the error is
+	// only logged, and the person notices nothing until they reload.
 	for _, pid := range pageIDs {
 		s.collab.reset(pid)
 	}
@@ -103,18 +101,17 @@ func (s *Server) purgeWorkspace(wsID string) error {
 	return nil
 }
 
-// removeUnreferencedFiles löscht Uploads, auf die keine Seite mehr zeigt.
+// removeUnreferencedFiles deletes uploads no page points at any more.
 //
-// Erst NACH dem Commit: solange die Zeilen noch da sind, wäre jede Datei noch
-// referenziert. Und nur, wenn wirklich niemand mehr darauf zeigt — dieselbe
-// Datei kann in einer Kopie oder einer verschobenen Seite weiterleben, und ein
-// fehlendes Bild in einem fremden Workspace wäre schlimmer als ein Rest auf
-// der Platte.
+// Only AFTER the commit: while the rows are still there, every file would look
+// referenced. And only when truly nothing points at it — the same file can live
+// on in a copy or a moved page, and a missing image in somebody else's
+// workspace would be worse than a leftover on disk.
 func (s *Server) removeUnreferencedFiles(refs map[string]bool) {
 	for name := range refs {
-		// Kein Pfadanteil: der Name kommt aus Seiteninhalt und ist damit vom
-		// Nutzer beeinflussbar. filepath.Base allein genügt nicht gegen "..",
-		// deshalb zusätzlich hart ablehnen.
+		// No path component: the name comes from page content and is therefore
+		// under the user's influence. filepath.Base alone is not enough against
+		// "..", hence the outright rejection as well.
 		if name == "" || strings.ContainsAny(name, "/\\") || strings.Contains(name, "..") {
 			continue
 		}
@@ -125,11 +122,11 @@ func (s *Server) removeUnreferencedFiles(refs map[string]bool) {
 		if used > 0 {
 			continue
 		}
-		// Nicht nur der AKTUELLE Inhalt zählt. Eine Revision lässt sich
-		// wiederherstellen (history.go schreibt sie 1:1 zurück), ein Kommentar
-		// kann auf die Datei verlinken, und ein Profilbild liegt im selben
-		// Verzeichnis. Ohne diese drei Abfragen hinterließ das Aufräumen ein
-		// totes Bild in einer wiederherstellbaren Fassung einer FREMDEN Seite.
+		// The CURRENT content is not the only thing that counts. A revision can
+		// be restored (history.go writes it back verbatim), a comment can link
+		// to the file, and a profile picture lives in the same directory.
+		// Without these three queries the clean-up left a dead image inside a
+		// restorable version of SOMEBODY ELSE'S page.
 		var elsewhere int
 		s.db.QueryRow(`SELECT
 			(SELECT COUNT(*) FROM page_revisions WHERE content LIKE ?) +
@@ -146,25 +143,25 @@ func (s *Server) removeUnreferencedFiles(refs map[string]bool) {
 	}
 }
 
-// deletionImpact beschreibt, was das Löschen eines Kontos nach sich zieht.
+// deletionImpact describes what deleting an account drags along with it.
 type deletionImpact struct {
 	UserName string `json:"userName"`
-	// Personal: Bereiche, die mit dem Konto verschwinden.
+	// Personal: spaces that disappear along with the account.
 	Personal []impactWorkspace `json:"personal"`
-	// Orphaned: geteilte Workspaces, in denen niemand sonst Admin ist — sie
-	// werden übergeben, nicht gelöscht.
+	// Orphaned: shared workspaces where nobody else is an admin — they are
+	// handed over, not deleted.
 	Orphaned []impactWorkspace `json:"orphaned"`
-	// Shared: persönliche Bereiche, in die das Konto ANDERE eingeladen hat. Sie
-	// werden nicht vernichtet — dort liegt fremde Arbeit. Sie werden zu
-	// gewöhnlichen Workspaces und gehen an die verbliebenen Mitglieder; die
-	// privaten Seiten des gelöschten Kontos verschwinden trotzdem.
+	// Shared: personal spaces this account invited OTHERS into. They are not
+	// destroyed — somebody else's work is in there. They become ordinary
+	// workspaces and go to the remaining members; the deleted account's private
+	// pages disappear all the same.
 	Shared []impactWorkspace `json:"shared"`
-	// Pages: Seiten, die dem Konto gehören und in GETEILTEN Workspaces liegen.
-	// Sie bleiben stehen; ihre privaten sind danach nur noch für
-	// Workspace-Admins lesbar.
+	// Pages: pages owned by the account that sit in SHARED workspaces. They
+	// stay; the private ones among them become readable to workspace admins
+	// only.
 	Pages int `json:"pages"`
-	// Err: die Bestandsaufnahme ist gescheitert. Dann darf NICHTS ausgeführt
-	// werden — ein leerer Plan sähe aus wie "es hängt nichts dran".
+	// Err: taking stock failed. Then NOTHING may be carried out — an empty plan
+	// looks exactly like "nothing hangs off this".
 	Err error `json:"-"`
 }
 
@@ -173,11 +170,11 @@ type impactWorkspace struct {
 	Name    string `json:"name"`
 	Pages   int    `json:"pages"`
 	Members int    `json:"members"`
-	// Heir: wer den Workspace übernimmt (leer = der Instanz-Owner).
+	// Heir: who takes the workspace on (empty = the instance owner).
 	Heir string `json:"heir,omitempty"`
 }
 
-// deletionImpactOf sammelt die Folgen, ohne etwas zu ändern.
+// deletionImpactOf gathers the consequences without changing anything.
 func (s *Server) deletionImpactOf(userID string) deletionImpact {
 	out := deletionImpact{Personal: []impactWorkspace{}, Orphaned: []impactWorkspace{}, Shared: []impactWorkspace{}}
 	if u := s.userByID(userID); u != nil {
@@ -191,9 +188,9 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 		FROM workspace_members m JOIN workspaces w ON w.id = m.workspace_id
 		WHERE m.user_id = ? ORDER BY w.created_at`, userID, userID, userID)
 	if err != nil {
-		// Still zurückzugeben hieße: kein Purge, keine Übergabe, und das Konto
-		// wird trotzdem gelöscht — genau der verwaiste Zustand, den W105
-		// abschafft. Der Aufrufer erfährt es über Err.
+		// Returning quietly would mean: no purge, no handover, and the account
+		// deleted anyway — precisely the orphaned state W105 does away with. The
+		// caller learns about it through Err.
 		log.Printf("deletionImpactOf %s: %v", userID, err)
 		out.Err = err
 		return out
@@ -216,9 +213,9 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 	for _, x := range all {
 		iw := impactWorkspace{ID: x.id, Name: x.name, Pages: x.pages, Members: x.members}
 		if x.personal != 0 {
-			// Nur wenn wirklich niemand sonst drin ist. Ein persönlicher Bereich
-			// darf Gäste haben (sein Mensch lädt sie selbst ein) — und dann liegt
-			// dort fremde Arbeit, die ein Kontolöschen nicht mitnehmen darf.
+			// Only when truly nobody else is in there. A personal space may have
+			// guests (its person invites them) — and then it holds somebody
+			// else's work, which deleting an account must not take with it.
 			if x.members <= 1 {
 				out.Personal = append(out.Personal, iw)
 			} else {
@@ -227,17 +224,17 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 			}
 			continue
 		}
-		// Ein FREMDER persönlicher Bereich, in den das Konto einmal eingeladen
-		// wurde: er verschwindet nicht (er gehört jemand anderem) und er wird
-		// auch nicht übergeben. Ohne diese Zeile lief er in den Zweig für
-		// geteilte Workspaces und landete beim Instanz-Owner, sobald der
-		// Eingeladene das letzte verbliebene Mitglied war — der persönliche
-		// Bereich eines anderen Menschen, dauerhaft, ohne Notfallzugriff.
-		// Die Mitgliedschaft allein fällt beim Löschen per CASCADE weg.
+		// SOMEBODY ELSE'S personal space that this account was once invited
+		// into: it does not disappear (it belongs to another person) and it is
+		// not handed over either. Without this line it fell into the branch for
+		// shared workspaces and landed with the instance owner as soon as the
+		// invitee was the last remaining member — another human being's personal
+		// space, permanently, with no emergency access involved. The membership
+		// alone goes by CASCADE on delete.
 		if x.foreignPersonal != 0 {
 			continue
 		}
-		// Geteilt: gibt es noch einen anderen Admin?
+		// Shared: is there another admin left?
 		var heirID, heirName string
 		s.db.QueryRow(`SELECT u.id, u.name FROM workspace_members m JOIN users u ON u.id = m.user_id
 			WHERE m.workspace_id = ? AND m.role = 'admin' AND m.user_id != ? AND u.disabled = 0
@@ -245,12 +242,12 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 		if heirID != "" {
 			continue // hat einen Nachfolger, keine Folge zu melden
 		}
-		// Nur wenn NIEMAND sonst mehr Mitglied ist, übernimmt der Owner. Sonst
-		// gehört der Workspace weiter denen, die drin sind — fehlt dort ein
-		// Verantwortlicher, wird einer von ihnen ernannt. Mit der schwächeren
-		// Bedingung hätte das Löschen eines beliebigen Mitglieds gereicht, um
-		// den Owner dauerhaft in einen fremden Workspace zu setzen, sobald
-		// dessen Admins nur stillgelegt waren.
+		// The owner only takes over when NOBODY else is a member any more.
+		// Otherwise the workspace still belongs to the people in it — and if
+		// nobody there is in charge, one of them gets appointed. With the weaker
+		// condition, deleting any member at all would have been enough to seat
+		// the owner permanently inside somebody else's workspace, as soon as its
+		// admins were merely deactivated.
 		if x.members > 1 {
 			continue
 		}
@@ -262,7 +259,7 @@ func (s *Server) deletionImpactOf(userID string) deletionImpact {
 	return out
 }
 
-// handleDeletionImpact zeigt vor dem Löschen, was daran hängt.
+// handleDeletionImpact shows what hangs off an account before it is deleted.
 func (s *Server) handleDeletionImpact(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if s.userByID(id) == nil {
@@ -272,7 +269,7 @@ func (s *Server) handleDeletionImpact(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.deletionImpactOf(id))
 }
 
-// handleSetUserDisabled legt ein Konto still oder aktiviert es wieder.
+// handleSetUserDisabled deactivates an account or brings it back.
 func (s *Server) handleSetUserDisabled(w http.ResponseWriter, r *http.Request) {
 	me := requestUser(r)
 	id := r.PathValue("id")
@@ -292,8 +289,8 @@ func (s *Server) handleSetUserDisabled(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "Du kannst dein eigenes Konto nicht stilllegen.")
 		return
 	}
-	// Denselben Schutz wie beim Löschen: ohne Owner steht die Instanz ohne
-	// Verantwortlichen da, und die Rolle ist über die App nicht neu vergebbar.
+	// The same guard as for deletion: without an owner the instance is left with
+	// nobody in charge, and the role cannot be handed out again from the app.
 	if body.Disabled && s.isOwner(id) {
 		httpErrorCode(w, 400, "owner_cannot_be_disabled", "The owner cannot be deactivated — hand the owner role on first.")
 		return
@@ -309,25 +306,25 @@ func (s *Server) handleSetUserDisabled(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if body.Disabled {
-		// Ein stillgelegtes Konto darf nicht weiterlaufen, nur weil es schon
-		// angemeldet war. Sitzungen und Token enden sofort.
+		// A deactivated account must not keep running merely because it was
+		// already signed in. Sessions and tokens end at once.
 		s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id)
 		s.db.Exec(`DELETE FROM api_tokens WHERE user_id = ?`, id)
-		// Der Kalender-Abo-Link liegt nicht in api_tokens, sondern als
-		// app_settings-Zeile — er haette sonst unbefristet weiter alle Termine
-		// und Datenbanken der Workspaces ausgeliefert, ohne Anmeldung.
+		// The calendar subscription link does not live in api_tokens but as an
+		// app_settings row — otherwise it would have gone on serving every date
+		// and database in those workspaces indefinitely, with no sign-in.
 		s.db.Exec(`DELETE FROM app_settings WHERE key = ?`, "ics_token_"+id)
-		// Und der offene Editor: der Collab-Socket wird nur beim Verbinden
-		// geprüft. Ohne das hier schrieb ein gerade stillgelegtes Konto in einem
-		// offenen Tab munter weiter — die Sperre hätte erst beim nächsten Laden
-		// gewirkt.
+		// And the open editor: the collab socket is only checked when it
+		// connects. Without this, an account deactivated a moment ago carried on
+		// writing happily from an open tab — the lock would not have bitten
+		// until the next page load.
 		s.collab.dropUser(id)
 	}
 	s.audit("human", me.ID, me.Name, action, "", "", target.Name)
 	writeJSON(w, s.userByID(id))
 }
 
-// seniorMemberName nennt das dienstälteste aktive Mitglied außer dem Genannten.
+// seniorMemberName names the longest-serving active member other than the one given.
 func (s *Server) seniorMemberName(wsID, exceptUser string) string {
 	var name string
 	s.db.QueryRow(`SELECT u.name FROM workspace_members m JOIN users u ON u.id = m.user_id
@@ -337,34 +334,34 @@ func (s *Server) seniorMemberName(wsID, exceptUser string) string {
 	return name
 }
 
-// applyDeletion führt aus, was deletionImpactOf ermittelt hat.
+// applyDeletion carries out what deletionImpactOf worked out.
 //
-// Läuft NACH dem DELETE auf users, mit dem vorher aufgenommenen Plan: das
-// Konto ist dann sicher weg, und schlägt hier etwas fehl, bleibt schlimmstenfalls
-// ein Workspace ohne Verantwortlichen zurück — den die Aufräum-Ansicht zeigt.
-// Andersherum (erst vernichten, dann löschen) wäre der schlechteste Ausgang
-// gewesen: Inhalte unwiederbringlich weg, Konto weiter angemeldet.
+// Runs AFTER the DELETE on users, with the plan taken beforehand: the account
+// is then reliably gone, and if something fails here the worst that remains is
+// a workspace with nobody in charge — which the clean-up view lists. The other
+// way round (destroy first, then delete) would have been the worst outcome:
+// content gone beyond recovery, account still signed in.
 func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName string) {
-	// Persönliche Bereiche gehen mit dem Menschen. Der Inhalt hängt per
-	// ON DELETE CASCADE an der Workspace-Zeile.
+	// Personal spaces go with the person. The content hangs off the workspace
+	// row via ON DELETE CASCADE.
 	for _, ws := range impact.Personal {
 		if err := s.purgeWorkspace(ws.ID); err != nil {
 			log.Printf("purge personal workspace %s: %v", ws.ID, err)
 			continue
 		}
-		// Protokoll erst NACH der Tat — sonst behauptet die Zeile eine Löschung,
-		// die nicht stattgefunden hat. Ohne Workspace-Bezug, weil es ihn nicht
-		// mehr gibt und Einträge zu verschwundenen Workspaces sonst deren
-		// Seitentitel offenlegen würden.
+		// Log only AFTER the deed — otherwise the entry claims a deletion that
+		// never happened. With no workspace reference, because there is no
+		// workspace any more and entries about vanished ones would otherwise
+		// expose their page titles.
 		s.audit("human", actorID, actorName, "delete_workspace", "", "",
 			fmt.Sprintf("%s (persönlicher Bereich von %s, %d Seiten)", ws.Name, impact.UserName, ws.Pages))
 	}
 
-	// Persönliche Bereiche MIT Gästen: dort liegt fremde Arbeit. Sie werden zu
-	// gewöhnlichen Workspaces und bleiben bei denen, die drin sind. Die PRIVATEN
-	// Seiten des gelöschten Kontos verschwinden trotzdem — sie waren für die
-	// Gäste nie sichtbar, und über den Umweg "Workspace-Admin sieht alles"
-	// würden sie es sonst plötzlich.
+	// Personal spaces WITH guests: somebody else's work is in there. They become
+	// ordinary workspaces and stay with the people in them. The deleted
+	// account's PRIVATE pages disappear all the same — the guests could never
+	// see them, and via the detour "a workspace admin sees everything" they
+	// suddenly would.
 	for _, ws := range impact.Shared {
 		if _, err := s.db.Exec(`DELETE FROM pages_fts WHERE id IN
 			(SELECT id FROM pages WHERE workspace_id = ? AND owner_id = ? AND visibility = 'private')`, ws.ID, userID); err != nil {
@@ -376,7 +373,7 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 		if _, err := s.db.Exec(`UPDATE workspaces SET is_personal = 0 WHERE id = ?`, ws.ID); err != nil {
 			log.Printf("shared personal %s: flag: %v", ws.ID, err)
 		}
-		// Wer übernimmt: dienstältestes aktives Mitglied, notfalls der Owner.
+		// Who takes over: longest-serving active member, failing that the owner.
 		var heir string
 		s.db.QueryRow(`SELECT m.user_id FROM workspace_members m JOIN users u ON u.id = m.user_id
 			WHERE m.workspace_id = ? AND m.user_id != ? AND u.disabled = 0
@@ -390,9 +387,9 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 			fmt.Sprintf("%s (war persönlicher Bereich von %s, hat weitere Mitglieder)", ws.Name, impact.UserName))
 	}
 
-	// Geteilte ohne verbleibenden Admin: der Instanz-Owner übernimmt. Ein
-	// Workspace ohne Verantwortlichen wäre für niemanden mehr sichtbar, seine
-	// Seiten lägen aber weiter in der Datenbank.
+	// Shared ones with no admin left: the instance owner takes over. A workspace
+	// with nobody in charge would be invisible to everyone, while its pages went
+	// on sitting in the database.
 	var ownerID string
 	s.db.QueryRow(`SELECT user_id FROM org_members WHERE org_id = ? AND role = ?`, s.defaultOrg(), roleOwner).Scan(&ownerID)
 	for _, ws := range impact.Orphaned {
@@ -406,13 +403,13 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 			fmt.Sprintf("%s übernommen (vorher %s)", ws.Name, impact.UserName))
 	}
 
-	// Alle übrigen: Eigentümer war der Gelöschte, aber es gibt noch Admins —
-	// der dienstälteste erbt, damit owner_id nicht ins Leere zeigt.
+	// All the rest: the deleted account was the owner, but admins remain — the
+	// longest-serving inherits, so owner_id does not point at nothing.
 	//
-	// is_personal = 0: ein persönlicher Bereich, dessen Löschung oben scheiterte,
-	// darf hier nicht hintenherum an den nächsten Admin oder den Instanz-Owner
-	// wandern — genau das "still an den Chef weiterreichen", das dieses Modul
-	// ausschließt. Er bleibt liegen und taucht in der Aufräum-Ansicht auf.
+	// is_personal = 0: a personal space whose deletion failed above must not
+	// wander round the back to the next admin or the instance owner — that is
+	// exactly the "pass it quietly to the boss" this module rules out. It stays
+	// where it is and shows up in the clean-up view.
 	rows, err := s.db.Query(`SELECT id FROM workspaces WHERE owner_id = ? AND is_personal = 0`, userID)
 	if err != nil {
 		return
@@ -439,7 +436,7 @@ func (s *Server) applyDeletion(impact deletionImpact, userID, actorID, actorName
 	}
 }
 
-// ---- Aufräumen: Workspaces ohne Verantwortlichen -------------------------
+// ---- Clean-up: workspaces with nobody in charge --------------------------
 
 type strandedWorkspace struct {
 	ID      string `json:"id"`
@@ -448,19 +445,20 @@ type strandedWorkspace struct {
 	Members int    `json:"members"`
 	Admins  int    `json:"admins"`
 	Pages   int    `json:"pages"`
-	// Adoptable: wirklich niemand mehr da. Bei "Mitglieder ohne Admin" ist der
-	// richtige Weg, einen von ihnen zu ernennen — nicht selbst einzuziehen.
+	// Adoptable: truly nobody left. With "members but no admin" the right move
+	// is to appoint one of them — not to move in yourself.
 	Adoptable bool `json:"adoptable"`
-	// Deletable: aufraeumen geht auch bei einem verwaisten PERSOENLICHEN Bereich
-	// — das ist genau der Rest, der vor W105 beim Loeschen eines Kontos entstand.
-	// Uebernehmen (und damit lesen) waere dort das Falsche, wegwerfen nicht.
+	// Deletable: clearing up works for an orphaned PERSONAL space too — that is
+	// exactly the leftover deleting an account produced before W105. Adopting it
+	// (and thereby reading it) would be the wrong move there; throwing it away
+	// is not.
 	Deletable bool `json:"deletable"`
 	Personal  bool `json:"personal"`
 }
 
-// handleStrandedWorkspaces listet Workspaces, um die sich niemand mehr kümmern
-// kann: ohne Mitglied oder ohne Admin. Solche Reste konnten vor W105 entstehen
-// (Konto gelöscht) und waren in keiner Oberfläche mehr zu sehen.
+// handleStrandedWorkspaces lists workspaces nobody can look after any more:
+// without a member, or without an admin. Leftovers like these could appear
+// before W105 (account deleted) and were visible in no interface at all.
 func (s *Server) handleStrandedWorkspaces(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`
 		SELECT w.id, w.name, COALESCE(u.name, ''), w.is_personal,
@@ -483,15 +481,14 @@ func (s *Server) handleStrandedWorkspaces(w http.ResponseWriter, r *http.Request
 			continue
 		}
 		x.Personal = personal != 0
-		// Ein persönlicher Bereich, in dem sein Mensch noch drinsteht, ist kein
-		// herrenloser Rest — auch wenn das Konto stillgelegt ist und deshalb
-		// kein AKTIVER Admin gezählt wird. Ohne diese Zeile stand nach jedem
-		// Stilllegen ein Eintrag in der Liste, für den es keinen Knopf und
-		// keinen gangbaren Rat gab: der einzige Vorschlag ("ernenne einen der
-		// Mitglieder zum Admin") ist bei persönlichen Bereichen gesperrt.
-		// Stilllegen ist der Normalfall beim Offboarding — die Liste wäre
-		// dauerhaft zugerauscht und ein echt herrenloser Workspace darin
-		// untergegangen.
+		// A personal space its person is still listed in is not an ownerless
+		// leftover — even when the account is deactivated and therefore counts
+		// as no ACTIVE admin. Without this line, every deactivation put an entry
+		// in the list for which there was neither a button nor any usable
+		// advice: the one suggestion ("make one of the members an admin") is
+		// barred for personal spaces. Deactivating is the normal case when
+		// somebody leaves — the list would have been permanently full of noise,
+		// and a genuinely ownerless workspace would have drowned in it.
 		if x.Personal && x.Members > 0 {
 			continue
 		}
@@ -505,9 +502,9 @@ func (s *Server) handleStrandedWorkspaces(w http.ResponseWriter, r *http.Request
 	writeJSON(w, list)
 }
 
-// handleAdoptWorkspace macht den Owner zum Admin eines herrenlosen Workspace.
-// Nur für solche ohne Verantwortlichen — sonst wäre es die Selbstzuweisung, die
-// W101 ausdrücklich abgeschafft hat (dafür gibt es den Notfallzugriff).
+// handleAdoptWorkspace makes the owner an admin of an ownerless workspace.
+// Only for ones with nobody in charge — otherwise it would be the self-grant
+// W101 expressly did away with (emergency access is what exists for that).
 func (s *Server) handleAdoptWorkspace(w http.ResponseWriter, r *http.Request) {
 	me := requestUser(r)
 	wsID := r.PathValue("id")
@@ -516,15 +513,15 @@ func (s *Server) handleAdoptWorkspace(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 404, "workspace not found")
 		return
 	}
-	// Bedingung ist "kein Mitglied mehr", nicht "kein AKTIVER Admin".
+	// The condition is "no members left", not "no ACTIVE admin".
 	//
-	// Mit der schwächeren Bedingung wäre das hier ein Generalschlüssel gewesen:
-	// ein stillgelegtes Konto zählt nicht mehr als Admin, also hätte
-	// "stilllegen, dann adoptieren" jeden fremden Bereich geöffnet — dauerhaft,
-	// wo der Notfallzugriff nur befristet und für die Betroffenen sichtbar ist.
-	// Solange jemand Mitglied ist, gehört der Workspace diesen Menschen; fehlt
-	// dort ein Verantwortlicher, ernennt der Owner einen aus ihrer Mitte
-	// (Nutzerverwaltung), statt selbst einzuziehen.
+	// With the weaker condition this would have been a master key: a deactivated
+	// account no longer counts as an admin, so "deactivate, then adopt" would
+	// have opened any space at all — permanently, where emergency access is
+	// time-limited and visible to the people affected. As long as somebody is a
+	// member, the workspace belongs to those people; if nobody there is in
+	// charge, the owner appoints one from among them (user management) rather
+	// than moving in.
 	var members, personal int
 	s.db.QueryRow(`SELECT COUNT(*) FROM workspace_members WHERE workspace_id = ?`, wsID).Scan(&members)
 	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
@@ -546,8 +543,8 @@ func (s *Server) handleAdoptWorkspace(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "name": name})
 }
 
-// handleDeleteStrandedWorkspace entfernt einen herrenlosen Workspace samt
-// Inhalt. Verlangt den Namen als Bestätigung, wie beim normalen Löschen.
+// handleDeleteStrandedWorkspace removes an ownerless workspace and its
+// content. Asks for the name as confirmation, as ordinary deletion does.
 func (s *Server) handleDeleteStrandedWorkspace(w http.ResponseWriter, r *http.Request) {
 	me := requestUser(r)
 	wsID := r.PathValue("id")

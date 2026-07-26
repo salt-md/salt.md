@@ -8,71 +8,70 @@ import (
 	"time"
 )
 
-// Rechtemodell (W101).
+// Permission model (W101).
 //
-// Vier Stufen, von außen nach innen:
+// Four levels, outside in:
 //
-//	Owner            betreibt die Instanz. Hat ohnehin Zugriff auf die
-//	                 SQLite-Datei — das ist die ehrliche Grenze. In der App
-//	                 heißt das: Instanzkonfiguration, Konten-Lebenszyklus
-//	                 (inkl. Passwort-Reset) und Notfallzugriff (break_glass),
-//	                 aber jede dieser Handlungen hinterlässt eine Spur.
-//	Admin            verwaltet Menschen, nicht Inhalte. Konten anlegen und
-//	                 pflegen, einladen, Nutzerliste. Ausdrücklich NICHT:
-//	                 fremde Passwörter setzen, sich in fremde Workspaces
-//	                 eintragen, fremde Workspaces exportieren. Ohne diese drei
-//	                 Verbote wäre die Grenze Theater — wer ein Passwort setzen
-//	                 kann, kann sich anmelden und alles lesen.
-//	Workspace-Admin  alles im eigenen Workspace, nichts außerhalb.
-//	Mitglied/Betrachter
+//	Owner            runs the instance. Has access to the SQLite file anyway —
+//	                 that is the honest boundary. Inside the app it means:
+//	                 instance configuration, the account lifecycle (password
+//	                 resets included) and emergency access (break_glass), but
+//	                 every one of those acts leaves a trace.
+//	Admin            manages people, not content. Create and maintain accounts,
+//	                 invite, see the user list. Expressly NOT: set somebody
+//	                 else's password, add themselves to somebody else's
+//	                 workspace, export somebody else's workspace. Without those
+//	                 three prohibitions the boundary would be theatre — whoever
+//	                 can set a password can sign in and read everything.
+//	Workspace admin  everything inside their own workspace, nothing outside it.
+//	Member/viewer
 //
-// Die Rollen liegen in org_members — bewusst als Spiegel von
-// workspace_members. Heute existiert genau eine Organisation (diese Instanz);
-// wird daraus eine gehostete Mehrmandanten-Version, ist org_id bereits die
-// Schranke.
+// The roles live in org_members, deliberately mirroring workspace_members.
+// Today exactly one organisation exists (this instance); should this ever
+// become a hosted multi-tenant version, org_id is already the boundary.
 
 const (
 	roleOwner  = "owner"
 	roleAdmin  = "admin"
 	roleMember = "member"
 
-	// breakGlassTTL: lang genug für eine Prüfung, kurz genug, dass ein
-	// vergessener Zugriff nicht zum Dauerzustand wird.
+	// breakGlassTTL: long enough for a review, short enough that a forgotten
+	// grant does not become a permanent state.
 	breakGlassTTL = 2 * time.Hour
 )
 
-// tsFixed ist RFC3339 mit IMMER neun Nachkommastellen. now() nutzt
-// RFC3339Nano, das nachlaufende Nullen abschneidet — dadurch ist ein kuerzerer
-// Zeitstempel Praefix eines laengeren, und beim Stringvergleich in SQL gewinnt
-// faelschlich das 'Z' (90) gegen jede Ziffer (48-57). Ein abgelaufener
-// Notfallzugriff koennte so kurz weitergelten. Feste Breite heisst:
-// lexikografisch == chronologisch.
+// tsFixed is RFC3339 with ALWAYS nine decimal places. now() uses RFC3339Nano,
+// which trims trailing zeroes — that makes a shorter timestamp a prefix of a
+// longer one, and in SQL's string comparison the 'Z' (90) then wrongly beats
+// any digit (48-57). An expired emergency grant could go on counting as valid.
+// Fixed width means: lexicographic == chronological.
 const tsFixed = "2006-01-02T15:04:05.000000000Z07:00"
 
 func nowFixed() string { return time.Now().UTC().Format(tsFixed) }
 
-// headerSafe entfernt Zeilenumbrueche aus einem Mail-Kopfzeilenwert.
+// headerSafe strips line breaks out of a mail header value.
 func headerSafe(v string) string {
 	return strings.NewReplacer("\r", " ", "\n", " ").Replace(v)
 }
 
-// defaultOrg liefert die (heute einzige) Organisation. Der Wert ändert sich
-// zur Laufzeit nicht, wird aber bewusst nicht global gecacht: der Aufruf ist
-// billig, und ein Cache wäre die erste Stelle, die bei Mehrmandantenfähigkeit
-// falsch würde.
+// defaultOrg returns the (today only) organisation. The value does not change
+// at runtime but is deliberately not cached globally: the call is cheap, and a
+// cache would be the first thing to go wrong the day this becomes
+// multi-tenant.
 func (s *Server) defaultOrg() string {
 	var id string
 	s.db.QueryRow(`SELECT id FROM organizations ORDER BY created_at LIMIT 1`).Scan(&id)
 	return id
 }
 
-// migrateOrg legt die Organisation an und leitet die Rollen aus dem Bestand
-// ab. Idempotent: läuft bei jedem Start, ändert nach dem ersten Mal nichts.
+// migrateOrg creates the organisation and derives the roles from what is
+// already there. Idempotent: runs on every start, changes nothing after the
+// first time.
 func (s *Server) migrateOrg() error {
 	var userCount int
 	s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&userCount)
 	if userCount == 0 {
-		// Frische Installation: handleSetup legt Organisation und Owner an.
+		// Fresh installation: handleSetup creates the organisation and owner.
 		return nil
 	}
 	orgID := s.defaultOrg()
@@ -87,17 +86,16 @@ func (s *Server) migrateOrg() error {
 			return fmt.Errorf("create organization: %w", err)
 		}
 	}
-	// Gibt es bereits einen Owner, bleibt er es — die Wahl unten greift nur,
-	// solange keiner existiert.
+	// If an owner already exists they stay one — the election below only fires
+	// while there is none.
 	var existingOwner string
 	s.db.QueryRow(`SELECT user_id FROM org_members WHERE org_id = ? AND role = ?`, orgID, roleOwner).Scan(&existingOwner)
 
-	// Der dienstälteste Admin wird Owner — er hat die Instanz aufgesetzt.
-	// Gibt es keinen Admin (sollte nicht vorkommen), fällt es auf den
-	// dienstältesten Nutzer zurück, damit die Instanz nie ownerlos ist.
-	// disabled = 0: ein stillgelegtes Konto zum Owner zu machen ist eine
-	// Sackgasse — es kann sich nicht anmelden, und Owner lassen sich nicht
-	// stilllegen, also auch nicht wieder aktivieren.
+	// The longest-serving admin becomes owner — they set the instance up. With
+	// no admin at all (which should not happen) it falls back to the
+	// longest-serving user, so the instance is never ownerless. disabled = 0:
+	// making a deactivated account the owner is a dead end — it cannot sign in,
+	// and owners cannot be deactivated, so it cannot be reactivated either.
 	var ownerID string
 	s.db.QueryRow(`SELECT id FROM users WHERE is_admin = 1 AND disabled = 0 ORDER BY created_at LIMIT 1`).Scan(&ownerID)
 	if ownerID == "" {
@@ -127,24 +125,24 @@ func (s *Server) migrateOrg() error {
 		if x.id == ownerID && existingOwner == "" {
 			role = roleOwner
 		}
-		// ON CONFLICT DO NOTHING: eine später von Hand vergebene Rolle darf ein
-		// Neustart nicht wieder überschreiben.
+		// ON CONFLICT DO NOTHING: a role granted by hand later must not be
+		// overwritten by a restart.
 		s.db.Exec(`INSERT INTO org_members (org_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
 			orgID, x.id, role)
 	}
-	// Nachwahl: hat die Instanz keinen Owner (etwa weil das Konto außerhalb der
-	// App entfernt wurde), wird der dienstälteste Admin dazu befördert — sonst
-	// bliebe sie ohne Verantwortlichen, und die Rolle ist über die App nirgends
-	// vergebbar. Das UPDATE ist nötig, weil sein DO-NOTHING-Insert oben an der
-	// vorhandenen admin-Zeile abprallt.
+	// By-election: if the instance has no owner (because the account was removed
+	// outside the app, say), the longest-serving admin is promoted — otherwise
+	// it would be left with nobody in charge, and the role cannot be granted
+	// anywhere in the app. The UPDATE is needed because their DO-NOTHING insert
+	// above bounces off the existing admin row.
 	if existingOwner == "" && ownerID != "" {
 		s.db.Exec(`UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ?`, roleOwner, orgID, ownerID)
 	}
-	// Bestandsinstanzen: bisher landete jeder Neuzugang im ältesten Workspace.
-	// Damit sich der Einstieg nach dem Update nicht STILL ändert, wird genau der
-	// als "für alle" markiert — sichtbar im Workspace-Menü und abschaltbar. Nur
-	// wenn noch gar keiner markiert ist, sonst würde eine bewusste Entscheidung
-	// des Owners bei jedem Neustart überschrieben.
+	// Existing instances: every newcomer used to land in the oldest workspace.
+	// So the entry point does not change SILENTLY after the update, exactly that
+	// one is marked "open to all" — visible in the workspace menu and switchable
+	// off. Only when none is marked yet, or a deliberate decision by the owner
+	// would be overwritten on every restart.
 	var marked int
 	s.db.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE auto_join = 1`).Scan(&marked)
 	if marked == 0 {
@@ -155,9 +153,9 @@ func (s *Server) migrateOrg() error {
 		}
 	}
 
-	// Workspaces ohne Eigentümer: der dienstälteste Workspace-Admin übernimmt,
-	// ersatzweise der Instanz-Owner. Ein Workspace ohne Eigentümer wäre genau
-	// der herrenlose Zustand, den W101 abschafft.
+	// Workspaces with no owner: the longest-serving workspace admin takes over,
+	// failing that the instance owner. A workspace without an owner would be
+	// precisely the ownerless state W101 does away with.
 	wsRows, err := s.db.Query(`SELECT id FROM workspaces WHERE owner_id = ''`)
 	if err != nil {
 		return err
@@ -186,15 +184,15 @@ func (s *Server) migrateOrg() error {
 	return nil
 }
 
-// ---- Wo ein neues Konto landet (W102) ------------------------------------
+// ---- Where a new account lands (W102) ------------------------------------
 //
-// Zwei Wege, und nur diese: ein Workspace, der ihm gehört, und die, die der
-// Owner ausdrücklich für alle geöffnet hat. Vorher erbte ein neu angelegtes
-// Konto sämtliche Workspaces des anlegenden Admins, und wer sich selbst
-// registrierte, landete im ältesten Workspace der Instanz — beides Annahmen,
-// die so nie jemand getroffen hatte.
+// Two paths, and only these: a workspace that belongs to it, and the ones the
+// owner has expressly opened to everyone. Before this, a newly created account
+// inherited every workspace of the admin who created it, and anyone who
+// registered themselves landed in the instance's oldest workspace — both
+// assumptions nobody had ever actually made.
 
-// personalWorkspaceName: der Bereich trägt den Namen des Menschen.
+// personalWorkspaceName: the space carries the person's name.
 func personalWorkspaceName(userName string) string {
 	userName = strings.TrimSpace(userName)
 	if userName == "" {
@@ -206,9 +204,9 @@ func personalWorkspaceName(userName string) string {
 	return userName
 }
 
-// createPersonalWorkspace legt den eigenen Bereich eines Kontos an: Eigentümer
-// und Admin ist der Mensch selbst. Liefert "" wenn es nicht klappt — dann steht
-// das Konto ohne eigenen Bereich da, was die Oberfläche abfängt.
+// createPersonalWorkspace creates an account's own space: the person is both
+// its owner and its admin. Returns "" when that fails — the account is then
+// left without a space of its own, which the interface handles.
 func (s *Server) createPersonalWorkspace(userID, userName string) string {
 	id := newID()
 	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id, is_personal) VALUES (?, ?, ?, ?, 1)`,
@@ -222,8 +220,8 @@ func (s *Server) createPersonalWorkspace(userID, userName string) string {
 	return id
 }
 
-// joinAutoWorkspaces trägt ein Konto in alle Workspaces ein, die für alle
-// geöffnet sind. Rolle: Mitglied — wer mehr braucht, bekommt es vergeben.
+// joinAutoWorkspaces adds an account to every workspace that is open to all.
+// Role: member — anyone needing more gets it granted.
 func (s *Server) joinAutoWorkspaces(userID string) int {
 	rows, err := s.db.Query(`SELECT id FROM workspaces WHERE auto_join = 1`)
 	if err != nil {
@@ -243,25 +241,25 @@ func (s *Server) joinAutoWorkspaces(userID string) int {
 	return len(ids)
 }
 
-// onboardUser gibt einem frisch angelegten Konto seinen Platz: den eigenen
-// Bereich plus die für alle geöffneten Workspaces.
+// onboardUser gives a freshly created account its place: its own space plus
+// the workspaces open to everyone.
 func (s *Server) onboardUser(userID, userName string) {
 	s.createPersonalWorkspace(userID, userName)
 	s.joinAutoWorkspaces(userID)
 }
 
-// orgRole liefert die Instanzrolle: owner | admin | member (leer = unbekannt).
+// orgRole returns the instance role: owner | admin | member (empty = unknown).
 func (s *Server) orgRole(userID string) string {
 	var role string
-	// Mit org_id, obwohl es heute nur eine Organisation gibt: der
-	// Primaerschluessel ist (org_id, user_id), ein Nutzer kann also mehrere
-	// Zeilen haben. Ohne die Bedingung waehlte QueryRow eine beliebige davon —
-	// und genau diese Schranke soll spaeter die Mandanten trennen.
+	// With org_id, even though only one organisation exists today: the primary
+	// key is (org_id, user_id), so a user can have several rows. Without the
+	// condition QueryRow would pick an arbitrary one — and this is exactly the
+	// boundary meant to separate tenants later.
 	s.db.QueryRow(`SELECT role FROM org_members WHERE org_id = ? AND user_id = ?`, s.defaultOrg(), userID).Scan(&role)
 	if role == "" {
-		// Fallback für Konten, die vor der Migration angelegt wurden oder deren
-		// Zeile fehlt: die alte is_admin-Spalte entscheidet. Nie mehr Rechte
-		// als vorher, nur nie weniger.
+		// Fallback for accounts created before the migration, or whose row is
+		// missing: the old is_admin column decides. Never more rights than
+		// before, only never fewer.
 		if u := s.userByID(userID); u != nil && u.IsAdmin {
 			return roleAdmin
 		}
@@ -272,9 +270,9 @@ func (s *Server) orgRole(userID string) string {
 
 func (s *Server) isOwner(userID string) bool { return s.orgRole(userID) == roleOwner }
 
-// addOrgMember trägt ein frisch angelegtes Konto in die Organisation ein.
-// Ohne die Zeile griffe zwar der is_admin-Rückfall in orgRole, aber die
-// Tabelle bliebe lückenhaft — und genau sie ist später die Mandantenschranke.
+// addOrgMember records a freshly created account in the organisation. Without
+// the row the is_admin fallback in orgRole would still work, but the table
+// would stay full of holes — and that table is the tenant boundary later on.
 func (s *Server) addOrgMember(userID string, isAdmin bool) {
 	role := roleMember
 	if isAdmin {
@@ -285,29 +283,26 @@ func (s *Server) addOrgMember(userID string, isAdmin bool) {
 	}
 }
 
-// sessionOnly verlangt eine Anmeldung im Browser — ein API-Token wird
-// abgewiesen.
+// sessionOnly requires a browser sign-in — an API token is turned away.
 //
-// Der Grund ist die Grenze, die das ganze Rechtemodell traegt: ein Token ist
-// ein ZWEITSCHLUESSEL FUER INHALTE, kein Ausweis fuer die Verwaltung. Es
-// traegt die volle Identitaet seines Menschen (siehe currentUser) und laesst
-// sich nur auf zwei Arten verengen — "nur lesen" und "nur diese Workspaces".
-// Beides wirkt ausschliesslich auf Seiten. Ohne diese Schranke stand einem
-// Token damit offen:
+// The reason is the boundary the whole permission model rests on: a token is a
+// SECOND KEY TO CONTENT, not a pass for administration. It carries its human's
+// full identity (see currentUser) and can be narrowed in only two ways — "read
+// only" and "these workspaces only". Both act on pages and nothing else.
+// Without this guard, a token had the run of:
 //
-//   * die Instanz-Sicherung — als GET sogar mit einem NUR-LESE-Token, also
-//     jeder Workspace, jede Datei, jeder Passwort-Hash
-//   * die Kontenliste samt E-Mail-Adressen, trotz Workspace-Begrenzung
-//   * sich selbst ein neues, UNBEGRENZTES Token auszustellen, womit die
-//     Workspace-Begrenzung blosse Zierde war
+//   * the instance backup — as a GET, so even with a READ-ONLY token: every
+//     workspace, every file, every password hash
+//   * the account list including email addresses, workspace limit or not
+//   * issuing itself a new, UNLIMITED token, which made the workspace limit
+//     pure decoration
 //
-// Wer einem Agenten einen Zugang gibt, gibt ihm Inhalte. Konten, Sicherung,
-// Notfallzugriff und Owner-Uebergabe bleiben an einem Menschen an der
-// Tastatur.
+// Handing an agent access hands it content. Accounts, backups, emergency
+// access and owner handover stay with a human at a keyboard.
 func (s *Server) sessionOnly(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// TokenScope ist bei einer Cookie-Sitzung leer und bei jedem Token
-		// gesetzt ("read" oder "write").
+		// TokenScope is empty for a cookie session and set for every token
+		// ("read" or "write").
 		if requestUser(r).TokenScope != "" {
 			httpError(w, http.StatusForbidden,
 				"Dieser Vorgang verlangt eine Anmeldung im Browser — ein API-Token reicht dafür nicht.")
@@ -317,7 +312,7 @@ func (s *Server) sessionOnly(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// ownerOnly bewacht Endpunkte, die nur dem Instanz-Owner offenstehen.
+// ownerOnly guards endpoints open to the instance owner alone.
 func (s *Server) ownerOnly(next http.HandlerFunc) http.HandlerFunc {
 	return s.auth(s.sessionOnly(func(w http.ResponseWriter, r *http.Request) {
 		if !s.isOwner(requestUser(r).ID) {
@@ -328,18 +323,17 @@ func (s *Server) ownerOnly(next http.HandlerFunc) http.HandlerFunc {
 	}))
 }
 
-// handleTransferOwner übergibt die Instanz an ein anderes Konto.
+// handleTransferOwner hands the instance to another account.
 //
-// Ohne diesen Weg war die Owner-Rolle eine Einbahnstraße: sie ließ sich nicht
-// stilllegen, nicht löschen und nirgends neu vergeben. Verließ der Owner das
-// Unternehmen, blieb nur ein Eingriff von Hand in der Datenbank — während
-// gleich zwei Fehlermeldungen dem Admin rieten, "die Owner-Rolle zuerst zu
-// übertragen".
+// Without this path the owner role was a one-way street: it could not be
+// deactivated, not deleted and not granted anywhere. If the owner left the
+// company, the only way out was editing the database by hand — while two
+// separate error messages advised the admin to "hand the owner role on first".
 //
-// Bedingungen bewusst eng: nur der Owner selbst, nur an ein aktives
-// Instanz-Admin-Konto, und die Übergabe ist vollständig — danach ist der alte
-// Owner ein gewöhnlicher Admin. Ein zweiter Owner darf nie entstehen, sonst
-// wäre "genau einer trägt die Verantwortung" nicht mehr wahr.
+// The conditions are deliberately tight: only the owner themselves, only to an
+// active instance-admin account, and the handover is complete — afterwards the
+// old owner is an ordinary admin. A second owner must never come into being,
+// or "exactly one person carries the responsibility" stops being true.
 func (s *Server) handleTransferOwner(w http.ResponseWriter, r *http.Request) {
 	me := requestUser(r)
 	var body struct {
@@ -373,8 +367,8 @@ func (s *Server) handleTransferOwner(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
-	// Erst herunterstufen, dann befördern: andersherum gäbe es einen Moment mit
-	// zwei Owner-Zeilen.
+	// Demote first, then promote: the other way round there would be a moment
+	// with two owner rows.
 	if _, err := tx.Exec(`UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ?`, roleAdmin, orgID, me.ID); err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -388,17 +382,17 @@ func (s *Server) handleTransferOwner(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 500, err.Error())
 		return
 	}
-	// Laufende Notfallzugriffe des alten Owners enden mit seiner Rolle — sonst
-	// behielte er nach der Übergabe noch bis zu zwei Stunden Lesezugriff auf
-	// fremde Workspaces.
+	// The old owner's running emergency grants end with their role — otherwise
+	// they would keep read access to other people's workspaces for up to two
+	// hours after the handover.
 	s.db.Exec(`UPDATE break_glass SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`, nowFixed(), me.ID)
 	s.audit("human", me.ID, me.Name, "transfer_owner", "", "", target.Name)
 	writeJSON(w, map[string]any{"ok": true, "owner": target.Name})
 }
 
-// ---- Notfallzugriff -------------------------------------------------------
+// ---- Emergency access -----------------------------------------------------
 
-// hasBreakGlass meldet einen gültigen, unwiderrufenen Notfallzugriff.
+// hasBreakGlass reports a valid, unrevoked emergency grant.
 func (s *Server) hasBreakGlass(userID, workspaceID string) bool {
 	if userID == "" || workspaceID == "" {
 		return false
@@ -410,11 +404,10 @@ func (s *Server) hasBreakGlass(userID, workspaceID string) bool {
 	return n > 0
 }
 
-// handleBreakGlass verschafft einem Owner befristeten LESE-Zugriff auf einen
-// Workspace, dem er nicht angehört — mit Begründung, im Protokoll, und für die
-// Verantwortlichen des Workspace sichtbar. Schreiben bleibt echten Mitgliedern
-// vorbehalten: der Zweck ist Einsicht (Prüfung, verwaister Workspace), nicht
-// Mitarbeit.
+// handleBreakGlass gives an owner time-limited READ access to a workspace they
+// do not belong to — with a stated reason, in the log, and visible to the
+// people in charge of that workspace. Writing stays with real members: the
+// purpose is a look inside (a review, an orphaned workspace), not taking part.
 func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
 	wsID := r.PathValue("id")
@@ -426,8 +419,8 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reason := strings.TrimSpace(body.Reason)
-	// Ohne nachvollziehbaren Grund kein Zugriff — das ist der ganze Unterschied
-	// zwischen Notfallzugriff und stiller Hintertür.
+	// No access without a reason on the record — that is the entire difference
+	// between emergency access and a quiet back door.
 	if len([]rune(reason)) < 10 {
 		httpError(w, 400, "Bitte einen nachvollziehbaren Grund angeben (mindestens 10 Zeichen) — er wird protokolliert und den Verantwortlichen des Workspace angezeigt.")
 		return
@@ -444,13 +437,13 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 		httpErrorCode(w, 400, "already_member", "You are already a member of this workspace — emergency access is not needed.")
 		return
 	}
-	// Ein persönlicher Bereich ist auch für den Notfallzugriff tabu. Sonst wäre
-	// die ganze Zusage hohl: der Owner erfährt die Id ohnehin (Lösch-Folgen,
-	// Aufräum-Ansicht), und mit Notfallzugriff stünde ihm anschließend der
-	// vollständige Export offen — dauerhaft genug für zwei Stunden, mit einer
-	// selbst geschriebenen Begründung. Wer die Instanz betreibt, kommt im
-	// Ernstfall über die Datensicherung an alles; das ist der ehrliche Weg und
-	// er hinterlässt eine Spur, die nicht so aussieht, als sei sie erlaubt.
+	// A personal space is off limits to emergency access too. Otherwise the
+	// whole promise would be hollow: the owner learns the id anyway (deletion
+	// impact, clean-up view), and with emergency access the full export would
+	// then be open to them — permanent enough at two hours, on a reason they
+	// wrote themselves. Whoever runs the instance can reach everything through
+	// the backup if it really comes to that; that is the honest route, and it
+	// leaves a trace that does not look like permission.
 	var personal int
 	s.db.QueryRow(`SELECT is_personal FROM workspaces WHERE id = ?`, wsID).Scan(&personal)
 	if personal != 0 {
@@ -464,15 +457,15 @@ func (s *Server) handleBreakGlass(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit("human", u.ID, u.Name, "break_glass", "", wsID, wsName+" — "+reason)
-	// Nebenlaeufig: der Versand spricht pro Empfaenger SMTP, sonst haengt die
-	// Antwort am Timeout eines nicht erreichbaren Mailservers.
+	// Concurrent: sending speaks SMTP once per recipient, or the response would
+	// hang on the timeout of an unreachable mail server.
 	go s.notifyWorkspaceAdmins(wsID, wsName, u.Name, reason)
 	writeJSON(w, map[string]any{"ok": true, "expiresAt": expires, "workspace": wsName})
 }
 
-// notifyWorkspaceAdmins informiert die Verantwortlichen per Mail. Schlägt der
-// Versand fehl (kein SMTP eingerichtet), bleibt der Protokolleintrag — der
-// Zugriff ist trotzdem nachvollziehbar, nur eben nicht zugestellt.
+// notifyWorkspaceAdmins tells the people in charge by email. If sending fails
+// (no SMTP configured), the log entry remains — the access is still on the
+// record, it just was not delivered.
 func (s *Server) notifyWorkspaceAdmins(wsID, wsName, actor, reason string) {
 	rows, err := s.db.Query(`SELECT u.email FROM workspace_members m
 		JOIN users u ON u.id = m.user_id
@@ -498,9 +491,9 @@ func (s *Server) notifyWorkspaceAdmins(wsID, wsName, actor, reason string) {
 	}
 }
 
-// handleListBreakGlass zeigt die Notfallzugriffe eines Workspace — für dessen
-// Verantwortliche und für Owner. Zugriff, den man nicht nachlesen kann, ist
-// kein kontrollierter Zugriff.
+// handleListBreakGlass shows a workspace's emergency grants — for the people
+// in charge of it and for owners. Access you cannot read back is not
+// controlled access.
 func (s *Server) handleListBreakGlass(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
 	wsID := r.PathValue("id")
@@ -537,9 +530,9 @@ func (s *Server) handleListBreakGlass(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, list)
 }
 
-// handleRevokeBreakGlass beendet einen laufenden Notfallzugriff sofort. Die
-// Verantwortlichen des Workspace können das selbst — sonst wäre die
-// Benachrichtigung eine Mitteilung ohne Handhabe.
+// handleRevokeBreakGlass ends a running emergency grant at once. The people in
+// charge of the workspace can do it themselves — otherwise the notification
+// would be a message with no handle on it.
 func (s *Server) handleRevokeBreakGlass(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
 	wsID := r.PathValue("id")
