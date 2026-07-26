@@ -3,8 +3,9 @@ import { api } from '../api';
 import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
-import { formatBytes } from '../format';
+import { formatBytes, formatMoment } from '../format';
 import { t } from '../i18n';
+import type { Webhook } from '../types';
 
 type Info = Awaited<ReturnType<typeof api.adminInfo>>;
 
@@ -51,7 +52,15 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
   const [passSet, setPassSet] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [loadErr, setLoadErr] = useState<string | null>(null);
-  const [tab, setTab] = useState<'general' | 'access' | 'email' | 'proxy' | 'maintenance'>('general');
+  const [tab, setTab] = useState<'general' | 'access' | 'email' | 'proxy' | 'webhooks' | 'maintenance'>('general');
+  const [hooks, setHooks] = useState<Webhook[] | null>(null);
+  const [hookURL, setHookURL] = useState('');
+  const [hookEvents, setHookEvents] = useState<string[]>(['page.created', 'page.updated']);
+  const [hookBusy, setHookBusy] = useState(false);
+  const [hookErr, setHookErr] = useState('');
+  // Shown once, right after creating: the receiver needs it and we cannot show
+  // it again — the same bargain as an API token.
+  const [freshSecret, setFreshSecret] = useState('');
   const [info, setInfo] = useState<Info | null>(null);
   const [upstream, setUpstream] = useState(window.location.host || '127.0.0.1:80');
   const [httpsEnabled, setHttpsEnabled] = useState(false);
@@ -100,7 +109,8 @@ export function AdminSettingsModal({ onClose }: { onClose: () => void }) {
   // Instance info lazily when the maintenance tab opens.
   useEffect(() => {
     if (tab === 'maintenance' && !info) void api.adminInfo().then(setInfo).catch(() => {});
-  }, [tab, info]);
+    if (tab === 'webhooks' && hooks === null) void api.webhooks().then(setHooks).catch(() => setHooks([]));
+  }, [tab, info, hooks]);
 
   // Live tunnel status while the proxy or access tab is open (the OAuth cards
   // derive the public redirect URI from a running tunnel).
@@ -241,6 +251,7 @@ ingress:
     { id: 'access', label: t('Access') },
     { id: 'email', label: t('Email') },
     { id: 'proxy', label: t('Domain & proxy') },
+    { id: 'webhooks', label: t('Webhooks') },
     { id: 'maintenance', label: t('Maintenance') },
   ];
 
@@ -581,6 +592,115 @@ ingress:
                   </>
                 )}
 
+                {tab === 'webhooks' && (
+                  <>
+                    <h3>{t('Tell other tools when something changes')}</h3>
+                    <p className="dialog-hint settings-hint">
+                      {t(
+                        'Instead of other programs asking over and over whether anything is new, Salt.md calls an address of your choosing when a page is created, changed or thrown away. That is what Zapier, Make and n8n need — and through them, everything else.',
+                      )}
+                    </p>
+                    <p className="dialog-hint settings-hint">
+                      {t(
+                        'The message says WHICH page and what happened to it — never the content. So a URL entered by mistake cannot turn into a steady export of what people write.',
+                      )}
+                    </p>
+
+                    <label>{t('Address to call')}</label>
+                    <input
+                      className="prop-input"
+                      placeholder="https://hooks.example.com/salt"
+                      value={hookURL}
+                      onChange={(e) => setHookURL(e.target.value)}
+                    />
+                    <label>{t('When should we call?')}</label>
+                    <div className="hook-events">
+                      {(['page.created', 'page.updated', 'page.trashed'] as const).map((ev) => (
+                        <label key={ev} className="hook-event">
+                          <input
+                            type="checkbox"
+                            checked={hookEvents.includes(ev)}
+                            onChange={(e) =>
+                              setHookEvents((prev) =>
+                                e.target.checked ? [...prev, ev] : prev.filter((x) => x !== ev),
+                              )
+                            }
+                          />
+                          <span>
+                            {ev === 'page.created'
+                              ? t('a page is created')
+                              : ev === 'page.updated'
+                                ? t('a page is changed')
+                                : t('a page is thrown away')}
+                          </span>
+                          <code>{ev}</code>
+                        </label>
+                      ))}
+                    </div>
+                    {hookErr && <div className="login-error">{hookErr}</div>}
+                    <button
+                      className="btn primary"
+                      disabled={hookBusy || !hookURL.trim() || hookEvents.length === 0}
+                      onClick={() => {
+                        setHookBusy(true);
+                        setHookErr('');
+                        void api
+                          .createWebhook(hookURL.trim(), hookEvents)
+                          .then((h) => {
+                            setFreshSecret(h.secret ?? '');
+                            setHookURL('');
+                            return api.webhooks().then(setHooks);
+                          })
+                          .catch((e: unknown) => setHookErr(e instanceof Error ? e.message : String(e)))
+                          .finally(() => setHookBusy(false));
+                      }}
+                    >
+                      {hookBusy ? t('Saving…') : t('Add')}
+                    </button>
+
+                    {freshSecret && (
+                      <div className="hook-secret">
+                        <strong>{t('Copy this secret now — it is shown only once.')}</strong>
+                        <p className="dialog-hint">
+                          {t(
+                            'Your receiver uses it to check that a message really came from us. We send it as a signature in the X-Salt-Signature header.',
+                          )}
+                        </p>
+                        <code className="hook-secret-value">{freshSecret}</code>
+                        <button className="btn-sm" onClick={() => setFreshSecret('')}>
+                          {t('I have it')}
+                        </button>
+                      </div>
+                    )}
+
+                    <h3>{t('Configured')}</h3>
+                    {hooks === null && <div className="dialog-hint">{t('Loading…')}</div>}
+                    {hooks?.length === 0 && (
+                      <div className="dialog-hint">{t('Nothing yet — nobody is being called.')}</div>
+                    )}
+                    {hooks?.map((h) => (
+                      <div key={h.id} className="hook-row">
+                        <div className="hook-row-main">
+                          <code>{h.url}</code>
+                          <span className="dialog-hint">{h.events.split(',').join(' · ')}</span>
+                        </div>
+                        <span className="dialog-hint hook-status">
+                          {h.lastAt
+                            ? `${t('last call')}: ${h.lastStatus} · ${formatMoment(h.lastAt)}`
+                            : t('not called yet')}
+                        </span>
+                        <button
+                          className="btn-sm danger"
+                          onClick={() => {
+                            void api.deleteWebhook(h.id).then(() => api.webhooks().then(setHooks));
+                          }}
+                        >
+                          {t('Remove')}
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
                 {tab === 'maintenance' && (
                   <>
                     <label>{t('Backup')}</label>

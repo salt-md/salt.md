@@ -717,5 +717,22 @@
   "No mail delivery is configured — set up SMTP, or connect Google or Microsoft.": "Es ist kein Mailversand eingerichtet — SMTP hinterlegen oder Google bzw. Microsoft verbinden.",
   "No mail provider is connected.": "Es ist kein Mail-Anbieter verbunden.",
   "The connection to the mailbox has expired — connect it again.": "Die Verbindung zum Postfach ist abgelaufen — bitte neu verbinden.",
-  "The provider refused to send the message.": "Der Anbieter hat den Versand abgelehnt."
+  "The provider refused to send the message.": "Der Anbieter hat den Versand abgelehnt.",
+  "Add": "Hinzufügen",
+  "Address to call": "Adresse, die angerufen wird",
+  "Configured": "Eingerichtet",
+  "Copy this secret now — it is shown only once.": "Kopier dieses Geheimnis jetzt — es wird nur einmal angezeigt.",
+  "I have it": "Hab ich",
+  "Instead of other programs asking over and over whether anything is new, Salt.md calls an address of your choosing when a page is created, changed or thrown away. That is what Zapier, Make and n8n need — and through them, everything else.": "Statt dass andere Programme immer wieder nachfragen, ob es etwas Neues gibt, ruft salt.md selbst eine Adresse deiner Wahl an, sobald eine Seite angelegt, geändert oder weggeworfen wird. Genau das brauchen Zapier, Make und n8n — und über die alles Weitere.",
+  "Nothing yet — nobody is being called.": "Noch nichts — es wird niemand angerufen.",
+  "Tell other tools when something changes": "Andere Programme benachrichtigen, wenn sich etwas ändert",
+  "The message says WHICH page and what happened to it — never the content. So a URL entered by mistake cannot turn into a steady export of what people write.": "Die Nachricht sagt, WELCHE Seite betroffen ist und was passiert ist — nie den Inhalt. Eine versehentlich eingetragene Adresse kann so nicht zum Dauerexport dessen werden, was Leute schreiben.",
+  "Webhooks": "Webhooks",
+  "When should we call?": "Wann sollen wir anrufen?",
+  "Your receiver uses it to check that a message really came from us. We send it as a signature in the X-Salt-Signature header.": "Deine Gegenstelle prüft damit, ob eine Nachricht wirklich von uns kam. Wir schicken es als Signatur im Kopffeld X-Salt-Signature.",
+  "a page is changed": "eine Seite geändert wird",
+  "a page is created": "eine Seite angelegt wird",
+  "a page is thrown away": "eine Seite weggeworfen wird",
+  "last call": "letzter Anruf",
+  "not called yet": "noch nicht angerufen"
 }

@@ -8,6 +8,7 @@ import type {
   PublicFormConfig,
   SearchResult,
   User,
+  Webhook,
   Workspace,
 } from './types';
 import { t } from './i18n';
@@ -79,6 +80,12 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => req<Me>('/api/me'),
+  // Webhooks: instance configuration, admin only. Creating one answers with the
+  // secret — the only time it is ever readable.
+  webhooks: () => req<Webhook[]>('/api/webhooks'),
+  createWebhook: (url: string, events: string[]) =>
+    req<Webhook>('/api/webhooks', { method: 'POST', body: JSON.stringify({ url, events }) }),
+  deleteWebhook: (id: string) => req<{ ok: boolean }>(`/api/webhooks/${id}`, { method: 'DELETE' }),
   // Language and time preferences. Its own endpoint, not a field on the user
   // PATCH: that route lets an admin edit somebody else, and nobody should be
   // able to set another person's clock format (see server/prefs.go).

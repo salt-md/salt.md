@@ -378,7 +378,19 @@ why `docker build` cannot pull on that box: not "no internet", no DNS.
 ## What's next
 
 The translation wave (W111) is finished, and so is **W112**, the settings that
-came out of it. Nothing is queued — ask the owner.
+came out of it. Since then: **W113**, a Markdown link to a page of this instance
+becomes a real `pageLink` on import (see `pageHrefRe` in mdimport.go) — until
+then everything an agent wrote was an island in the graph, because the backlink
+index and the graph read `pageLink` and nothing else. And **W114**, outbound
+webhooks (webhooks.go, admin dialog → Webhooks). Nothing is queued — ask the
+owner.
+
+**W114 in one line:** Salt.md had nothing that reaches OUT, which is the single
+reason it looked like it had no integration story next to Notion. Three things
+about it that must not be undone: the payload names a page and never carries it;
+delivery goes through `safeDial`, so a webhook URL cannot be pointed at
+169.254.169.254 or the router; every delivery is signed
+(`X-Salt-Signature: sha256=…`). The secret is shown exactly once, on creation.
 
 **W112 as built**, since the shape is worth knowing before touching it:
 

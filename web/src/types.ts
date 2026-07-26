@@ -86,6 +86,20 @@ export interface Me {
   prefs?: Prefs;
 }
 
+/** An outbound webhook: Salt.md calls this URL when something happens, so
+ *  other tools do not have to keep asking. The secret is returned once, when
+ *  it is created, and never again. */
+export interface Webhook {
+  id: string;
+  url: string;
+  events: string;
+  active: boolean;
+  createdAt: string;
+  lastStatus: string;
+  lastAt: string;
+  secret?: string;
+}
+
 export interface Revision {
   id: string;
   createdAt: string;

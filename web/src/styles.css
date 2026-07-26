@@ -7044,3 +7044,78 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Webhooks (W114) ------------------------------------------------------
+   A row is one standing arrangement to call a foreign host, so the address is
+   the loudest thing on it and the last result sits right beside it — a hook
+   that quietly stopped working is the failure mode that matters. */
+.hook-events {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 6px 0 14px;
+}
+.hook-event {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.hook-event code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.hook-secret {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+}
+.hook-secret .dialog-hint {
+  margin: 4px 0 8px;
+}
+/* Selectable and wrapping: it is copied by hand exactly once, and a value that
+   runs off the edge cannot be. */
+.hook-secret-value {
+  display: block;
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--bg-subtle, rgba(127, 127, 127, 0.12));
+  font-size: 12px;
+  word-break: break-all;
+  user-select: all;
+}
+.hook-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.hook-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.hook-row-main code {
+  font-size: 13px;
+  word-break: break-all;
+}
+.hook-row .dialog-hint {
+  margin: 0;
+  font-size: 12px;
+}
+.hook-status {
+  white-space: nowrap;
+}
+@media (max-width: 560px) {
+  .hook-row {
+    flex-wrap: wrap;
+  }
+  .hook-status {
+    white-space: normal;
+  }
+}
