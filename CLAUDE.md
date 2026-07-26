@@ -95,8 +95,11 @@ a German paragraph over three lines with a `<code>` in it walked straight past
 **`go test ./...` enforces the same on the server** (`server/language_test.go`),
 in two tests that catch different things:
 
-- `TestSourceIsEnglish` — a *line* reading as German fails the build. Needs two
-  German words or an umlaut, which suits **prose**: comments, long messages.
+- `TestSourceIsEnglish` — a *line* reading as German fails the build. Two German
+  words or an umlaut, which suits **prose**; plus `germanStrong`, where ONE
+  unambiguous word is enough, because short remarks like
+  "laufende Massenimporte (siehe …)" sat in server.go through three passes that
+  all reported clean.
 - `TestUserFacingStringsAreEnglish` — a *string literal* reading as German
   fails. **One** German word is enough, because that is the shape short
   interface text has. "Nicht gefunden" is one word and no umlaut, so the line
@@ -112,7 +115,14 @@ matters, audit exhaustively instead: enumerate every string handed to
 `httpError`/`httpErrorCode`/`fmt.Errorf`/`errors.New`/`loginErrorRedirect` and
 read them (422 calls, 239 unique texts — small enough for a person), and run a
 one-German-word pass over comment lines and check the hits by hand. That is how
-the last eight German texts were found *after* both tests read clean.
+the last eight German texts were found *after* both tests read clean — and four
+more, in server.go, the day the code was about to be pushed in public.
+
+**An error that fails deep can still carry a code.** `coded(code, msg, detail)`
+plus `httpErrorFrom(w, status, err)` — for failures that happen several calls
+below the handler, like the mail path, where `err.Error()` used to arrive at the
+browser as untranslatable English. `detail` carries text the PROVIDER wrote,
+which nobody can translate, so it travels beside the sentence.
 
 **Server messages carry a code, not a language.** `httpErrorCode(w, status,
 "code", "English sentence")`. The English is for curl and MCP agents; browsers
@@ -168,7 +178,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.1-dev |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.0 |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -323,16 +333,29 @@ the interface now, where they used to be German. They carry no error code, so
 `serverErrors.ts` cannot translate them. Giving them codes is a small, separate
 job — not done, deliberately, because it changes API responses.
 
-Branch `public` is **14 commits ahead of `origin/main`** — the translation work
-after 1.4.0, plus the settings that came out of it. Test box runs `1.5.1-dev`,
-production stays on `1.4.0`.
+**1.5.0 is released.** Branch `public` is level with `origin/main`, the tag
+`v1.5.0` is pushed, and both workflows went green: platform binaries hang off
+the GitHub Release, and `ghcr.io/salt-md/salt.md:1.5.0` and `:latest` are in
+GHCR. Test box runs `1.5.0`.
 
-**No `v1.4.0` tag has been pushed.** A `v*` tag fires both
-`.github/workflows/release.yml` and `docker.yml`, which publish platform
-binaries to a GitHub Release (where `install.sh` fetches from) and an image to
-GHCR. That is a separate decision from pushing code, so it waits for a word.
+**Production is still on `1.4.0` and needs a hand.** `docker stop salt` is
+refused here by the permission gate, which is exactly right — that command
+interrupts his live instance. Everything up to it is prepared: `/root/salt-src`
+is a shallow clone at `v1.5.0` and `salt.md:1.5.0` is built on the box. What is
+left is backup, stop, recreate, verify.
 
-Rollback: test server `/opt/salt/salt.bak-w116`, production the 1.0.2 image plus
+**GHCR is not public.** Not even `1.0.2` can be pulled anonymously, so
+production cannot `docker pull` its way to a release — it builds from the
+cloned tag. Needs `DOCKER_BUILDKIT=1`: the Docker there is too old for
+`$BUILDPLATFORM` and fails with an unhelpful platform error without it.
+
+A `v*` tag fires both `.github/workflows/release.yml` and `docker.yml`, which
+publish platform binaries to a GitHub Release (where `install.sh` fetches from)
+and an image to GHCR, `latest` included. Both take the version from the tag, so
+`server.Version` only matters for local builds. Tagging is a separate decision
+from pushing code and waits for a word.
+
+Rollback: test server `/opt/salt/salt.bak-w117`, production the 1.0.2 image plus
 `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
 migrated 1.0.2 → 1.4.0 in one jump and came up clean.
 
