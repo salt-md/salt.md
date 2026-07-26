@@ -178,7 +178,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.0 |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.1-dev |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -364,7 +364,7 @@ and an image to GHCR, `latest` included. Both take the version from the tag, so
 `server.Version` only matters for local builds. Tagging is a separate decision
 from pushing code and waits for a word.
 
-Rollback: test server `/opt/salt/salt.bak-w117`, production the 1.0.2 image plus
+Rollback: test server `/opt/salt/salt.bak-w118`, production the 1.0.2 image plus
 `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
 migrated 1.0.2 → 1.4.0 in one jump and came up clean.
 
@@ -414,6 +414,29 @@ Four things about it that are easy to undo by accident:
   version did exactly that and looked like a dropdown that did nothing. Use
   `previewFormat()` for anything that must not remount; `applyPrefs()` only
   once the value is stored.
+
+## Licence
+
+**AGPL-3.0** since 2026-07-26. It replaced PolyForm Noncommercial, which
+forbade ALL commercial use — including a company simply running Salt.md for its
+own team, which is the exact door the project wants open.
+
+The model the licence is chosen for: small teams self-host for free, and when
+they outgrow self-hosting they buy the hosted version. AGPL protects that
+crossing — a competitor may host Salt.md, but has to publish their changes,
+so running the product against its author is unattractive. It does not forbid
+it; the moat is the trademark, being upstream, and whatever is built on top.
+
+Deliberately absent: no CLA (there are no outside contributors, and open-core
+work belongs in its own repository under its own terms), and no trademark
+filing yet. The README asks for a fork to carry its own name.
+
+Known cost: some large companies ban AGPL outright. Apache-2.0 would reach them
+and would also let anyone close the code and sell it — the two cannot be had
+together.
+
+Not legal advice, and none was bought. What keeps the risk small is that the
+text is a standard one, adopted unchanged.
 
 ## Working agreement
 
