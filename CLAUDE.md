@@ -49,6 +49,7 @@ web/src/
   serverErrors.ts    server error code → translated message
   locales/de.json    German catalog (681 entries)
   scripts/           check-i18n.mjs, check-format.mjs, translate.mjs
+docs/search-and-ai.md  design paper: local semantic search, stages 0-2
 ```
 
 ## Conventions that are easy to break
@@ -80,15 +81,27 @@ loop variables anything else.
 stray `toLocale*` or a catalog that has drifted. A line may opt out with
 `// i18n-ok: <reason>` — the reason is mandatory.
 
-**`go test ./...` enforces the same on the server** (`server/language_test.go`).
-It exists because twelve finished German sentences were sitting in login
-redirects and two whole emails went out in German — none of which a frontend
-check can see, because they never pass through `t()`. A `.go` line reading as
-German fails the build. Same escape hatch, same mandatory reason; whole files
-whose German IS the subject (the search-folding fixtures) carry
-`i18n-ok-file: <reason>`. `pendingTranslation` in that file is a debt list of
-files not converted yet — a second test fails if an entry on it is already
-clean, so it cannot quietly outlive the problem.
+**`go test ./...` enforces the same on the server** (`server/language_test.go`),
+in two tests that catch different things:
+
+- `TestSourceIsEnglish` — a *line* reading as German fails the build. Needs two
+  German words or an umlaut, which suits **prose**: comments, long messages.
+- `TestUserFacingStringsAreEnglish` — a *string literal* reading as German
+  fails. **One** German word is enough, because that is the shape short
+  interface text has. "Nicht gefunden" is one word and no umlaut, so the line
+  rule would never see it, and that is precisely the class that reaches users.
+
+Same escape hatch for both, same mandatory reason (`i18n-ok: <reason>` on the
+line itself — a bare marker does not count); whole files whose German IS the
+subject carry a file-level marker. `pendingTranslation` is the old debt list and
+is **empty**; a second test fails if a clean file is put back on it.
+
+**Neither check is a proof, and the word lists will miss things.** When it
+matters, audit exhaustively instead: enumerate every string handed to
+`httpError`/`httpErrorCode`/`fmt.Errorf`/`errors.New`/`loginErrorRedirect` and
+read them (422 calls, 239 unique texts — small enough for a person), and run a
+one-German-word pass over comment lines and check the hits by hand. That is how
+the last eight German texts were found *after* both tests read clean.
 
 **Server messages carry a code, not a language.** `httpErrorCode(w, status,
 "code", "English sentence")`. The English is for curl and MCP agents; browsers
@@ -139,7 +152,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.1-dev |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.2-dev |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -202,7 +215,33 @@ pct push 115 <local> <remote>
 Inside: binary `/opt/salt/salt`, data `/opt/salt/data`, systemd unit **`salt`**
 (the older `blatt` unit is inactive — the project was renamed). Go 1.24.4 is
 installed there, so the container builds its own binary from a pushed source
-tarball. **No `curl`** in it — use `wget` or `python3 urllib` to smoke-test.
+tarball. **No `curl`** in it — and there is no need: `172.16.0.115:80` answers
+from this machine, so smoke-test with `python3 urllib` locally.
+
+**Never run `/opt/salt/salt --version` on that box.** It does not print a
+version, it starts a SECOND server as root beside the running service and hangs
+the ssh call. It has happened twice. The version is in the startup log
+(`journalctl -u salt`) — read it there.
+
+Ship it like this (roughly six minutes end to end):
+
+```bash
+cd web && SALT_VERSION=1.4.2-dev npm run build    # the gate runs inside this
+cd .. && tar czf /tmp/salt-src.tgz --exclude='web/node_modules' --exclude='.git' \
+  main.go go.mod go.sum Makefile server web/dist
+scp /tmp/salt-src.tgz root@172.16.0.10:/tmp/
+ssh root@172.16.0.10 'pct push 115 /tmp/salt-src.tgz /tmp/salt-src.tgz'
+ssh root@172.16.0.10 'pct exec 115 -- sh -c "
+  rm -rf /tmp/saltbuild && mkdir -p /tmp/saltbuild
+  tar xzf /tmp/salt-src.tgz -C /tmp/saltbuild && cd /tmp/saltbuild
+  CGO_ENABLED=0 go build -trimpath \
+    -ldflags=\"-s -w -X salt/server.Version=1.4.2-dev\" -o salt .
+  cp -a /opt/salt/salt /opt/salt/salt.bak-w113
+  systemctl stop salt && cp salt /opt/salt/salt && systemctl start salt"'
+```
+
+The macOS `tar` adds `LIBARCHIVE.xattr.com.apple.provenance` headers that GNU
+tar complains about on every file — noise, not an error.
 
 The convention is to keep the outgoing binary as `salt.bak-w<N>` before
 swapping (they run from `w84` up), then `systemctl restart salt`.
@@ -226,24 +265,50 @@ with English text, frontend and server report one version, no console errors,
 and the interface comes up in **German** from the catalog while the source is
 English — the whole point, proven on real data.
 
-Nothing a user reads is German any more. That took three passes, and the third
-found what the first two could not: `/public/{token}` — the password prompt for
-a shared page — was a **complete German HTML page served to strangers**, and it
-had been missed twice because the German sits inside a long HTML string. The
-Go-side check found it, not a person. Also converted: twelve login errors, seven
-mailbox-connection errors (both travel as codes in the query string now, see
-`loginErrorRedirect`), and both **emails**, which go out in English because an
-invitation reaches somebody who has no account and therefore no known language.
+**The source is English. All of it** — `go test` reports zero German lines and
+zero German strings, `docs/` is translated, and `pendingTranslation` is empty.
+Deployed on the test box as `1.4.2-dev` and checked against the shipped binary:
+the seven German strings gone, the seven English ones present, `tunnel:
+connected` in the log where it used to say `verbunden`.
 
-Branch `public` is **4 commits ahead of `origin/main`** — the translation work
-after 1.4.0. Test box runs `1.4.1-dev`, production stays on `1.4.0`.
+That took five passes, and **each one found what the last could not** — worth
+knowing, because it says something about what a check can and cannot do:
+
+1–3. the interface, then the server messages, then the comments.
+4. **The check found what people had missed twice**: `/public/{token}`, the
+   password prompt for a shared page, was a complete German HTML page served to
+   strangers. The German sat inside a long HTML string, which is why reading
+   never caught it.
+5. **People found what the check could not**: after everything read clean, eight
+   German texts were still there — a SECOND German 404 page for anonymous
+   visitors, the print bar of the HTML export, the admin test mail, four mail
+   errors and one settings message. All below the two-word threshold.
+
+And the check had exempted **itself**: `exemptFile`'s pattern matched its own
+source, so `language_test.go` was the one file nobody checked, with two German
+lines hiding behind it. The marker is assembled from a constant now. The first
+attempt at the comment explaining this re-created the bug by spelling the token
+out — so do not name the token in that file.
+
+Also converted earlier: twelve login errors, seven mailbox-connection errors
+(both travel as codes in the query string, see `loginErrorRedirect`), and both
+**emails**, which go out in English because an invitation reaches somebody who
+has no account and therefore no known language.
+
+**One consequence to know about:** five admin-only mail errors are English in
+the interface now, where they used to be German. They carry no error code, so
+`serverErrors.ts` cannot translate them. Giving them codes is a small, separate
+job — not done, deliberately, because it changes API responses.
+
+Branch `public` is **8 commits ahead of `origin/main`** — the translation work
+after 1.4.0. Test box runs `1.4.2-dev`, production stays on `1.4.0`.
 
 **No `v1.4.0` tag has been pushed.** A `v*` tag fires both
 `.github/workflows/release.yml` and `docker.yml`, which publish platform
 binaries to a GitHub Release (where `install.sh` fetches from) and an image to
 GHCR. That is a separate decision from pushing code, so it waits for a word.
 
-Rollback: test server `/opt/salt/salt.bak-w112`, production the 1.0.2 image plus
+Rollback: test server `/opt/salt/salt.bak-w113`, production the 1.0.2 image plus
 `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
 migrated 1.0.2 → 1.4.0 in one jump and came up clean.
 
@@ -254,36 +319,12 @@ the whole time — `dig @1.1.1.1` worked, `dig @10.10.20.1` timed out. If it
 happens again, compare those two before touching anything. The same fault is
 why `docker build` cannot pull on that box: not "no internet", no DNS.
 
-## What's next, in order
+## What's next
 
-**1. Finish the comment sweep — 459 German lines in 17 files.** They are listed
-by name in `pendingTranslation` in `server/language_test.go`; that list IS the
-work queue. Largest: `ingest.go` (63), `mcp_schema.go` (52), `mcp_pages.go`
-(49), `mcp.go` (30), `audit.go` (30), `mcp_workspace.go` (28).
+The translation wave (W111) is **finished**. One item is left from it, and it is
+the one the owner asked for by name.
 
-The method that worked, one file at a time:
-
-```bash
-# see what a file still has
-grep -nE "[äöüßÄÖÜ]" server/ingest.go
-# translate, then:
-go build ./... && go test ./server/ -run TestSourceIsEnglish
-```
-
-Rewrite comments with a small Python replace script rather than many Edit
-calls — exact-match on the full comment block, and print what did NOT match so
-a silent miss is impossible. **Remove the file from `pendingTranslation` in the
-same commit**; `TestNoStalePendingTranslation` fails if you forget, which is the
-point of it.
-
-Keep German where German is the *subject*: search-folding examples, import
-fixtures. Mark those `// i18n-ok: <reason>` on the same line as the German — a
-marker one line above does not count.
-
-**2. `docs/suche-und-ki.md`** (289 lines, German prose). Not covered by any
-check; it is the design document for search and AI.
-
-**3. Language and time settings — Auto/Manual.** Agreed with the owner and not
+**Language and time settings — Auto/Manual.** Agreed with the owner and not
 started. Today there is **no language picker in the interface at all**: the only
 way to switch is the `salt-locale` key in localStorage. Timezone and clock
 format are never asked, they come silently from the browser.
