@@ -136,7 +136,9 @@ it is documentation of the terrain, not an invitation.
   registry, and `cloudflared` (which lives in the volume at `/data/bin`, not in
   the image) loop-fails on startup. Both were true before anyone touched it.
 - It is **not** the host behind `salt.sevensecure.de` — it cannot be, it has no
-  internet. The public name answers 1.3.1 from elsewhere.
+  internet. **The test box is**: LXC 115 logs `tunnel: verbunden (token)` on
+  start, so anything deployed there is immediately public. "Test server" names
+  its role in the workflow, not its reachability.
 - Published images `1.0.1`, `1.0.2` and `latest` are present locally, so a
   rollback needs no network.
 
@@ -209,9 +211,13 @@ Startup log lines are still German too ("search index: neu aufgebaut",
 `tunnel.go` and go with those files. Logs are read by whoever runs the server,
 so they belong in the English sweep.
 
-`1.4.0-i18n` has been built and run once, but against the **production**
-database by mistake, and has since been rolled back. What that run did prove is
-worth keeping: the migration path onto a real 659-page instance completes,
-login answers `bad_credentials` with English text, and both sides report one
-version. What it did **not** prove is anything on the test server — the branch
-has never run on `172.16.0.115`.
+`1.4.0-i18n` runs on the test server (LXC 115) and therefore on
+`salt.sevensecure.de`. Verified there: search index rebuilt over 736 pages,
+login answers `{"code":"bad_credentials"}` with English text, frontend and
+server report the same version, no console errors, and the interface comes up
+in **German** from the catalog while the source is English — the whole point,
+proven on a real instance. Rollback is `/opt/salt/salt.bak-w110` (1.3.1) with
+`data-backup-20260726-w110.tar.gz` beside it.
+
+It was also run once against the **production** database by mistake and rolled
+back; the backups from that are on `10.10.20.20` under `/root/salt-backups/`.
