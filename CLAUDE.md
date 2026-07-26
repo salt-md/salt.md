@@ -338,11 +338,20 @@ job — not done, deliberately, because it changes API responses.
 the GitHub Release, and `ghcr.io/salt-md/salt.md:1.5.0` and `:latest` are in
 GHCR. Test box runs `1.5.0`.
 
-**Production is still on `1.4.0` and needs a hand.** `docker stop salt` is
-refused here by the permission gate, which is exactly right — that command
-interrupts his live instance. Everything up to it is prepared: `/root/salt-src`
-is a shallow clone at `v1.5.0` and `salt.md:1.5.0` is built on the box. What is
-left is backup, stop, recreate, verify.
+**Production runs `1.5.0`.** Deployed by the owner (the permission gate refuses
+`docker stop` on his live instance, which is right). Verified afterwards: the
+five `pref_*` columns are there, 1416 pages / 677 active / 4 accounts / 5
+workspaces intact, the search index at 677 rows agrees with the active pages,
+and no account carries a manual setting — everything automatic, which is the
+correct state for a migration that only adds defaults. Startup log is three
+lines with no rebuild and no error. Backup before it:
+`/root/salt-backups/salt-data-20260726-155337-vor-1.5.0.tar.gz` (21M, gzip
+verified); the `salt.md:1.4.0` image is still on the box for a rollback.
+
+**Reading that database from outside needs the WAL.** `docker cp salt:/data/salt.db`
+alone shows a stale schema — the migration sat in `salt.db-wal` and the copy
+looked as if it had never run. Copy `salt.db`, `salt.db-wal` and `salt.db-shm`
+together, or conclude nothing.
 
 **GHCR is not public.** Not even `1.0.2` can be pulled anonymously, so
 production cannot `docker pull` its way to a release — it builds from the
