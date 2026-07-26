@@ -140,8 +140,37 @@ function preferred(p: Prefs): string {
   return 'en';
 }
 
-/** Take the account's settings and show them. Called once /api/me has answered,
- *  and again whenever the settings dialog saves.
+/** Show a set of settings WITHOUT changing the language.
+ *
+ *  The settings dialog needs a live preview, and a live preview must not change
+ *  the language — because changing the language remounts the whole tree
+ *  (main.tsx keys the root on it), which destroys the dialog mid-edit AND
+ *  re-runs App's mount effect, which re-fetches /api/me and applies the still
+ *  unsaved value. The result was a dropdown that appeared to do nothing: pick
+ *  English, the tree remounts, the server says German, everything is German
+ *  again, one frame later, dialog gone.
+ *
+ *  So the split: format settings preview immediately, because nothing has to
+ *  remount for them — setFormatLocale and setFormatPrefs notify nobody. The
+ *  LANGUAGE waits for Save, where a remount is exactly what you want. */
+export function previewFormat(next: Prefs): void {
+  setFormatLocale(next.region || automaticFormatTag(next));
+  setFormatPrefs(next);
+}
+
+/** The regional tag "automatic" resolves to for a given set of settings.
+ *
+ *  Takes the settings rather than reading the applied ones, because the dialog
+ *  has to label its Automatic entry for what is PENDING: pick English while the
+ *  region stays automatic and the answer becomes English, one moment before the
+ *  language itself is applied. Reading global state there said "German" while
+ *  the preview beside it already showed 07/18/2026. */
+export function automaticFormatTag(p: Prefs = prefs): string {
+  return formattingTag(preferred(p));
+}
+
+/** Take the account's settings and show them, language included. Called once
+ *  /api/me has answered, and again whenever the settings dialog saves.
  *
  *  Writes the cache as a side effect, so the next first paint already matches
  *  and the change survives a reload even before /api/me returns. */

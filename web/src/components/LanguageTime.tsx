@@ -1,8 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { api } from '../api';
-import { applyPrefs, getPrefs, LOCALES, t, type Prefs } from '../i18n';
+import {
+  applyPrefs,
+  automaticFormatTag,
+  getPrefs,
+  LOCALES,
+  previewFormat,
+  t,
+  type Prefs,
+} from '../i18n';
 import {
   availableTimeZones,
   formatDay,
@@ -48,14 +56,22 @@ export function LanguageTimeModal({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Applied immediately, then saved. The preview below changes as you pick, so
-  // the effect of a choice is visible before committing to it — which matters
-  // most for the one setting whose wording nobody agrees on (12 vs 24 hours).
+  // The FORMAT settings preview as you pick them; the LANGUAGE waits for Save.
+  //
+  // Not a style choice — changing the language remounts the whole tree (see
+  // main.tsx), which would destroy this dialog mid-edit and re-run App's mount
+  // effect, and that re-fetches /api/me and re-applies the still unsaved value.
+  // The first version did exactly that: picking English put everything back to
+  // German a frame later and closed the dialog on the way.
   const change = (patch: Prefs) => {
     const next = { ...prefs, ...patch };
     setPrefs(next);
-    void applyPrefs(next);
+    previewFormat(next);
   };
+
+  // Leaving without saving must not leave the preview behind. Covers Cancel,
+  // Esc and the click outside, because all three end in an unmount.
+  useEffect(() => () => previewFormat(getPrefs()), []);
 
   const save = async () => {
     setSaving(true);
@@ -66,6 +82,9 @@ export function LanguageTimeModal({ onClose }: { onClose: () => void }) {
       // rather than what was asked for.
       const stored = await api.putPrefs(prefs);
       setPrefs(stored);
+      // Full apply, language included. This is the one moment a remount is
+      // wanted: everything is saved, so the re-fetch that follows finds the new
+      // values and agrees with them.
       await applyPrefs(stored);
       onClose();
     } catch (e) {
@@ -113,6 +132,12 @@ export function LanguageTimeModal({ onClose }: { onClose: () => void }) {
               </option>
             ))}
           </select>
+          {/* Said out loud rather than left to be guessed: the other four take
+              effect in the preview straight away, and a language that visibly
+              does nothing until Save reads as broken. */}
+          {(prefs.language ?? '') !== (getPrefs().language ?? '') && (
+            <span className="dialog-hint">{t('The language changes when you save.')}</span>
+          )}
 
           <label className="profile-label">{t('Date and number format')}</label>
           <select
@@ -121,7 +146,7 @@ export function LanguageTimeModal({ onClose }: { onClose: () => void }) {
             onChange={(e) => change({ region: e.target.value })}
           >
             <option value="">
-              {t('Automatic ({value})', { value: regionLabel(formatTag()) })}
+              {t('Automatic ({value})', { value: regionLabel(automaticFormatTag(prefs)) })}
             </option>
             {REGIONS.map((tag) => (
               <option key={tag} value={tag}>
@@ -192,8 +217,10 @@ export function LanguageTimeModal({ onClose }: { onClose: () => void }) {
 
           {error && <div className="login-error">{error}</div>}
           <div className="dialog-actions">
-            <button onClick={onClose}>{t('Cancel')}</button>
-            <button className="primary" onClick={() => void save()} disabled={saving}>
+            <button className="btn" onClick={onClose}>
+              {t('Cancel')}
+            </button>
+            <button className="btn primary" onClick={() => void save()} disabled={saving}>
               {saving ? t('Saving…') : t('Save')}
             </button>
           </div>
@@ -203,12 +230,9 @@ export function LanguageTimeModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-// Two small readers rather than imports of module state: i18n owns the language
-// and format.ts owns the formatting tag, and the dialog only ever displays them.
+// The language currently APPLIED, which is what "Automatic" means for the
+// language row: automatic follows the browser, and the browser is what is on
+// screen right now.
 function localeNow(): string {
   return document.documentElement.lang || 'en';
-}
-
-function formatTag(): string {
-  return getPrefs().region || localeNow();
 }
