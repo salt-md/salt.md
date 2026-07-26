@@ -7,6 +7,7 @@ import { confirm, promptText } from '../dialog';
 import { toast } from '../toast';
 import { useExclusiveModal } from '../modal';
 import { formatMoment } from '../format';
+import { plural, t } from '../i18n';
 import { AdminSettingsModal, TwoFAModal, CalendarSubModal } from './AdminSettings';
 import { Key, History, CalendarDays, ShieldCheck, Users, Settings, LogOut, Bot, User as UserIcon, Columns2, Type } from 'lucide-react';
 
@@ -68,14 +69,14 @@ function ProfileModal({
 
   const emailChanged = email.trim() !== '' && email !== user.email;
   const pwMismatch = pw !== '' && pw !== pw2;
-  // Aktuelles Passwort wird verlangt, sobald man Passwort ODER E-Mail aendert —
-  // genau das prueft auch der Server; ohne diese Bestaetigung koennte jemand an
-  // einer offen gelassenen Sitzung die Zugangsdaten uebernehmen.
+  // The current password is required as soon as password OR email changes —
+  // exactly what the server checks too. Without that confirmation, anyone at a
+  // session left open could take over the credentials.
   const needsCurrent = pw !== '' || emailChanged;
 
   const save = async () => {
     if (pwMismatch) {
-      toast('Die beiden neuen Passwörter stimmen nicht überein');
+      toast(t('The two new passwords do not match'));
       return;
     }
     setBusy(true);
@@ -92,9 +93,9 @@ function ProfileModal({
         onChanged(updated);
       }
       onClose();
-      if (pw) toast('Passwort geändert — andere Sitzungen wurden abgemeldet');
+      if (pw) toast(t('Password changed — other sessions were signed out'));
     } catch (err) {
-      toast((err as Error).message || 'Speichern fehlgeschlagen');
+      toast((err as Error).message || t('Saving failed'));
     } finally {
       setBusy(false);
     }
@@ -106,21 +107,21 @@ function ProfileModal({
       const url = await api.upload(f);
       setAvatar(url);
     } catch (err) {
-      toast((err as Error).message || 'Upload fehlgeschlagen');
+      toast((err as Error).message || t('Upload failed'));
     }
   };
 
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-        <div className="dialog" role="dialog" aria-modal="true" aria-label="Profil">
-          <h2>Profil</h2>
+        <div className="dialog" role="dialog" aria-modal="true" aria-label={t('Profile')}>
+          <h2>{t('Profile')}</h2>
           <div className="profile-avatar-row">
             <Avatar user={{ ...user, name, color, avatar }} size={56} />
             <div className="profile-avatar-btns">
-              <button className="btn-sm" onClick={() => fileRef.current?.click()}>Bild hochladen</button>
+              <button className="btn-sm" onClick={() => fileRef.current?.click()}>{t('Upload picture')}</button>
               {avatar && (
-                <button className="btn-sm" onClick={() => setAvatar('')}>Bild entfernen</button>
+                <button className="btn-sm" onClick={() => setAvatar('')}>{t('Remove picture')}</button>
               )}
               <input
                 ref={fileRef}
@@ -131,11 +132,11 @@ function ProfileModal({
               />
             </div>
           </div>
-          <label className="profile-label">Name</label>
+          <label className="profile-label">{t('Name')}</label>
           <input className="prop-input profile-input" value={name} onChange={(e) => setName(e.target.value)} />
-          <label className="profile-label">E-Mail</label>
+          <label className="profile-label">{t('Email')}</label>
           <input className="prop-input profile-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          <label className="profile-label">Farbe</label>
+          <label className="profile-label">{t('Colour')}</label>
           <div className="profile-colors">
             {USER_COLORS.map((c) => (
               <button
@@ -147,18 +148,18 @@ function ProfileModal({
               />
             ))}
           </div>
-          <label className="profile-label">Neues Passwort (leer = unverändert)</label>
+          <label className="profile-label">{t('New password (blank = unchanged)')}</label>
           <input
             className="prop-input profile-input"
             type="password"
             value={pw}
             autoComplete="new-password"
-            placeholder="mindestens 8 Zeichen"
+            placeholder={t('at least 8 characters')}
             onChange={(e) => setPw(e.target.value)}
           />
           {pw !== '' && (
             <>
-              <label className="profile-label">Neues Passwort bestätigen</label>
+              <label className="profile-label">{t('Confirm new password')}</label>
               <input
                 className={'prop-input profile-input' + (pwMismatch ? ' is-invalid' : '')}
                 type="password"
@@ -171,26 +172,26 @@ function ProfileModal({
           {needsCurrent && (
             <>
               <label className="profile-label">
-                Aktuelles Passwort {pw ? '(zur Bestätigung)' : '(nötig zum Ändern der E-Mail)'}
+                {pw ? t('Current password (to confirm)') : t('Current password (needed to change the email)')}
               </label>
               <input
                 className="prop-input profile-input"
                 type="password"
                 value={currentPw}
                 autoComplete="current-password"
-                placeholder="dein jetziges Passwort"
+                placeholder={t('your password right now')}
                 onChange={(e) => setCurrentPw(e.target.value)}
               />
             </>
           )}
 
           <div className="profile-2fa-row">
-            <span>Zwei-Faktor-Authentifizierung</span>
-            <button className="btn-sm" onClick={onOpen2FA}>Verwalten</button>
+            <span>{t('Two-factor authentication')}</span>
+            <button className="btn-sm" onClick={onOpen2FA}>{t('Manage')}</button>
           </div>
 
           <div className="dialog-actions">
-            <button className="btn" onClick={onClose}>Abbrechen</button>
+            <button className="btn" onClick={onClose}>{t('Cancel')}</button>
             <button
               className="btn primary"
               disabled={
@@ -201,7 +202,7 @@ function ProfileModal({
               }
               onClick={() => void save()}
             >
-              Speichern
+              {t('Save')}
             </button>
           </div>
         </div>
@@ -213,8 +214,8 @@ function ProfileModal({
 interface Props {
   user: User;
   onLogout: () => void;
-  // Nach einer Profilaenderung traegt App den neuen Stand in den Auth-State —
-  // sonst zeigten Kopfzeile und Praesenz bis zum Neuladen den alten Namen.
+  // After a profile change App writes the new state into the auth state —
+  // otherwise the header and presence would show the old name until a reload.
   onUserChanged?: (u: User) => void;
   onOpenAgents?: () => void;
   // Bear-style notes mode (middle notes column). Off = classic tree layout.
@@ -253,51 +254,51 @@ export default function UserMenu({ user, onLogout, onUserChanged, onOpenAgents, 
             </button>
           )}
           <button onClick={() => { setOpen(false); setModal('profile'); }}>
-            <UserIcon size={16} /> Profil
+            <UserIcon size={16} /> {t('Profile')}
           </button>
           <button onClick={() => { setOpen(false); setModal('tokens'); }}>
-            <Key size={16} /> API tokens
+            <Key size={16} /> {t('API tokens')}
           </button>
           <button onClick={() => { setOpen(false); setModal('activity'); }}>
-            <History size={16} /> Activity log
+            <History size={16} /> {t('Activity log')}
           </button>
           <button onClick={() => { setOpen(false); setModal('calendar'); }}>
-            <CalendarDays size={16} /> Kalender abonnieren
+            <CalendarDays size={16} /> {t('Subscribe to calendar')}
           </button>
           <button onClick={() => { setOpen(false); setModal('twofa'); }}>
-            <ShieldCheck size={16} /> Zwei-Faktor (2FA)
+            <ShieldCheck size={16} /> {t('Two-factor (2FA)')}
           </button>
           {onToggleNotesMode && (
-            <button onClick={onToggleNotesMode} title="Notizliste als Mittelspalte (Bear-Stil)">
-              <Columns2 size={16} /> Notizen-Modus
+            <button onClick={onToggleNotesMode} title={t('Note list as a middle column (Bear style)')}>
+              <Columns2 size={16} /> {t('Notes mode')}
               <span className={'mode-dot' + (notesMode ? ' on' : '')} aria-hidden />
             </button>
           )}
-          {/* Die Schriften liegen im Programm selbst und sind seit W107 die
-              Voreinstellung. Der Schalter bleibt: wer die Systemschrift
-              gewohnt ist, kommt mit einem Klick zurueck, und die Wahl gilt
-              nur fuer das eigene Konto. */}
+          {/* The fonts live inside the program itself and have been the default
+              since W107. The switch stays: anyone used to the system font gets
+              back with one click, and the choice applies to their account
+              alone. */}
           {onSetFont && (
             <button
               onClick={() => onSetFont(fontPref === 'brand' ? 'system' : 'brand')}
-              title="Inter für Text, JetBrains Mono für Code und Beschriftungen — die Schriften der Website"
+              title={t('Inter for text, JetBrains Mono for code and labels — the fonts from the website')}
             >
-              <Type size={16} /> Salt-Schriften
+              <Type size={16} /> {t('Salt fonts')}
               <span className={'mode-dot' + (fontPref === 'brand' ? ' on' : '')} aria-hidden />
             </button>
           )}
           {user.isAdmin && (
             <button onClick={() => { setOpen(false); setModal('users'); }}>
-              <Users size={16} /> Manage users
+              <Users size={16} /> {t('Manage users')}
             </button>
           )}
           {user.isAdmin && (
             <button onClick={() => { setOpen(false); setModal('settings'); }}>
-              <Settings size={16} /> Instanz-Einstellungen
+              <Settings size={16} /> {t('Instance settings')}
             </button>
           )}
           <button className="danger" onClick={onLogout}>
-            <LogOut size={16} /> Sign out
+            <LogOut size={16} /> {t('Sign out')}
           </button>
         </div>
       )}
@@ -338,32 +339,33 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
     setEntries((prev) => [...prev, ...more]);
     if (more.length < 50) setDone(true);
   };
-  // Die Vorgänge rund um Konten und Workspaces sind der Grund, warum es dieses
-  // Protokoll gibt — ohne Übersetzung standen sie als rohes „disable_user"
-  // zwischen den Seitenänderungen.
+  // The account and workspace events are the reason this log exists — without
+  // wording they sat between the page edits as a raw "disable_user".
   const label: Record<string, string> = {
-    create_page: 'hat erstellt',
-    update_page: 'hat geändert',
-    append_markdown: 'hat ergänzt',
-    trash_page: 'hat in den Papierkorb gelegt',
-    delete_page: 'hat endgültig gelöscht',
-    upload_file: 'hat eine Datei hochgeladen zu',
-    disable_user: 'hat das Konto stillgelegt:',
-    enable_user: 'hat das Konto wieder aktiviert:',
-    delete_user: 'hat das Konto gelöscht:',
-    delete_workspace: 'hat den Workspace gelöscht:',
-    workspace_handover: 'hat den Workspace übernommen:',
-    workspace_adopted: 'hat den herrenlosen Workspace übernommen:',
-    transfer_owner: 'hat die Instanz übergeben an:',
-    break_glass: 'hat Notfallzugriff genommen:',
-    break_glass_revoked: 'hat den Notfallzugriff beendet:',
+    create_page: t('created'),
+    update_page: t('changed'),
+    append_markdown: t('added to'),
+    trash_page: t('moved to trash'),
+    delete_page: t('permanently deleted'),
+    upload_file: t('uploaded a file to'),
+    disable_user: t('deactivated the account:'),
+    enable_user: t('reactivated the account:'),
+    delete_user: t('deleted the account:'),
+    delete_workspace: t('deleted the workspace:'),
+    workspace_handover: t('took over the workspace:'),
+    workspace_adopted: t('adopted the ownerless workspace:'),
+    transfer_owner: t('handed the instance to:'),
+    break_glass: t('took emergency access:'),
+    break_glass_revoked: t('ended the emergency access:'),
   };
   return (
     <Portal>
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dialog">
-        <h2>Protokoll</h2>
-        <p className="dialog-hint">Die letzten Änderungen — mit dem Hinweis, ob ein Mensch oder ein Agent sie gemacht hat.</p>
+        <h2>{t('Activity log')}</h2>
+        <p className="dialog-hint">
+          {t('The most recent changes — noting whether a human or an agent made them.')}
+        </p>
         <div className="user-list">
           {entries.map((e) => (
             <div key={e.id} className="user-row">
@@ -372,19 +374,22 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
               </span>
               <span className="user-row-name">
                 {e.actorName} {label[e.action] ?? e.action}
-                {e.detail ? ` „${e.detail.slice(0, 60)}"` : ''}
+                {e.detail ? ` “${e.detail.slice(0, 60)}”` : ''}
               </span>
-              <span className="user-row-email">{e.createdAt.slice(0, 16).replace('T', ' ')}</span>
+              {/* Was `createdAt.slice(0, 16)`, which printed the stored UTC
+                  string verbatim — two hours off for a reader in Berlin, and
+                  further for anyone else. */}
+              <span className="user-row-email">{formatMoment(e.createdAt, 'datetime')}</span>
             </div>
           ))}
-          {entries.length === 0 && <div className="dialog-hint">Noch nichts passiert.</div>}
+          {entries.length === 0 && <div className="dialog-hint">{t('Nothing has happened yet.')}</div>}
           {!done && entries.length > 0 && (
             <button className="btn-sm" onClick={() => void loadMore()}>
-              Mehr laden…
+              {t('Load more…')}
             </button>
           )}
         </div>
-        <button className="btn dialog-close" onClick={onClose}>Schließen</button>
+        <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
       </div>
     </div>
     </Portal>
@@ -440,22 +445,27 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
       await api.setMembership(userId, wsId, role);
     } catch (err) {
       setError((err as Error).message);
-      load(); // zuruecksetzen auf den echten Stand
+      load(); // reset to the real state
     }
   };
 
-  // Notfallzugriff: die Begründung ist Pflicht, weil genau sie den Unterschied
-  // zwischen kontrolliertem Zugriff und stiller Hintertür ausmacht.
+  // Emergency access: the reason is mandatory, because it is precisely what
+  // separates controlled access from a quiet back door.
   const requestBreakGlass = async (wsId: string, wsName: string) => {
     setError(null);
-    const reason = await promptText(`Notfallzugriff auf „${wsName}" — warum?`, {
-      placeholder: 'z.B. Rechtliche Prüfung Az. …, Freigabe durch …',
+    const reason = await promptText(t('Emergency access to “{name}” — why?', { name: wsName }), {
+      placeholder: t('e.g. Legal review ref. …, approved by …'),
     });
     if (!reason?.trim()) return;
     try {
       const res = await api.breakGlass(wsId, reason.trim());
       const until = formatMoment(res.expiresAt, 'time');
-      toast(`Lesezugriff auf „${wsName}" bis ${until} — die Verantwortlichen wurden informiert.`);
+      toast(
+        t('Read access to “{name}” until {time} — the people in charge have been told.', {
+          name: wsName,
+          time: until,
+        }),
+      );
       load();
     } catch (err) {
       setError((err as Error).message);
@@ -472,85 +482,114 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
     }
   };
 
-  // Stilllegen ist der Normalfall beim Offboarding: Anmeldung zu, Sitzungen
-  // beendet — aber alles bleibt zurechenbar und nichts verwaist.
+  // Deactivating is the normal case when someone leaves: sign-in closed,
+  // sessions ended — but everything stays attributable and nothing is orphaned.
   const toggleDisabled = async (u: User) => {
     setError(null);
     try {
       await api.setUserDisabled(u.id, !u.disabled);
-      toast(u.disabled ? `${u.name} ist wieder aktiv.` : `${u.name} wurde stillgelegt.`);
+      toast(
+        u.disabled
+          ? t('{name} is active again.', { name: u.name })
+          : t('{name} has been deactivated.', { name: u.name }),
+      );
       load();
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
-  // Die Instanz weiterreichen. Danach ist der bisherige Owner ein gewöhnlicher
-  // Admin — deshalb die ausführliche Rückfrage, die Folge ist nicht umkehrbar
-  // (nur der neue Owner könnte sie zurückgeben).
+  // Hand the instance on. Afterwards the previous owner is an ordinary admin —
+  // hence the long-winded confirmation; the consequence cannot be undone (only
+  // the new owner could hand it back).
   const handOver = async (u: User) => {
     setError(null);
     const ok = await confirm(
-      `Die Instanz an ${u.name} übergeben?\n\n` +
-        `${u.name} wird Owner: Notfallzugriff, Instanz-Sicherung, Konten löschen.\n` +
-        'Du bist danach gewöhnlicher Admin und kannst das nicht selbst rückgängig machen.',
-      { danger: true, confirmText: 'Übergeben' },
+      t('Hand the instance to {name}?', { name: u.name }) +
+        '\n\n' +
+        t('{name} becomes owner: emergency access, instance backup, deleting accounts.', {
+          name: u.name,
+        }) +
+        '\n' +
+        t('You will be an ordinary admin afterwards and cannot undo this yourself.'),
+      { danger: true, confirmText: t('Hand over') },
     );
     if (!ok) return;
     try {
       const r = await api.transferOwner(u.id);
-      toast(`${r.owner} ist jetzt Owner dieser Instanz.`);
+      toast(t('{name} is now the owner of this instance.', { name: r.owner }));
       load();
     } catch (err) {
       setError((err as Error).message);
     }
   };
 
-  // Löschen zeigt vorher, was daran hängt — und bietet den Export an, solange
-  // es die Inhalte noch gibt. Vorher verschwand der persönliche Bereich
-  // wortlos mit dem Konto.
+  // Deleting shows what hangs off the account first — and offers the export
+  // while the content still exists. Before this, the personal space vanished
+  // wordlessly along with the account.
   const remove = async (u: User) => {
     setError(null);
     let impact: Awaited<ReturnType<typeof api.deletionImpact>> | null = null;
     try {
       impact = await api.deletionImpact(u.id);
     } catch {
-      /* Vorschau nicht verfügbar — unten wird das ausdrücklich gesagt */
+      /* preview unavailable — said explicitly below */
     }
     const lines: string[] = [];
-    // Ohne Vorschau darf der Dialog NICHT so aussehen, als wäre alles harmlos:
-    // sonst bliebe von der Warnung genau der beruhigende Satz übrig, während
-    // der persönliche Bereich trotzdem unwiederbringlich mitgelöscht wird.
+    // With no preview the dialog must NOT look as if everything were harmless:
+    // otherwise all that survives of the warning is the reassuring sentence,
+    // while the personal space is still deleted beyond recovery.
     if (!impact) {
       lines.push(
-        'Die Folgen konnten nicht geladen werden. Falls diese Person einen persönlichen Bereich hat, wird er mit allen Seiten unwiederbringlich mit gelöscht.',
+        t(
+          'The consequences could not be loaded. If this person has a personal space, it will be deleted with all its pages beyond recovery.',
+        ),
       );
     }
-    // ALLE persönlichen Bereiche, nicht nur der erste — gelöscht wird die ganze
-    // Liste. Und die Mitgliederzahl gehört dazu: sie sagt, ob dort nur eigene
-    // Notizen liegen.
+    // ALL personal spaces, not just the first — the whole list gets deleted.
+    // And the member count belongs in there: it says whether the space holds
+    // nothing but their own notes.
     for (const p of impact?.personal ?? []) {
-      lines.push(`Der persönliche Bereich „${p.name}" wird mit gelöscht (${p.pages} Seiten).`);
+      lines.push(
+        t('The personal space “{name}” will be deleted too ({pages}).', {
+          name: p.name,
+          pages: plural(p.pages, '{n} page', '{n} pages'),
+        }),
+      );
     }
     if (impact?.shared.length) {
       lines.push(
-        `Bleibt erhalten, weil andere darin arbeiten: ${impact.shared
-          .map((sw) => `„${sw.name}" (${sw.members} Mitglieder)`)
-          .join(', ')} — die privaten Seiten dieser Person darin werden gelöscht.`,
+        t('Kept because others work in them: {list} — this person’s private pages there are deleted.', {
+          list: impact.shared
+            .map((sw) => `“${sw.name}” (${plural(sw.members, '{n} member', '{n} members')})`)
+            .join(', '),
+        }),
       );
     }
     if (impact?.orphaned.length) {
       lines.push(
-        `Ohne weiteren Verantwortlichen: ${impact.orphaned
-          .map((o) => `„${o.name}" (${o.pages} Seiten)`)
-          .join(', ')} — übernimmt der Owner.`,
+        t('Left with nobody in charge: {list} — the owner takes them on.', {
+          list: impact.orphaned
+            .map((o) => `“${o.name}” (${plural(o.pages, '{n} page', '{n} pages')})`)
+            .join(', '),
+        }),
       );
     }
     if (impact?.pages) {
-      lines.push(`${impact.pages} Seiten in geteilten Workspaces bleiben bestehen.`);
+      lines.push(
+        t('{pages} in shared workspaces stay where they are.', {
+          pages: plural(impact.pages, '{n} page', '{n} pages'),
+        }),
+      );
     }
-    lines.push('Stilllegen genügt meistens — dabei geht nichts verloren.');
-    if (!(await confirm(`${u.name} endgültig löschen?\n\n${lines.join('\n')}`, { danger: true, confirmText: 'Löschen' }))) return;
+    lines.push(t('Deactivating is usually enough — nothing is lost that way.'));
+    if (
+      !(await confirm(t('Permanently delete {name}?', { name: u.name }) + `\n\n${lines.join('\n')}`, {
+        danger: true,
+        confirmText: t('Delete'),
+      }))
+    )
+      return;
     try {
       await api.deleteUser(u.id);
       setSelId(null);
@@ -624,65 +663,67 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                       <div className="users-detail-name">
                         {sel.name}
                         {sel.orgRole === 'owner'
-                          ? <span className="badge">Instanz-Owner</span>
-                          : sel.isAdmin && <span className="badge">Instanz-Admin</span>}
+                          ? <span className="badge">{t('Instance owner')}</span>
+                          : sel.isAdmin && <span className="badge">{t('Instance admin')}</span>}
                       </div>
                       <div className="users-detail-email">{sel.email}</div>
                     </div>
                   </div>
 
-                  {/* Der Owner betreibt die Instanz — er lässt sich hier weder
-                      degradieren noch löschen, sonst stünde sie ohne
-                      Verantwortlichen da. */}
+                  {/* The owner runs the instance — they can be neither demoted
+                      nor deleted here, or it would be left with nobody in
+                      charge. */}
                   <div className="users-detail-actions">
                     {sel.id !== me.id && sel.orgRole !== 'owner' && (
                       <button className="btn-sm" onClick={() => void toggleAdmin(sel)}>
-                        {sel.isAdmin ? 'Admin-Rechte entziehen' : 'Zum Instanz-Admin machen'}
+                        {sel.isAdmin ? t('Revoke admin rights') : t('Make instance admin')}
                       </button>
                     )}
                     {sel.id !== me.id && sel.orgRole !== 'owner' && (
                       <button className="btn-sm" onClick={() => void toggleDisabled(sel)}>
-                        {sel.disabled ? 'Wieder aktivieren' : 'Konto stilllegen'}
+                        {sel.disabled ? t('Reactivate') : t('Deactivate account')}
                       </button>
                     )}
-                    {/* Löschen vernichtet den persönlichen Bereich des Kontos.
-                        Das ist Datenkontrolle und liegt beim Owner — ein Admin
-                        legt still, dabei geht nichts verloren. */}
+                    {/* Deleting destroys the account's personal space. That is
+                        control over data and belongs to the owner — an admin
+                        deactivates, and nothing is lost that way. */}
                     {sel.id !== me.id && sel.orgRole !== 'owner' && me.orgRole === 'owner' && (
                       <button className="btn-sm danger" onClick={() => void remove(sel)}>
-                        Nutzer löschen
+                        {t('Delete user')}
                       </button>
                     )}
                     {sel.id !== me.id && sel.orgRole !== 'owner' && me.orgRole !== 'owner' && (
                       <span className="dialog-hint">
-                        Endgültig löschen kann nur der Owner — mit dem Konto verschwände auch
-                        der persönliche Bereich dieser Person.
+                        {t(
+                          'Only the owner can delete permanently — the account would take this person’s personal space with it.',
+                        )}
                       </span>
                     )}
-                    {/* Übergabe: nur der Owner, nur an ein aktives Admin-Konto.
-                        Ohne diesen Weg wäre die Rolle nicht weiterzureichen —
-                        und zwei Fehlermeldungen raten genau dazu. */}
+                    {/* Handover: owner only, and only to an active admin
+                        account. Without this path the role could not be passed
+                        on at all — and two error messages advise doing exactly
+                        that. */}
                     {me.orgRole === 'owner' && sel.id !== me.id && sel.isAdmin && !sel.disabled && (
                       <button className="btn-sm" onClick={() => void handOver(sel)}>
-                        Instanz übergeben
+                        {t('Hand over the instance')}
                       </button>
                     )}
                     {sel.orgRole === 'owner' && (
                       <span className="dialog-hint">
-                        Der Owner betreibt diese Instanz — seine Rolle wird hier nicht geändert.
+                        {t('The owner runs this instance — their role is not changed here.')}
                       </span>
                     )}
                   </div>
 
-                  <h3 className="users-section-title">Workspace-Zugriff</h3>
+                  <h3 className="users-section-title">{t('Workspace access')}</h3>
                   <div className="ws-access-list">
                     {access.workspaces.map((ws) => {
                       const role = roleOf(sel.id, ws.id);
-                      // Der Server lässt Rollenänderungen nur zu, wo sie
-                      // zustehen: nie für sich selbst (dafür gibt es den
-                      // Notfallzugriff), und als Admin nur in eigenen
-                      // Workspaces. Die Oberfläche zeigt dieselbe Grenze,
-                      // statt Klicks in ein 403 laufen zu lassen.
+                      // The server permits role changes only where they are due:
+                      // never for yourself (that is what emergency access is
+                      // for), and as an admin only in your own workspaces. The
+                      // interface draws the same line rather than letting
+                      // clicks run into a 403.
                       const mayEdit =
                         sel.id !== me.id &&
                         (me.orgRole === 'owner' || roleOf(me.id, ws.id) === 'admin');
@@ -693,10 +734,12 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                           {mayPeek && (
                             <button
                               className="btn-sm"
-                              title="Befristete Einsicht mit Begründung — wird protokolliert und den Verantwortlichen angezeigt"
+                              title={t(
+                                'Time-limited access with a stated reason — logged and shown to the people in charge',
+                              )}
                               onClick={() => void requestBreakGlass(ws.id, ws.name)}
                             >
-                              Notfallzugriff
+                              {t('Emergency access')}
                             </button>
                           )}
                           <div className="ws-role-seg">
@@ -710,8 +753,8 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                                   mayEdit
                                     ? undefined
                                     : sel.id === me.id
-                                      ? 'Eigenen Zugriff kann man sich hier nicht geben.'
-                                      : 'Nur der Owner oder ein Admin dieses Workspace kann das ändern.'
+                                      ? t('You cannot grant yourself access here.')
+                                      : t('Only the owner or an admin of this workspace can change this.')
                                 }
                                 onClick={() => void setRole(sel.id, ws.id, r.v)}
                               >
@@ -723,17 +766,17 @@ function UsersModal({ me, onClose }: { me: User; onClose: () => void }) {
                       );
                     })}
                     {access.workspaces.length === 0 && (
-                      <div className="dialog-hint">Noch keine Workspaces.</div>
+                      <div className="dialog-hint">{t('No workspaces yet.')}</div>
                     )}
                   </div>
                 </>
               ) : (
-                <div className="dialog-hint users-empty">Wähle links einen Nutzer.</div>
+                <div className="dialog-hint users-empty">{t('Pick a user on the left.')}</div>
               )}
             </section>
           </div>
           <div className="dialog-actions">
-            <button className="btn" onClick={onClose}>Schließen</button>
+            <button className="btn" onClick={onClose}>{t('Close')}</button>
           </div>
         </div>
       </div>
@@ -864,7 +907,7 @@ function TokensModal({ onClose }: { onClose: () => void }) {
     // Guard the fail-open: "specific workspaces" with nothing picked must not
     // silently create an all-workspaces token (the server rejects it too).
     if (wsMode === 'some' && pickedWs.length === 0) {
-      toast('Bitte mindestens einen Workspace auswählen (oder „Alle Workspaces").');
+      toast(t('Pick at least one workspace (or “All workspaces”).'));
       return;
     }
     const chosen = wsMode === 'some' ? pickedWs : [];
