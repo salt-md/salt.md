@@ -44,6 +44,26 @@ func isWordByte(b byte) bool {
 
 var linkRe = regexp.MustCompile(`^\[([^\]]*)\]\(([^)]+)\)`)
 
+// A link that points at a page of THIS instance becomes a pageLink, not an
+// ordinary link (W113).
+//
+// Why this matters more than it looks: the backlinks index and the graph read
+// `pageLink` and nothing else (see links.go). An agent writing
+// `[Handbook](/p/abc…)` used to get a plain <a> — it navigated, but the page was
+// invisible to "which pages point here", so every structure an agent built was
+// an island in the graph. Agents have no other way in: mdToBlocksJSON is the
+// only path content takes.
+//
+// It also closes a round trip. The Markdown export writes a pageLink as
+// `[label](/p/id)` (see export.go), so exporting a page and importing it back
+// silently downgraded every internal link.
+//
+// Accepted: a bare `/p/<id>`, or an absolute URL ending in `/p/<id>` — agents
+// write the absolute form because that is what share_page hands them. An id is
+// 32 hex characters from newID(); anything else stays an ordinary link, which
+// is the safe direction to be wrong in.
+var pageHrefRe = regexp.MustCompile(`(?:^|/)p/([0-9a-f]{32})/?$`)
+
 // parseInline converts inline markdown to BlockNote inline content.
 func parseInline(md string) []any {
 	var out []any
@@ -62,11 +82,22 @@ func parseInline(md string) []any {
 	for len(md) > 0 {
 		if m := linkRe.FindStringSubmatch(md); m != nil {
 			flush()
-			out = append(out, map[string]any{
-				"type":    "link",
-				"href":    m[2],
-				"content": []any{inlineText(m[1], nil)},
-			})
+			if pm := pageHrefRe.FindStringSubmatch(strings.TrimSpace(m[2])); pm != nil {
+				label := strings.TrimSpace(m[1])
+				if label == "" {
+					label = "Untitled"
+				}
+				out = append(out, map[string]any{
+					"type":  "pageLink",
+					"props": map[string]any{"pageId": pm[1], "label": label},
+				})
+			} else {
+				out = append(out, map[string]any{
+					"type":    "link",
+					"href":    m[2],
+					"content": []any{inlineText(m[1], nil)},
+				})
+			}
 			advance(len(m[0]))
 			continue
 		}
