@@ -1,4 +1,9 @@
-# Salt.md
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with
+code in this repository.
+
+## Salt.md
 
 Self-hosted Notion alternative. One Go binary serves the API, the MCP endpoint,
 the Yjs collab relay, an SSE change feed and the embedded React frontend.
@@ -33,12 +38,16 @@ server/*.go          51 files, one concern each
   searchindex.go     FTS5 tokenizer, query folding, German stemming
   chunks.go          page → passage splitting for search
   collab.go          Yjs WebSocket relay (binary, never interprets CRDT data)
+  public.go          /public/{token} — standalone HTML for anonymous visitors,
+                     no SPA and no JS, so no t() reaches it
+  oauth.go           OIDC sign-in; errors travel as codes in the query string
+  language_test.go   fails the build on German in a .go file
   mcp*.go            MCP tools
 web/src/
   i18n.ts            t(), plural(), locale switching
   format.ts          THE ONLY place that formats dates, numbers, sorting
   serverErrors.ts    server error code → translated message
-  locales/de.json    German catalog (658 entries)
+  locales/de.json    German catalog (681 entries)
   scripts/           check-i18n.mjs, check-format.mjs, translate.mjs
 ```
 
@@ -130,7 +139,7 @@ picker.
 
 | Address | What it is | Reached via | Version |
 | --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.0 |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.4.1-dev |
 | `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
 
 The test box answers on **port 80**, production on **8420** — a bare
@@ -142,9 +151,10 @@ real pages. Everything below about it is what an accidental deploy taught us —
 it is documentation of the terrain, not an invitation.
 
 - Docker container `salt`, named volume `salt-data` → `/data`. Root SSH by key.
-- **No outbound internet.** `docker pull`/`docker build` cannot reach a
-  registry, and `cloudflared` (which lives in the volume at `/data/bin`, not in
-  the image) loop-fails on startup. Both were true before anyone touched it.
+- **No DNS, but routing works.** `docker pull`/`docker build` cannot reach a
+  registry and `cloudflared` (which lives in the volume at `/data/bin`, not in
+  the image) loop-fails — both because the nameserver answers nothing, not
+  because the box is offline. Build FROM a locally present image.
 - It is **not** the host behind `salt.sevensecure.de` — it cannot be, it has no
   internet. **The test box is**: LXC 115 logs `tunnel: verbunden (token)` on
   start, so anything deployed there is immediately public. "Test server" names
@@ -209,31 +219,100 @@ look at it, not read about it: build, run the gate, roll out, then report.
 commits are fine. Name the address in the report either way — see the table
 above for why.
 
-**1.4.0** is the English-first release: the frontend, the server messages and
-the four permission files (`roles`, `lifecycle_account`, `users`,
-`workspaces`). It is merged into `public` and pushed.
+**1.4.0 is the English-first release** and is on GitHub (`origin/main`), on
+production and on the test box. Verified on each: search index rebuilt (736
+pages on test, 659 on production), login answers `{"code":"bad_credentials"}`
+with English text, frontend and server report one version, no console errors,
+and the interface comes up in **German** from the catalog while the source is
+English — the whole point, proven on real data.
 
-Still German: ~740 comment lines in 31 Go files — largest are `ingest.go` (76),
-`mcp_pages.go` (59), `mcp_schema.go` (58), `searchindex.go` (50), `pages.go`
-(40). Plus `docs/suche-und-ki.md` (148 lines). Mechanical work: one file at a
-time, `go build ./...` after each.
+Nothing a user reads is German any more. That took three passes, and the third
+found what the first two could not: `/public/{token}` — the password prompt for
+a shared page — was a **complete German HTML page served to strangers**, and it
+had been missed twice because the German sits inside a long HTML string. The
+Go-side check found it, not a person. Also converted: twelve login errors, seven
+mailbox-connection errors (both travel as codes in the query string now, see
+`loginErrorRedirect`), and both **emails**, which go out in English because an
+invitation reaches somebody who has no account and therefore no known language.
 
-Startup log lines are still German too ("search index: neu aufgebaut",
-"tunnel: autostart (gespeicherter Token)") — they live in `searchindex.go` and
-`tunnel.go` and go with those files. Logs are read by whoever runs the server,
-so they belong in the English sweep.
-
-1.4.0 is on GitHub (`origin/main`) and on **both** servers. Verified on each:
-search index rebuilt (736 pages on test, 659 on production), login answers
-`{"code":"bad_credentials"}` with English text, frontend and server report one
-version, no console errors, and the interface comes up in **German** from the
-catalog while the source is English — the whole point, proven on real data.
+Branch `public` is **4 commits ahead of `origin/main`** — the translation work
+after 1.4.0. Test box runs `1.4.1-dev`, production stays on `1.4.0`.
 
 **No `v1.4.0` tag has been pushed.** A `v*` tag fires both
 `.github/workflows/release.yml` and `docker.yml`, which publish platform
 binaries to a GitHub Release (where `install.sh` fetches from) and an image to
 GHCR. That is a separate decision from pushing code, so it waits for a word.
 
-Rollback: test server `/opt/salt/salt.bak-w110` (1.3.1); production the 1.0.2
-image plus `/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`.
-Production migrated 1.0.2 → 1.4.0 in one jump and came up clean.
+Rollback: test server `/opt/salt/salt.bak-w112`, production the 1.0.2 image plus
+`/root/salt-backups/salt-data-20260726-073629-vor-1.4.0.tar.gz`. Production
+migrated 1.0.2 → 1.4.0 in one jump and came up clean.
+
+Production's Cloudflare tunnel loop-failed for hours and it was **not the
+tunnel**: the box's nameserver (`10.10.20.1`, the gateway) answered nothing, so
+`cloudflared` could not resolve `region1.v2.argotunnel.com`. Routing was fine
+the whole time — `dig @1.1.1.1` worked, `dig @10.10.20.1` timed out. If it
+happens again, compare those two before touching anything. The same fault is
+why `docker build` cannot pull on that box: not "no internet", no DNS.
+
+## What's next, in order
+
+**1. Finish the comment sweep — 459 German lines in 17 files.** They are listed
+by name in `pendingTranslation` in `server/language_test.go`; that list IS the
+work queue. Largest: `ingest.go` (63), `mcp_schema.go` (52), `mcp_pages.go`
+(49), `mcp.go` (30), `audit.go` (30), `mcp_workspace.go` (28).
+
+The method that worked, one file at a time:
+
+```bash
+# see what a file still has
+grep -nE "[äöüßÄÖÜ]" server/ingest.go
+# translate, then:
+go build ./... && go test ./server/ -run TestSourceIsEnglish
+```
+
+Rewrite comments with a small Python replace script rather than many Edit
+calls — exact-match on the full comment block, and print what did NOT match so
+a silent miss is impossible. **Remove the file from `pendingTranslation` in the
+same commit**; `TestNoStalePendingTranslation` fails if you forget, which is the
+point of it.
+
+Keep German where German is the *subject*: search-folding examples, import
+fixtures. Mark those `// i18n-ok: <reason>` on the same line as the German — a
+marker one line above does not count.
+
+**2. `docs/suche-und-ki.md`** (289 lines, German prose). Not covered by any
+check; it is the design document for search and AI.
+
+**3. Language and time settings — Auto/Manual.** Agreed with the owner and not
+started. Today there is **no language picker in the interface at all**: the only
+way to switch is the `salt-locale` key in localStorage. Timezone and clock
+format are never asked, they come silently from the browser.
+
+His requirement, verbatim in intent: *somebody may not want it to follow their
+browser language, or the system clock is wrong* — so **every** value gets
+Automatic (today's behaviour, stays the default) or Manual:
+
+| Setting | Automatic | Manual |
+| --- | --- | --- |
+| Language | `navigator.languages` | pick from `LOCALES` |
+| Region format | browser's regional tag | e.g. `de-AT`, `en-GB` |
+| Time zone | system zone | any IANA zone |
+| Clock | what the region implies | 12 or 24 hours |
+| Week starts | what the region implies | Monday / Sunday / Saturday |
+
+Three decisions already taken: settings live **on the account**, not in
+localStorage, or the phone and the laptop disagree — which is the thing he
+wants gone; localStorage stays as a cache so the first paint is not briefly
+wrong. `format.ts` and `i18n.ts` are already the only choke points, so no call
+site changes. And **`formatDay` must stay unconverted whatever the timezone
+setting says** — a deadline on the 18th is the 18th; that is the one place a
+timezone preference can do real damage, and `check-format.mjs` has to grow an
+assertion for it.
+
+## Working agreement
+
+Local commits freely. **Test server without asking** — he wants to look at the
+result, not read about it. **Production and `git push` only on his word.**
+Explain simply, in German, with concrete numbers; when something might break,
+say first what *cannot* break. He asks for a plan before anything structural,
+and for mechanical work he wants it carried through to the end.
