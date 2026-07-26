@@ -17,7 +17,7 @@ import (
 
 const sessionCookie = "salt_session"
 
-// sessionCookieValue liefert den Sitzungswert aus dem Cookie.
+// sessionCookieValue returns the session value from the cookie.
 func sessionCookieValue(r *http.Request) (string, bool) {
 	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
 		return c.Value, true
@@ -32,12 +32,13 @@ type user struct {
 	Color   string `json:"color"`
 	Avatar  string `json:"avatar"`
 	IsAdmin bool   `json:"isAdmin"`
-	// Disabled: stillgelegt — kein Login, keine Sitzung, aber alles bleibt
-	// zurechenbar. Der Normalfall beim Offboarding (siehe lifecycle_account.go).
+	// Disabled: deactivated — no sign-in, no session, but everything stays
+	// attributable. The normal case when somebody leaves (see
+	// lifecycle_account.go).
 	Disabled bool `json:"disabled"`
-	// OrgRole ist die Instanzrolle: owner | admin | member. Sie kommt aus
-	// org_members und wird mitgeladen, damit die Oberfläche Owner-Aktionen
-	// zeigen kann, ohne dafür eine zweite Abfrage zu brauchen.
+	// OrgRole is the instance role: owner | admin | member. It comes from
+	// org_members and is loaded alongside so the interface can show owner
+	// actions without needing a second query for it.
 	OrgRole string `json:"orgRole"`
 	// TokenScope is set only when the request authenticated via an API token:
 	// "write" (full) or "read" (read-only). Empty for cookie/session auth,
@@ -137,7 +138,7 @@ func (s *Server) userByID(id string) *user {
 	u.IsAdmin = isAdmin != 0
 	u.Disabled = disabled != 0
 	if u.OrgRole == "" {
-		// Konto ohne Organisationszeile (Altbestand): die alte Spalte entscheidet.
+		// Account with no organisation row (legacy): the old column decides.
 		u.OrgRole = roleMember
 		if u.IsAdmin {
 			u.OrgRole = roleAdmin
@@ -196,8 +197,8 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 			httpError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		// Stillgelegt heisst stillgelegt — auch wenn beim Abschalten eine Sitzung
-		// durchgerutscht ist oder eine ueber OAuth neu entstand.
+		// Deactivated means deactivated — even if a session slipped through when
+		// the account was switched off, or a new one appeared via OAuth.
 		if u.Disabled {
 			httpError(w, http.StatusForbidden, "Dieses Konto wurde stillgelegt.")
 			return
@@ -216,9 +217,9 @@ func (s *Server) auth(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-// adminOnly: Instanz-Verwaltung. Verlangt zusaetzlich eine Anmeldung im
-// Browser — siehe sessionOnly. Ein Admin-Token waere sonst ein Admin-Ausweis
-// fuer jeden Agenten, dem man ihn gibt.
+// adminOnly: instance administration. Additionally requires a browser sign-in
+// — see sessionOnly. An admin token would otherwise be an admin pass for every
+// agent it is handed to.
 func (s *Server) adminOnly(next http.HandlerFunc) http.HandlerFunc {
 	return s.auth(s.sessionOnly(func(w http.ResponseWriter, r *http.Request) {
 		if !requestUser(r).IsAdmin {
@@ -279,8 +280,8 @@ var userColors = []string{
 	"#3ba0a8", "#b5527e", "#6b8f3b", "#8a6650", "#5560c4",
 }
 
-// validUserColor laesst nur die vorgegebene Palette oder ein reines #hex zu —
-// kein Platz fuer CSS-Funktionen (url(), expression(), …).
+// validUserColor accepts only the given palette or a plain #hex — no room for
+// CSS functions (url(), expression(), …).
 func validUserColor(c string) bool {
 	for _, p := range userColors {
 		if strings.EqualFold(c, p) {
@@ -348,17 +349,17 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 	var wsID string
 	if s.db.QueryRow(`SELECT id FROM workspaces ORDER BY created_at LIMIT 1`).Scan(&wsID) != nil || wsID == "" {
 		wsID = newID()
-		// auto_join: der Bereich, den die Instanz teilt. Damit verhaelt sich der
-		// Einstieg wie bisher — nur ist es jetzt eine sichtbare Entscheidung, die
-		// der Owner im Workspace-Menue auch wieder abschalten kann.
+		// auto_join: the space the instance shares. The entry point behaves as it
+		// always did — except it is now a visible decision the owner can switch
+		// off again from the workspace menu.
 		s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id, auto_join) VALUES (?, 'Workspace', ?, ?, 1)`, wsID, now(), id)
 	} else {
 		s.db.Exec(`UPDATE workspaces SET owner_id = ? WHERE id = ? AND owner_id = ''`, id, wsID)
 	}
 	s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin') ON CONFLICT DO NOTHING`, wsID, id)
-	// Die Organisation ist die Ebene über den Workspaces; wer die Instanz
-	// einrichtet, ist ihr Owner. Derselbe Ablauf trägt später eine gehostete
-	// Registrierung — dann mit einer Organisation je Kunde statt genau einer.
+	// The organisation is the level above workspaces; whoever sets the instance
+	// up is its owner. The same flow carries a hosted signup later — with one
+	// organisation per customer instead of exactly one.
 	orgID := s.defaultOrg()
 	if orgID == "" {
 		orgID = newID()
@@ -424,8 +425,8 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Wrong email or wrong password.")
 		return
 	}
-	// Stillgelegtes Konto: erst NACH der Passwortprüfung ablehnen, sonst
-	// verriete die Antwort, dass es diese Adresse überhaupt gibt.
+	// Deactivated account: refuse only AFTER the password check, or the response
+	// would give away that this address exists at all.
 	if disabled != 0 {
 		httpErrorCode(w, http.StatusForbidden, "account_disabled", "This account has been deactivated — talk to an admin.")
 		return
@@ -522,12 +523,12 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 	s.addOrgMember(id, body.IsAdmin)
 	me := requestUser(r)
 	if len(body.Workspaces) > 0 {
-		// Ausdrueckliche Zuweisung: nur diese Workspaces, mit gewaehlter Rolle.
+		// Explicit assignment: these workspaces only, with the chosen role.
 		//
-		// Und nur solche, die der Anlegende auch vergeben darf. Ohne diese
-		// Pruefung waere die gesamte Rechtetrennung wirkungslos: ein Admin
-		// legt ein Konto mit selbst gewaehltem Passwort an, setzt es als
-		// Workspace-Admin in einen fremden Workspace und meldet sich damit an.
+		// And only ones the creator is actually allowed to grant. Without this
+		// check the entire separation of rights would be pointless: an admin
+		// creates an account with a password of their choosing, puts it into
+		// somebody else's workspace as a workspace admin, and signs in as it.
 		for _, ws := range body.Workspaces {
 			if ws.Role == "none" || ws.ID == "" {
 				continue
@@ -535,18 +536,19 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 			if !s.isOwner(me.ID) && !s.isWorkspaceAdmin(me.ID, ws.ID) {
 				continue
 			}
-			// Der Nutzer wurde eben angelegt; eine unbekannte Workspace-Id faellt
-			// am Foreign Key aus, ohne Schaden.
+			// The user was just created; an unknown workspace id falls out at the
+			// foreign key, harmlessly.
 			s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`,
 				ws.ID, id, normalizeRole(ws.Role))
 		}
 	}
-	// Der eigene Bereich plus die fuer alle geoeffneten Workspaces — unabhaengig
-	// davon, ob oben etwas ausgewaehlt wurde.
+	// Their own space plus the workspaces open to everyone — regardless of what
+	// was selected above.
 	//
-	// Frueher erbte ein Konto OHNE Auswahl saemtliche Workspaces des anlegenden
-	// Admins. Da ein Admin meist ueberall Mitglied ist, sah jeder Neuzugang
-	// sofort alles — genau die Beobachtung, mit der diese Welle anfing.
+	// An account with NO selection used to inherit every workspace of the admin
+	// who created it. Since an admin is usually a member everywhere, every
+	// newcomer saw everything at once — which is the observation this whole wave
+	// started from.
 	s.onboardUser(id, body.Name)
 	writeJSON(w, s.userByID(id))
 }
@@ -571,9 +573,9 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "invalid JSON")
 		return
 	}
-	// ---- ERST ALLES PRUEFEN, dann alles anwenden. Vorher committete jedes
-	// Feld einzeln; scheiterte ein spaeteres an der Pruefung, blieb die Zeile
-	// halb geaendert (z. B. isAdmin schon gesetzt, obwohl der Aufruf 409 gab).
+	// ---- CHECK EVERYTHING FIRST, then apply everything. Each field used to be
+	// committed on its own; if a later one failed its check, the row was left
+	// half changed (isAdmin already set, say, while the call returned 409).
 	changingSensitive := body.Password != nil || body.Email != nil
 	if me.ID == id && changingSensitive {
 		var hash string
@@ -583,19 +585,19 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	// Ein FREMDES Passwort zu setzen heißt, sich als dieser Mensch anmelden und
-	// alles lesen zu können, was er sieht. Das ist keine Nutzerverwaltung mehr,
-	// sondern Datenzugriff — und bleibt deshalb dem Owner vorbehalten, der die
-	// Datei ohnehin hat. Dasselbe gilt für eine fremde E-Mail: sie entscheidet
-	// über die künftige SSO-Identität.
+	// Setting SOMEBODY ELSE'S password means being able to sign in as that
+	// person and read everything they see. That is no longer user management but
+	// data access — and so stays with the owner, who has the file anyway. The
+	// same holds for somebody else's email: it decides their future SSO
+	// identity.
 	if me.ID != id && changingSensitive && !s.isOwner(me.ID) {
 		httpErrorCode(w, 403, "owner_only_credentials", "Only the owner can change another account's password or email. As an admin you can send an invitation.")
 		return
 	}
 	if body.IsAdmin != nil && me.IsAdmin && !*body.IsAdmin {
-		// Sich SELBST die Admin-Rechte zu nehmen sperrt einen aus dem offenen
-		// Verwaltungsdialog aus (jede weitere Aktion faellt auf 403) — und man
-		// kann sich nicht selbst wieder befoerdern. Also verbieten.
+		// Taking your OWN admin rights away locks you out of the administration
+		// dialog you have open (every further action falls to 403) — and you
+		// cannot promote yourself back. So: forbidden.
 		if me.ID == id {
 			httpError(w, 400, "you cannot remove your own admin rights — ask another admin")
 			return
@@ -606,8 +608,8 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			httpError(w, 400, "cannot remove the last admin")
 			return
 		}
-		// Dem Owner is_admin zu nehmen ließe ihn halb ausgesperrt zurück: die
-		// Owner-Rolle behielte er, aber jede adminOnly-Route wäre zu.
+		// Taking is_admin from the owner would leave them half locked out: they
+		// would keep the owner role, but every adminOnly route would be shut.
 		if s.isOwner(id) {
 			httpErrorCode(w, 400, "owner_rights_locked", "The owner's rights cannot be revoked — hand the owner role on first.")
 			return
@@ -644,7 +646,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// ---- Ab hier ist alles geprueft; jetzt anwenden.
+	// ---- Everything is checked from here; now apply it.
 	if body.IsAdmin != nil && me.IsAdmin {
 		v := 0
 		role := roleMember
@@ -653,10 +655,9 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 			role = roleAdmin
 		}
 		s.db.Exec(`UPDATE users SET is_admin = ? WHERE id = ?`, v, id)
-		// Die Instanzrolle mitziehen, sonst driften beide auseinander: der
-		// Rückfall in orgRole greift nur bei FEHLENDER Zeile, nicht bei einer
-		// veralteten. Ein Owner wird hier nie berührt — das verhindert die
-		// Prüfung oben.
+		// Carry the instance role along, or the two drift apart: the fallback in
+		// orgRole only fires on a MISSING row, not on a stale one. An owner is
+		// never touched here — the check above prevents it.
 		if org := s.defaultOrg(); org != "" {
 			s.db.Exec(`UPDATE org_members SET role = ? WHERE org_id = ? AND user_id = ? AND role != ?`, role, org, id, roleOwner)
 		}
@@ -675,7 +676,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.Password != nil {
 		s.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, hashPassword(*body.Password), id)
-		// Ein Passwortwechsel entwertet alle Sitzungen und Tokens des Kontos.
+		// Changing the password invalidates all of the account's sessions and tokens.
 		s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id)
 		s.db.Exec(`DELETE FROM api_tokens WHERE user_id = ?`, id)
 		if me.ID == id {
@@ -699,25 +700,25 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, "cannot delete the last admin")
 		return
 	}
-	// Den Owner nicht löschen. Seine org_members-Zeile verschwände per CASCADE
-	// mit, und die Migration vergibt die Rolle nur an Konten OHNE Zeile — die
-	// Instanz bliebe dauerhaft ohne Owner: kein Notfallzugriff, kein
-	// Passwort-Reset, kein Instanz-Backup. Reparabel wäre das nur von Hand in
-	// der Datenbank. Erst übertragen, dann löschen.
+	// Do not delete the owner. Their org_members row would go with them by
+	// CASCADE, and the migration only grants the role to accounts WITHOUT a row
+	// — the instance would be left permanently ownerless: no emergency access,
+	// no password reset, no instance backup. Repairable only by hand in the
+	// database. Hand it over first, then delete.
 	if s.isOwner(id) {
 		httpErrorCode(w, 400, "owner_cannot_be_deleted", "The owner cannot be deleted — hand the owner role to another account first.")
 		return
 	}
-	// Reihenfolge: erst AUFNEHMEN, was am Konto hängt (danach sind die
-	// Mitgliedschaften per CASCADE weg und niemand wüsste es mehr), dann das
-	// Konto löschen, dann ausführen. Andersherum — erst vernichten, dann
-	// löschen — endete ein fehlgeschlagenes DELETE im schlechtestmöglichen
-	// Zustand: Inhalte unwiederbringlich weg, Konto weiter anmeldefähig.
+	// Order: first RECORD what hangs off the account (after this the memberships
+	// are gone by CASCADE and nobody would know any more), then delete the
+	// account, then carry the plan out. The other way round — destroy first,
+	// then delete — a failed DELETE ended in the worst possible state: content
+	// gone beyond recovery, account still able to sign in.
 	me := requestUser(r)
 	plan := s.deletionImpactOf(id)
 	if plan.Err != nil {
-		// Ein leerer Plan sähe aus wie "es hängt nichts dran" und ließe alle
-		// Workspaces dieses Kontos verwaisen. Lieber gar nicht löschen.
+		// An empty plan would look like "nothing hangs off this" and leave every
+		// one of the account's workspaces orphaned. Better not to delete at all.
 		httpErrorCode(w, 500, "impact_unavailable", "The consequences of this deletion could not be determined — please try again.")
 		return
 	}
@@ -726,16 +727,16 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 500, err.Error())
 		return
 	}
-	// Der Kalender-Abo-Link liegt als app_settings-Zeile und hängt an keinem
-	// Fremdschlüssel — er überlebte das Konto sonst.
+	// The calendar subscription link lives as an app_settings row and hangs off
+	// no foreign key — it would otherwise outlive the account.
 	s.db.Exec(`DELETE FROM app_settings WHERE key = ?`, "ics_token_"+id)
 	s.applyDeletion(plan, id, me.ID, me.Name)
 	if target != nil {
 		s.audit("human", me.ID, me.Name, "delete_user", "", "", target.Name)
 	}
-	// Übergebene und gelöschte Workspaces ändern die Seitenleiste aller offenen
-	// Sitzungen — ohne das Signal zeigte der Owner den neuen Workspace erst nach
-	// einem Neuladen, und gelöschte Seiten blieben sichtbar anklickbar.
+	// Handed-over and deleted workspaces change the sidebar of every open
+	// session — without this signal the owner would only see the new workspace
+	// after a reload, and deleted pages stayed visibly clickable.
 	s.pagesChanged()
 	writeJSON(w, map[string]bool{"ok": true})
 }

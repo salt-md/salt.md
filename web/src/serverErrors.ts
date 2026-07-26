@@ -80,6 +80,10 @@ export function serverMessage(code: string, fallback: string, data?: ErrorData):
       return t('Only the owner can open a workspace to everyone.');
     case 'not_workspace_admin':
       return t('Only the owner or an admin of this workspace can change its members.');
+    case 'last_admin_other':
+      return t('That is the last admin of this workspace. Make somebody else an admin first.');
+    case 'no_self_grant':
+      return t('You cannot grant yourself access here — use emergency access, which is logged.');
     case 'last_admin':
       return t(
         'You are the last admin of this workspace. Make somebody else an admin first — or delete the workspace if it should go.',
