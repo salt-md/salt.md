@@ -1,4 +1,9 @@
 :root {
+  /* Tells the browser which scheme to use for NATIVE widgets — the calendar
+     icon inside date inputs, select arrows, picker popups. Without it those
+     stayed black-on-dark in dark mode (invisible calendars in table date
+     cells). */
+  color-scheme: light;
   /* Height of the document header. Read by .topbar AND by the comment
      column, so that one begins below the other. */
   --topbar-h: 47px;
@@ -33,6 +38,7 @@
 }
 
 [data-theme='dark'] {
+  color-scheme: dark;
   --bg: #191919;
   --fg: #d4d4d4;
   --muted: #8f8f8f;
@@ -507,13 +513,9 @@ button {
   gap: 2px;
   padding: 4px 6px 0;
   overflow-x: auto;
-  scrollbar-width: thin;
   border-bottom: 1px solid var(--border);
   background: var(--bg);
   flex: none;
-}
-.tab-bar::-webkit-scrollbar {
-  height: 0;
 }
 .tab {
   display: flex;
@@ -1357,7 +1359,12 @@ button {
   top: auto;
   bottom: calc(100% + 4px);
   left: 8px;
-  right: 8px;
+  /* Size to content instead of pinning to the right edge: the anchor (the
+     user button) shares the footer row with the theme switch and is barely
+     180px wide — pinned to it, long entries overflowed and crushed their
+     icons. */
+  right: auto;
+  min-width: 210px;
 }
 
 /* ---------- Dialogs ---------- */
@@ -1684,9 +1691,6 @@ button {
   overscroll-behavior-y: contain;
   min-height: 0;
   flex: 1 1 auto;
-  /* Room for the scrollbar, so the cards do not jump when they appear. */
-  padding-right: 2px;
-  scrollbar-width: thin;
 }
 
 .board-card {
@@ -2955,6 +2959,10 @@ button {
 .menu button svg,
 .user-menu-popup button svg {
   vertical-align: -2px;
+  /* The buttons are flex rows; an svg is the only child that CAN shrink.
+     When a label got long ("Instanz-Einstellungen"), the icon was silently
+     squeezed to half its width while all its neighbours stayed at 16px. */
+  flex: none;
 }
 
 .menu button,
@@ -3689,12 +3697,7 @@ button {
            bar collapsed from 43px to 17px because of it. It is a bar, not content
            — it does not shrink. */
     flex: none;
-    scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
-  }
-
-  .collection-toolbar::-webkit-scrollbar {
-    display: none;
   }
 
   .collection-toolbar > * {
@@ -3707,16 +3710,6 @@ button {
     /* Columns snap into place instead of floating between positions. */
     scroll-snap-type: x proximity;
     scroll-padding-left: 14px;
-    scrollbar-width: none;
-  }
-
-  .board::-webkit-scrollbar,
-  .table-wrap::-webkit-scrollbar {
-    display: none;
-  }
-
-  .table-wrap {
-    scrollbar-width: none;
   }
 
   .board-col {
@@ -3925,22 +3918,22 @@ button {
 
 /* ---------- Scrollbars ---------- */
 
+/* Hidden entirely — scrolling still works via wheel, trackpad, touch and
+   keyboard; the bars themselves are just noise. Both mechanisms are needed:
+   `scrollbar-width` (the standard property) for Firefox AND Chrome 121+,
+   `::-webkit-` for Safari/older WebKit. Never set `scrollbar-width` per
+   element to something visible again: the moment the standard property is
+   set (it used to be `thin` on .board-cards), Chrome ignores EVERY
+   ::-webkit rule on that element and paints its default bars — that is
+   exactly how the board columns got white scrollbars in dark mode. */
+* {
+  scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
-  width: 9px;
-  height: 9px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--active);
-  border-radius: 5px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--muted);
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 /* ---- Named tag colour palette (Welle 28), Notion-style ---- */
@@ -5049,6 +5042,7 @@ a.btn {
 /* The icon cycles dynamically through every hue. */
 .agents-ic {
   display: inline-flex;
+  flex: none;
   color: #e05fb0;
   animation: agents-hue 7s linear infinite;
 }
