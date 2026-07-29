@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api';
 import { toast } from '../toast';
 import type { Comment } from '../types';
-import { Check, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, MessageSquareText, Trash2 } from 'lucide-react';
 import { formatRelative } from '../format';
 import { t } from '../i18n';
 
@@ -12,8 +12,16 @@ import { t } from '../i18n';
 // over the text). Then a docked column that claimed width and, on a page with
 // no comments, showed nothing but "No comments yet" — an empty pane beside a
 // full document. Look closely and Notion has no column at all: the comments sit
-// at the bottom of the flow, directly under the content. That is where they
-// belong — always visible, no toggle, and taking only the room they need.
+// at the bottom of the flow, directly under the content.
+//
+// Third correction (this one): the section is COLLAPSED to a single slim row
+// until it is opened. The always-open version put a tall header + compose box
+// on every fresh page — a comments form was the most prominent thing on an
+// empty document. The row still carries the open-comment count, so nothing is
+// hidden that matters; the topbar button opens it via the event below.
+
+/** Editor's topbar button says "open the comments" through this event. */
+export const OPEN_COMMENTS_EVENT = 'salt:comments-open';
 
 const when = (iso: string) => formatRelative(iso);
 
@@ -35,15 +43,31 @@ export default function CommentsSection({
   pageId,
   myUserId,
   onCountChange,
+  hidden,
 }: {
   pageId: string;
   myUserId: string;
   onCountChange?: (n: number) => void;
+  /** Row completely off (topbar toggle). Stays mounted so the badge count
+      in the topbar keeps loading. */
+  hidden?: boolean;
 }) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [body, setBody] = useState('');
   const [showResolved, setShowResolved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // Collapse again when navigating to another page — the state belongs to the
+  // page, not to the mounted component instance (Editor keeps it mounted).
+  useEffect(() => setExpanded(false), [pageId]);
+
+  // The topbar comment button scrolls here AND opens the section.
+  useEffect(() => {
+    const openUp = () => setExpanded(true);
+    window.addEventListener(OPEN_COMMENTS_EVENT, openUp);
+    return () => window.removeEventListener(OPEN_COMMENTS_EVENT, openUp);
+  }, []);
 
   const load = () =>
     void api
@@ -85,13 +109,28 @@ export default function CommentsSection({
   const resolved = comments.filter((c) => c.resolvedAt);
   const visible = showResolved ? comments : open;
 
-  return (
-    <section className="comments-section" id="kommentare" aria-label={t('Comments')}>
-      <h2 className="cp-title">
-        {t('Comments')}
-        {open.length > 0 && <span className="cp-count">{open.length}</span>}
-      </h2>
+  if (hidden) return null;
 
+  return (
+    <section
+      className={'comments-section' + (expanded ? ' is-open' : '')}
+      id="kommentare"
+      aria-label={t('Comments')}
+    >
+      <button
+        type="button"
+        className="cp-bar"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((o) => !o)}
+      >
+        <MessageSquareText size={15} />
+        <span>{t('Comments')}</span>
+        {open.length > 0 && <span className="cp-count">{open.length}</span>}
+        <ChevronDown size={14} className="cp-chev" aria-hidden />
+      </button>
+
+      {expanded && (
+        <>
       {resolved.length > 0 && (
         <label className="cp-toggle">
           <input
@@ -159,6 +198,8 @@ export default function CommentsSection({
           {t('Send')}
         </button>
       </form>
+        </>
+      )}
     </section>
   );
 }

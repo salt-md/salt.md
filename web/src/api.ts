@@ -295,10 +295,14 @@ export const api = {
       body: JSON.stringify(patch),
     }),
   trashPage: (id: string) => req<{ ok: boolean }>(`/api/pages/${id}`, { method: 'DELETE' }),
-  duplicatePage: (id: string, fromTemplate = false) =>
-    req<{ id: string }>(`/api/pages/${id}/duplicate${fromTemplate ? '?fromTemplate=1' : ''}`, {
-      method: 'POST',
-    }),
+  // fromTemplate: instantiate a template (copy keeps the title).
+  // asTemplate: save as template — the COPY becomes the template (snapshot),
+  // the original stays a normal page.
+  duplicatePage: (id: string, fromTemplate = false, asTemplate = false) =>
+    req<{ id: string }>(
+      `/api/pages/${id}/duplicate${fromTemplate ? '?fromTemplate=1' : asTemplate ? '?asTemplate=1' : ''}`,
+      { method: 'POST' },
+    ),
   importMarkdown: (parentId: string | null, title: string, markdown: string) =>
     req<{ id: string }>('/api/import', {
       method: 'POST',

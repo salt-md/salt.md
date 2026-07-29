@@ -17,9 +17,11 @@ type dupRow struct {
 // duplicatePage deep-copies a page and its whole subtree (new ids, preserved
 // structure, copied collection schema/views) as a sibling of the original.
 // fromTemplate keeps the original title (instantiating a template) instead of
-// prefixing "Copy of"; the copy is never itself a template. Returns the new
-// root id.
-func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string, error) {
+// prefixing "Copy of". asTemplate marks the COPY as the template: saving a
+// template is a snapshot, so the original stays a normal page and later edits
+// to it never change the template. Without asTemplate the copy is never a
+// template. Returns the new root id.
+func (s *Server) duplicatePage(rootID, userID string, fromTemplate, asTemplate bool) (string, error) {
 	ids, err := subtreeIDs(s.db, rootID)
 	if err != nil {
 		return "", err
@@ -128,11 +130,17 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 		var parent any
 		pos := d.position
 		title := d.title
+		isTemplate := 0
 		if oldID == rootID {
 			parent = rootParent
 			pos = rootPos
-			if !fromTemplate {
+			// A snapshot keeps its name — "Copy of" is for duplicates that live
+			// beside their original in the same list.
+			if !fromTemplate && !asTemplate {
 				title = "Copy of " + d.title
+			}
+			if asTemplate {
+				isTemplate = 1 // only the root carries the flag; the subtree is its body
 			}
 		} else if np, ok := newID2[d.parentID]; ok {
 			parent = np
@@ -145,9 +153,9 @@ func (s *Server) duplicatePage(rootID, userID string, fromTemplate bool) (string
 			// skipped.
 			continue
 		}
-		if _, err := s.db.Exec(`INSERT INTO pages (id, parent_id, title, icon, cover, content, position, created_at, updated_at, type, props, workspace_id, owner_id, visibility)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			nid, parent, title, d.icon, d.cover, d.content, pos, ts, ts, d.typ, d.props, workspaceID, userID, d.visibility); err != nil {
+		if _, err := s.db.Exec(`INSERT INTO pages (id, parent_id, title, icon, cover, content, position, created_at, updated_at, type, props, workspace_id, owner_id, visibility, is_template)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			nid, parent, title, d.icon, d.cover, d.content, pos, ts, ts, d.typ, d.props, workspaceID, userID, d.visibility, isTemplate); err != nil {
 			return "", err
 		}
 		if sv, ok := collectionSchemas[oldID]; ok {
@@ -166,7 +174,7 @@ func (s *Server) handleDuplicatePage(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 403, "forbidden")
 		return
 	}
-	newRoot, err := s.duplicatePage(pageID, u.ID, r.URL.Query().Get("fromTemplate") == "1")
+	newRoot, err := s.duplicatePage(pageID, u.ID, r.URL.Query().Get("fromTemplate") == "1", r.URL.Query().Get("asTemplate") == "1")
 	if err == sql.ErrNoRows {
 		httpError(w, 404, "page not found")
 		return

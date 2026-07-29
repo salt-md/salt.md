@@ -769,7 +769,12 @@ button {
 .editor-inner {
   max-width: var(--doc-width);
   margin: 0 auto;
-  padding: 20px var(--doc-pad) 30vh;
+  /* Bottom padding is the click-to-write strip under the last block, not a
+     spacer: it used to be 30vh, which pushed the comments a third of a screen
+     away from the text ("riesen Abstand"). Short pages still get their big
+     clickable area from .editor-scroll's flex stretch; the scroll-past-end
+     room lives in .comments-wrap's bottom padding. */
+  padding: 20px var(--doc-pad) 56px;
 }
 
 .page-icon-row {
@@ -2577,7 +2582,7 @@ button {
   .sidebar, .sidebar-backdrop, .topbar, .tab-bar, .backlinks, .toaster,
   .menu-btn, .upload-bar, .menu, .page-cover-actions, .cover-btn,
   .page-tag-input, .page-tag-x, .add-icon, .icon-picker, .collection-toolbar,
-  .head-controls, .db-add-row, .comments-panel {
+  .head-controls, .db-add-row, .comments-wrap {
     display: none !important;
   }
 
@@ -6251,21 +6256,34 @@ a,
 
 .comments-section {
   border-top: 1px solid var(--border);
-  padding-top: 20px;
-  margin-top: 8px;
   font-size: 14px;
 }
 
-.cp-title {
+/* Collapsed, the whole section is this one slim row. */
+.cp-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  width: 100%;
+  padding: 12px 0;
+  font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
   color: var(--muted);
-  margin: 0 0 14px;
+}
+.cp-bar:hover {
+  color: var(--fg);
+}
+.cp-bar svg {
+  flex: none;
+}
+.cp-chev {
+  transition: transform 0.15s;
+}
+.comments-section.is-open .cp-chev {
+  transform: rotate(180deg);
+}
+.comments-section.is-open .cp-bar {
+  color: var(--fg);
 }
 .cp-count {
   font-size: 11px;

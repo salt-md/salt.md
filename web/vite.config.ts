@@ -22,6 +22,9 @@ export default defineConfig({
     proxy: {
       '/api': backend,
       '/files': backend,
+      // The Yjs relay lives outside /api; without ws:true the dev editor
+      // never leaves its loading state (the socket dies at the vite server).
+      '/collab': { target: backend, ws: true },
     },
   },
 });

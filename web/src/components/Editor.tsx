@@ -24,12 +24,12 @@ import { PageIcon } from '../pageIcon';
 import { BlockContext } from '../blockContext';
 import CollectionView from './CollectionView';
 import { HistoryModal } from './PageHistory';
-import CommentsSection, { initials } from './CommentsSection';
+import CommentsSection, { initials, OPEN_COMMENTS_EVENT } from './CommentsSection';
 import { usePeers, setPeers, clearPeers } from '../presence';
 import { tagColorClass, TAG_PALETTE } from '../tags';
 import { collectTags, suggestTags } from '../tagSuggest';
 import { useMenuDismiss } from '../modal';
-import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile } from 'lucide-react';
+import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile } from 'lucide-react';
 
 export interface EditorProps {
   pageId: string;
@@ -364,6 +364,20 @@ function PageHeader({
   useMenuDismiss(overflowOpen, overflowWrapRef, () => setOverflowOpen(false));
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openComments, setOpenComments] = useState(0);
+  // The topbar button toggles the WHOLE comments row, not just its expansion —
+  // hidden means hidden, remembered across pages and reloads.
+  const [commentsHidden, setCommentsHidden] = useState(
+    () => localStorage.getItem('salt-comments-hidden') === '1',
+  );
+  const showComments = () => {
+    setCommentsHidden(false);
+    localStorage.removeItem('salt-comments-hidden');
+    window.dispatchEvent(new CustomEvent(OPEN_COMMENTS_EVENT));
+    // Render first, then scroll — the row does not exist while hidden.
+    requestAnimationFrame(() =>
+      document.getElementById('kommentare')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
   const peers = usePeers(pageId);
   // The counter in the header should be right before anybody has scrolled
   // down — you should SEE that comments exist without going to look.
@@ -631,13 +645,18 @@ function PageHeader({
             </div>
           )}
           <button
-            className="icon-btn"
-            title={t('Jump to the comments')}
-            onClick={() =>
-              document.getElementById('kommentare')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-            }
+            className={'icon-btn' + (commentsHidden ? ' comments-off' : '')}
+            title={commentsHidden ? t('Show comments') : t('Hide comments')}
+            onClick={() => {
+              if (commentsHidden) {
+                showComments();
+              } else {
+                setCommentsHidden(true);
+                localStorage.setItem('salt-comments-hidden', '1');
+              }
+            }}
           >
-            <MessageSquare size={17} />
+            {commentsHidden ? <MessageSquareOff size={17} /> : <MessageSquare size={17} />}
             {openComments > 0 && <span className="badge-count">{openComments}</span>}
           </button>
           <button
@@ -741,7 +760,9 @@ function PageHeader({
                   className="menu-item"
                   onClick={() => {
                     setOverflowOpen(false);
-                    document.getElementById('kommentare')?.scrollIntoView({ behavior: 'smooth' });
+                    // Always SHOWS them — a jump target that stays hidden
+                    // would make this menu item a no-op.
+                    showComments();
                   }}
                 >
                   <MessageSquare size={15} /> {t('To the comments')}
@@ -1045,7 +1066,12 @@ function PageHeader({
           Datenbank-Seite hat unten ihre Tabelle, darunter waere es verloren. */}
       {page.type !== 'collection' && (
         <div className="comments-wrap">
-          <CommentsSection pageId={pageId} myUserId={user.id} onCountChange={setOpenComments} />
+          <CommentsSection
+            pageId={pageId}
+            myUserId={user.id}
+            onCountChange={setOpenComments}
+            hidden={commentsHidden}
+          />
         </div>
       )}
       </div>

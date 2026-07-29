@@ -1087,7 +1087,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "list_users":
 			return s.mcpListUsers(u)
 		case "duplicate_page":
-			nid, err := s.duplicatePage(args.PageID, userID, false)
+			nid, err := s.duplicatePage(args.PageID, userID, false, false)
 			if err != nil {
 				return "", err
 			}

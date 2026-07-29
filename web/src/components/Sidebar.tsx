@@ -310,6 +310,16 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
           </button>
           {ctx.menuFor === p.id && (
             <div className="menu">
+              {/* The visible way to get a second tab — ⌘-click and middle-click
+                  exist too, but nothing in the interface said so. */}
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onOpenInNewTab(p.id);
+                }}
+              >
+                {t('↗ Open in new tab')}
+              </button>
               <button
                 onClick={() => {
                   ctx.setMenuFor(null);
@@ -347,12 +357,17 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
               <button
                 onClick={() => {
                   ctx.setMenuFor(null);
+                  // A template is a SNAPSHOT: the copy becomes the template and
+                  // keeps this moment's state; the page here stays a normal page.
+                  // (Flagging the page itself kept template and original one
+                  // object — editing either changed "the template".)
                   void api
-                    .updatePage(p.id, { isTemplate: !p.isTemplate })
-                    .catch(() => toast('Template-Markierung fehlgeschlagen'));
+                    .duplicatePage(p.id, false, true)
+                    .then(() => toast(t('Saved as template')))
+                    .catch(() => toast(t('Could not save as template')));
                 }}
               >
-                {p.isTemplate ? '📋 Template-Markierung entfernen' : '📋 Als Template markieren'}
+                {t('📋 Save as template')}
               </button>
               <button
                 onClick={() => {
@@ -498,6 +513,8 @@ export default function Sidebar({
       toast(t('The template could not be used'));
     }
   };
+  // ⋯ menu on a template row (remove the flag / trash the snapshot).
+  const [tplMenuFor, setTplMenuFor] = useState<string | null>(null);
 
   const { childrenMap, parentKeyOf, trashRoots } = useMemo(() => {
     const visible = pages.filter((p) => !p.trashed && inWs(p));
@@ -1022,6 +1039,37 @@ export default function Sidebar({
                   <button title={t('New page from this template')} onClick={() => void instantiateTemplate(p.id)}>
                     ＋
                   </button>
+                  <button
+                    title={t('More')}
+                    onClick={() => setTplMenuFor(tplMenuFor === p.id ? null : p.id)}
+                  >
+                    ⋯
+                  </button>
+                  {tplMenuFor === p.id && (
+                    <div className="menu">
+                      <button
+                        onClick={() => {
+                          setTplMenuFor(null);
+                          // Back to a normal page: it leaves this list and
+                          // reappears in the tree.
+                          void api
+                            .updatePage(p.id, { isTemplate: false })
+                            .catch(() => toast(t('Could not be changed')));
+                        }}
+                      >
+                        {t('📋 Remove template flag')}
+                      </button>
+                      <button
+                        className="danger"
+                        onClick={() => {
+                          setTplMenuFor(null);
+                          onTrash(p.id);
+                        }}
+                      >
+                        {t('🗑 Move to trash')}
+                      </button>
+                    </div>
+                  )}
                 </span>
               </div>
             ))
