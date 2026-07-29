@@ -174,12 +174,51 @@ entries in `<locale>.machine.json`. Plural categories come from
 `Intl.PluralRules`. Add the code to `LOCALES` in `i18n.ts` so it appears in the
 picker.
 
+## The release path — fixed, one direction
+
+The repo is public and marketing is coming. This sequence is the whole of it;
+**he decides when anything goes live**, and no step runs ahead of its word:
+
+1. **Work locally, together.** Session/worktree branches base on
+   `origin/main` — run `git fetch` and CHECK the base first: worktrees branch
+   from the local `main` by default, and that has already been a stale,
+   rewritten line once (a whole session started on 1.2.0 while GitHub was at
+   1.5.2).
+2. **Deploy to the test box** `172.16.0.115` without asking — that is where he
+   looks at the work. The tunnel makes it publicly reachable; "test" names the
+   stage in this path, not the visibility.
+3. **`git push` to GitHub only on his word.** Local commits are always fine.
+4. **Tag on his word — the tag IS the release act.** A `v*` tag fires
+   `release.yml` (platform binaries on a GitHub Release, where `install.sh`
+   downloads from) and `docker.yml` (`ghcr.io/salt-md/salt.md:<ver>` +
+   `:latest`). Tagging is a separate decision from pushing and waits for its
+   own word.
+5. **Production** (`10.10.20.20:8420`, Proxmox in the Hetzner cloud) **only
+   after the tag's build is green**, only from the tagged artefact, never from
+   hand-copied source (mechanics and the GHCR-visibility caveat below). The
+   final `docker stop` on that box is his — the permission layer refusing it
+   is the design.
+
+No shortcuts between stages, no deploy that skips the test box, no tag without
+a green conscience about what is on it. When he says "auf GitHub", that means
+step 3 — 4 and 5 still wait for their own go.
+
+**Planned, not done: the org may be renamed** — `salt-md/salt.md` →
+`salt-labs/salt.md`. If it happens, the `origin` remote, the GHCR image path
+in `docker.yml`, `install.sh`'s download URL and the README links all move
+together: grep for `salt-md/` and treat it as one public-facing change, on his
+word like the rest.
+
 ## The two servers — do not mix them up
 
-| Address | What it is | Reached via | Version |
-| --- | --- | --- | --- |
-| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` | 1.5.1-dev |
-| `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` | 1.4.0 |
+| Address | What it is | Reached via |
+| --- | --- | --- |
+| `http://172.16.0.115/` | **test** server, LXC 115 | `ssh root@172.16.0.10` → `pct` |
+| `http://10.10.20.20:8420` | **PRODUCTION** — the owner's real instance | `ssh root@10.10.20.20` |
+
+This table used to carry a Version column and it was wrong within a week —
+read the version from the startup log on the box itself (`journalctl -u
+salt`), never from this file and never from `--version` (see below).
 
 The test box answers on **port 80**, production on **8420** — a bare
 `10.10.20.20` in a command is a strong hint that something is aimed wrong.
@@ -487,6 +526,9 @@ Not legal advice, and none was bought. What keeps the risk small is that the
 text is a standard one, adopted unchanged.
 
 ## Working agreement
+
+The release path above is the law of this repo: local → test box → push →
+tag → production, one direction, each public step on his word.
 
 Local commits freely. **Test server without asking** — he wants to look at the
 result, not read about it. **Production and `git push` only on his word.**
