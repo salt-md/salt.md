@@ -5424,6 +5424,73 @@ a.btn {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* ---- Checklist property (W116) ---- */
+
+/* A finished checklist turns green — the one moment where the accent colour is
+   not enough, because "all done" is worth seeing across a whole board. */
+.prop-bar-fill.is-full { background: #2f9e44; }
+
+.prop-checklist-toggle { cursor: pointer; display: inline-flex; }
+.prop-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 180px;
+}
+.pcl-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pcl-item.is-done .pcl-text {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.pcl-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  color: var(--fg);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  padding: 2px 0;
+}
+.pcl-text:focus { outline: none; border-bottom-color: var(--border); }
+.pcl-del,
+.pcl-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.pcl-del:hover { color: var(--danger); }
+.pcl-add:hover { color: var(--fg); }
+.pcl-actions { display: flex; gap: 12px; padding-top: 2px; }
+
+/* ---- Person property: the same face as in presence and comments ---- */
+.prop-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.prop-person-av {
+  width: 18px;
+  height: 18px;
+  font-size: 8px;
+}
+.prop-person-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Meta size, like the date and the bar label beside it — at card font size a
+     name shouted louder than the row title. */
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
 .prop-ring { display: inline-flex; align-items: center; gap: 6px; }
 .prop-ring svg { flex: none; }
 .prop-ring-track { fill: none; stroke: var(--hover); stroke-width: 3; }

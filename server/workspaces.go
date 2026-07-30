@@ -551,6 +551,11 @@ type memberJSON struct {
 	Name   string `json:"name"`
 	Email  string `json:"email"`
 	Role   string `json:"role"`
+	// Colour and picture travel too, so a person property can show the same
+	// face the presence dots and the comments already show. Nothing new is
+	// disclosed: both are visible to fellow members wherever a person appears.
+	Color  string `json:"color"`
+	Avatar string `json:"avatar"`
 }
 
 // handleListMembers lists a workspace's members. Any member may view the roster.
@@ -561,7 +566,8 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rows, err := s.db.Query(`
-		SELECT u.id, u.name, u.email, m.role FROM workspace_members m
+		SELECT u.id, u.name, u.email, m.role, COALESCE(u.color, ''), COALESCE(u.avatar, '')
+		FROM workspace_members m
 		JOIN users u ON u.id = m.user_id
 		WHERE m.workspace_id = ? ORDER BY m.role, u.name`, wsID)
 	if err != nil {
@@ -572,7 +578,7 @@ func (s *Server) handleListMembers(w http.ResponseWriter, r *http.Request) {
 	list := []memberJSON{}
 	for rows.Next() {
 		var m memberJSON
-		rows.Scan(&m.UserID, &m.Name, &m.Email, &m.Role)
+		rows.Scan(&m.UserID, &m.Name, &m.Email, &m.Role, &m.Color, &m.Avatar)
 		list = append(list, m)
 	}
 	writeJSON(w, list)

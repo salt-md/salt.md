@@ -135,11 +135,20 @@ export type PropType =
   | 'multiselect'
   | 'date'
   | 'checkbox'
+  | 'checklist'
   | 'url'
   | 'person'
   | 'relation'
   | 'rollup'
   | 'formula';
+
+/** One sub-task of a checklist property. Progress is derived from these — a
+    stored percentage would be a second truth to keep in sync. */
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
 
 export interface PropOption {
   id: string;

@@ -273,7 +273,7 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "create_database",
-		"description": "Create a new database (collection) page with a property schema. schema is an array of {id,name,type,...} property definitions (types: text, number, select, multiselect, date, checkbox, person, relation, rollup, formula). If omitted, a default Status board is created.",
+		"description": "Create a new database (collection) page with a property schema. schema is an array of {id,name,type,...} property definitions (types: text, number, select, multiselect, date, checkbox, checklist, person, relation, rollup, formula). If omitted, a default Status board is created.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"title":        map[string]any{"type": "string"},
@@ -308,7 +308,7 @@ var mcpTools = []map[string]any{
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"page_id": map[string]any{"type": "string"},
-				"properties": map[string]any{"type": "array", "description": "Each: {id? (to change), name, type, options?, formula?, numberDisplay?, numberMax?, relationCollection?, rollupRelation?, rollupTarget?, rollupAgg?}. Types: text, number, select, multiselect, date, checkbox, url, person, relation, rollup, formula. OPTIONS may be plain strings [\"To do\",\"Done\"] or objects with a colour: [{\"name\":\"Done\",\"color\":\"#2f9e44\"}] — the colour shows in board columns and chips.",
+				"properties": map[string]any{"type": "array", "description": "Each: {id? (to change), name, type, options?, formula?, numberDisplay?, numberMax?, relationCollection?, rollupRelation?, rollupTarget?, rollupAgg?}. Types: text, number, select, multiselect, date, checkbox, checklist, url, person, relation, rollup, formula. A checklist value is a list of sub-tasks [{\"text\":\"…\",\"done\":false}] and shows its own progress bar — do not add a second percentage column beside it. OPTIONS may be plain strings [\"To do\",\"Done\"] or objects with a colour: [{\"name\":\"Done\",\"color\":\"#2f9e44\"}] — the colour shows in board columns and chips.",
 					"items": map[string]any{"type": "object"}},
 				"remove_properties": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Property ids to remove"},
 			},

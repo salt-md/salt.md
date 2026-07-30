@@ -29,6 +29,9 @@ var validPropTypes = map[string]bool{
 	"text": true, "number": true, "select": true, "multiselect": true,
 	"date": true, "checkbox": true, "url": true, "person": true,
 	"relation": true, "rollup": true, "formula": true,
+	// checklist holds sub-tasks: [{"id","text","done"}]. Its progress is
+	// DERIVED (done/total), so there is no percentage to keep in sync.
+	"checklist": true,
 }
 
 var validViewTypes = map[string]bool{
@@ -56,7 +59,7 @@ func normalizeSchema(props []map[string]any) ([]map[string]any, error) {
 	for _, p := range props {
 		typ := str(p, "type")
 		if typ != "" && !validPropTypes[typ] {
-			return nil, fmt.Errorf("unknown property type %q on %q — use one of: text, number, select, multiselect, date, checkbox, url, person, relation, rollup, formula", typ, str(p, "name"))
+			return nil, fmt.Errorf("unknown property type %q on %q — use one of: text, number, select, multiselect, date, checkbox, checklist, url, person, relation, rollup, formula", typ, str(p, "name"))
 		}
 		if str(p, "name") == "" && str(p, "id") == "" {
 			return nil, fmt.Errorf("each property needs a name")
@@ -232,7 +235,7 @@ func (s *Server) mcpUpdateSchema(pageID string, props json.RawMessage, remove []
 			return "", fmt.Errorf("each property needs at least a name")
 		}
 		if typ != "" && !validPropTypes[typ] {
-			return "", fmt.Errorf("unknown property type %q — use one of: text, number, select, multiselect, date, checkbox, url, person, relation, rollup, formula", typ)
+			return "", fmt.Errorf("unknown property type %q — use one of: text, number, select, multiselect, date, checkbox, checklist, url, person, relation, rollup, formula", typ)
 		}
 		// An existing property? Then merge field by field — whatever the agent
 		// does not name stays untouched.

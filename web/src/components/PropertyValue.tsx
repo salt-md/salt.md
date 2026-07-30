@@ -1,9 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from '../api';
-import type { PropDef, PropOption } from '../types';
+import type { ChecklistItem, PropDef, PropOption } from '../types';
 import Portal from './Portal';
 import { OPTION_HEXES, optionPalette, optionSlug } from '../selectOptions';
 import { daysUntil, formatDay, formatNumber } from '../format';
+import { initials, nameColor } from './CommentsSection';
 import { Check, Link2 as LinkIcon, Plus, Trash2 } from 'lucide-react';
 import { t } from '../i18n';
 
@@ -311,6 +312,170 @@ function NumberDisplay({ value, def, compact }: { value: unknown; def: PropDef; 
   );
 }
 
+// ---- Checklist ----
+// Sub-tasks with derived progress. Deliberately NOT a number with a stored
+// percentage: two truths that drift apart, and the reason a Trello-style card
+// reads as "half done" is that the ticks and the bar cannot disagree.
+
+function checklistItems(value: unknown): ChecklistItem[] {
+  if (!Array.isArray(value)) return [];
+  // Tolerant like the select cell: an agent may write plain strings, and older
+  // rows may carry items without an id.
+  //
+  // Empty items are KEPT. Dropping them here looked tidy and broke adding
+  // entirely: a fresh sub-task starts empty, so it vanished on the very next
+  // render and the + button appeared to do nothing. They are cleaned up when
+  // the editor closes instead.
+  return value.map((v, i) =>
+    typeof v === 'string'
+      ? { id: 'i' + i, text: v, done: false }
+      : ({ id: String((v as ChecklistItem)?.id ?? 'i' + i), text: String((v as ChecklistItem)?.text ?? ''), done: (v as ChecklistItem)?.done === true } as ChecklistItem),
+  );
+}
+
+/** The compact face of a checklist: a bar and "3/5". Used on cards and in
+    table cells, where a full list would blow up the row. */
+function ChecklistSummary({ items, compact }: { items: ChecklistItem[]; compact?: boolean }) {
+  // A half-typed sub-task must not dilute the percentage, so the summary counts
+  // only items that say something.
+  const named = items.filter((i) => i.text.trim() !== '');
+  const total = named.length;
+  const done = named.filter((i) => i.done).length;
+  if (!total) return compact ? null : <span className="prop-empty" />;
+  const pct = Math.round((done / total) * 100);
+  return (
+    <span className="prop-bar prop-checklist-sum" title={`${done} / ${total}`}>
+      <span className="prop-bar-track">
+        <span className={'prop-bar-fill' + (done === total ? ' is-full' : '')} style={{ width: pct + '%' }} />
+      </span>
+      <span className="prop-bar-label">{pct}%</span>
+    </span>
+  );
+}
+
+function ChecklistValue({ value, onChange, readOnly, compact }: Props) {
+  const items = checklistItems(value);
+  const [open, setOpen] = useState(false);
+  const ro = readOnly || !onChange;
+
+  // Read-only cells and the collapsed state show the summary; the list itself
+  // only appears once someone opens it, so a table row stays one line high.
+  if (ro || !open) {
+    const summary = <ChecklistSummary items={items} compact={compact} />;
+    if (ro) return summary;
+    return (
+      <span className="prop-checklist-toggle" onClick={() => setOpen(true)}>
+        {items.length ? summary : <span className="prop-empty">{t('+ Sub-task')}</span>}
+      </span>
+    );
+  }
+
+  const write = (next: ChecklistItem[]) => onChange!(next.length ? next : null);
+  const toggle = (id: string) => write(items.map((i) => (i.id === id ? { ...i, done: !i.done } : i)));
+  const setText = (id: string, text: string) => write(items.map((i) => (i.id === id ? { ...i, text } : i)));
+  const remove = (id: string) => write(items.filter((i) => i.id !== id));
+  const add = () =>
+    write([...items, { id: 'i' + Date.now().toString(36) + items.length, text: '', done: false }]);
+
+  return (
+    <div className="prop-checklist">
+      <ChecklistSummary items={items} />
+      {items.map((it) => (
+        <div key={it.id} className={'pcl-item' + (it.done ? ' is-done' : '')}>
+          <input type="checkbox" checked={it.done} onChange={() => toggle(it.id)} />
+          <input
+            className="pcl-text"
+            value={it.text}
+            placeholder={t('Sub-task')}
+            onChange={(e) => setText(it.id, e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                add();
+              }
+            }}
+          />
+          <button className="pcl-del" title={t('Delete')} onClick={() => remove(it.id)}>
+            <Trash2 size={12} />
+          </button>
+        </div>
+      ))}
+      <div className="pcl-actions">
+        <button className="pcl-add" onClick={add}>
+          <Plus size={12} /> {t('Sub-task')}
+        </button>
+        <button
+          className="pcl-add"
+          onClick={() => {
+            // Closing is where empty rows go — they exist so you can type in
+            // them, not so they end up in the data.
+            const named = items.filter((i) => i.text.trim() !== '');
+            if (named.length !== items.length) write(named);
+            setOpen(false);
+          }}
+        >
+          {t('Done')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---- Person ----
+// Members of the workspaces this browser can see, by id AND by name, so a
+// person value written as a name (by hand or by an agent) still finds its face.
+// One request per workspace, shared by every cell — a table with 200 person
+// cells must not make 200 calls.
+type Member = { userId: string; name: string; color: string; avatar: string };
+let memberCache: Promise<Member[]> | null = null;
+
+function loadMembers(): Promise<Member[]> {
+  if (!memberCache) {
+    memberCache = api
+      .listWorkspaces()
+      .then((ws) => Promise.all(ws.map((w) => api.listMembers(w.id).catch(() => []))))
+      .then((lists) => {
+        const byID = new Map<string, Member>();
+        for (const m of lists.flat()) {
+          byID.set(m.userId, { userId: m.userId, name: m.name, color: m.color, avatar: m.avatar });
+        }
+        return [...byID.values()];
+      })
+      .catch(() => [] as Member[]);
+  }
+  return memberCache;
+}
+
+/** A person value used to render as grey text — the same name that appears as a
+    face in presence and in comments. Matches by id first, then by name; an
+    unknown value stays readable text rather than disappearing. */
+function PersonValue({ value }: { value: unknown }) {
+  const raw = String(value ?? '').trim();
+  const [members, setMembers] = useState<Member[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void loadMembers().then((m) => alive && setMembers(m));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  if (!raw) return null;
+  const lower = raw.toLowerCase();
+  const hit = members.find((m) => m.userId === raw) ?? members.find((m) => m.name.toLowerCase() === lower);
+  const name = hit?.name ?? raw;
+  return (
+    <span className="prop-person" title={name}>
+      <span
+        className="cp-avatar prop-person-av"
+        style={{ background: hit?.avatar ? 'transparent' : hit?.color || nameColor(name) }}
+      >
+        {hit?.avatar ? <img src={hit.avatar} alt="" /> : initials(name)}
+      </span>
+      <span className="prop-person-name">{name}</span>
+    </span>
+  );
+}
+
 // ---- Relation picker ----
 // Rows of the target collection are fetched once per collection and shared
 // across every relation cell via a module-level cache, so a table with many
@@ -484,6 +649,8 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
           onChange={(e) => onChange?.(e.target.checked)}
         />
       );
+    case 'checklist':
+      return <ChecklistValue def={def} value={value} onChange={onChange} readOnly={readOnly} compact={compact} />;
     case 'number': {
       const display = def.numberDisplay ?? 'plain';
       if (ro) return <NumberDisplay value={value} def={def} compact={compact} />;
@@ -551,6 +718,31 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
       );
     }
     case 'person':
+      // Showing the face is the whole point, so a person renders as a chip
+      // until it is clicked; the editor is the same free-text field as before,
+      // because a person value may also be somebody without an account.
+      if (ro || !editing) {
+        if (!value) return compact ? null : <span className="prop-empty" onClick={ro ? undefined : () => setEditing(true)} />;
+        return (
+          <span onClick={ro ? undefined : () => setEditing(true)}>
+            <PersonValue value={value} />
+          </span>
+        );
+      }
+      return (
+        <input
+          className="prop-input"
+          autoFocus
+          defaultValue={(value as string) || ''}
+          onBlur={(e) => {
+            setEditing(false);
+            onChange!(e.target.value);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          }}
+        />
+      );
     case 'text':
     default:
       if (compact) return value ? <span className="prop-text-chip">{String(value)}</span> : null;

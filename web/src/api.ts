@@ -422,10 +422,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ email, role }),
     }),
+  // color/avatar travel too (W116), so a person property can show the same face
+  // as presence and comments.
   listMembers: (workspaceId: string) =>
-    req<{ userId: string; name: string; email: string; role: 'admin' | 'member' | 'viewer' }[]>(
-      `/api/workspaces/${workspaceId}/members`,
-    ),
+    req<
+      {
+        userId: string;
+        name: string;
+        email: string;
+        role: 'admin' | 'member' | 'viewer';
+        color: string;
+        avatar: string;
+      }[]
+    >(`/api/workspaces/${workspaceId}/members`),
   updateMember: (workspaceId: string, userId: string, role: 'admin' | 'member' | 'viewer') =>
     req<{ ok: boolean }>(`/api/workspaces/${workspaceId}/members/${userId}`, {
       method: 'PATCH',

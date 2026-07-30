@@ -14,6 +14,9 @@ const TYPES: { value: PropType; label: string }[] = [
   { value: 'multiselect', label: 'Multi-select' },
   { value: 'date', label: 'Date' },
   { value: 'checkbox', label: 'Checkbox' },
+  // A checklist is not a checkbox with extra steps: it holds sub-tasks and
+  // shows their progress, which is what a card needs to say "half done".
+  { value: 'checklist', label: 'Checklist' },
   // The server has long known url (validPropTypes) and MCP advertises it —
   // only the interface never offered it and quietly treated it as text.
   { value: 'url', label: 'URL' },
