@@ -445,6 +445,15 @@ bundle; three-line startup, no rebuild. Backup:
 `/root/salt-backups/salt-data-20260730-085502-vor-1.5.3.tar.gz` (21M, gzip
 verified); the `1.5.2` image stays on the box for a rollback.
 
+**Production runs `1.6.1`** (2026-07-30 19:31), on his word ("push live"):
+anonymous pull from GHCR, stop + volume backup + swap in one line — the owner
+had deployed `1.6.0` himself in between (backup `…-vor-1.6.0` from 16:44), so
+this hop was 1.6.0 → 1.6.1. Verified by behaviour: `ws-rules-view`,
+`Load into editor` and `has-pending-dot` in the served bundle (workspace
+rules, W123–W123c); three-line startup, no rebuild. Backup:
+`/root/salt-backups/salt-data-20260730-193133-vor-1.6.1.tar.gz` (22M, gzip
+verified); the `1.6.0` image stays on the box for a rollback.
+
 **Reading that database from outside needs the WAL.** `docker cp salt:/data/salt.db`
 alone shows a stale schema — the migration sat in `salt.db-wal` and the copy
 looked as if it had never run. Copy `salt.db`, `salt.db-wal` and `salt.db-shm`
