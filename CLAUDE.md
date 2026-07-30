@@ -202,7 +202,10 @@ The repo is public and marketing is coming. This sequence is the whole of it;
    `release.yml` (platform binaries on a GitHub Release, where `install.sh`
    downloads from) and `docker.yml` (`ghcr.io/salt-md/salt.md:<ver>` +
    `:latest`). Tagging is a separate decision from pushing and waits for its
-   own word.
+   own word. **Version numbers move modestly**: patch bump by default
+   (1.6.0 → 1.6.1), even for a feature — a minor bump is for something
+   genuinely big, and he says when that is (said so on 1.6.1, after a 1.7.0
+   was almost stamped for three workspace-rules commits).
 5. **Production** (`10.10.20.20:8420`, Proxmox in the Hetzner cloud) **only
    after the tag's build is green**, only from the tagged artefact, never from
    hand-copied source (mechanics and the GHCR-visibility caveat below). The
