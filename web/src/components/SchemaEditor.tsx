@@ -252,7 +252,7 @@ export default function SchemaEditor({
             value={p.relationCollection ?? ''}
             onChange={(e) => updateProp(p.id, { relationCollection: e.target.value })}
           >
-            <option value="">{t('Select a database…')}</option>
+            <option value="">{t('Select a collection…')}</option>
             {targets.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title || 'Untitled'}
@@ -344,7 +344,7 @@ export default function SchemaEditor({
     <Portal>
     <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="dialog wide">
-        <h2>{t('Database properties')}</h2>
+        <h2>{t('Collection properties')}</h2>
         <div className="schema-list">
           {schema.map((p) => (
             <div key={p.id} className="schema-item">

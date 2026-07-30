@@ -276,14 +276,14 @@ export const databaseSpec = createReactBlockSpec(
           <div className="bn-db-picker" contentEditable={false}>
             <input
               className="prop-input"
-              placeholder={t('Search databases…')}
+              placeholder={t('Search collections…')}
               value={q}
               autoFocus
               onChange={(e) => setQ(e.target.value)}
               onKeyDown={(e) => e.stopPropagation()}
             />
             <div className="bn-db-picker-list">
-              {dbs.length === 0 && <div className="bn-db-picker-empty">{t('No database found')}</div>}
+              {dbs.length === 0 && <div className="bn-db-picker-empty">{t('No collection found')}</div>}
               {dbs.slice(0, 8).map((d) => (
                 <button
                   key={d.id}
@@ -305,7 +305,7 @@ export const databaseSpec = createReactBlockSpec(
         // crash — an honest note.
         return (
           <div className="bn-db-missing" contentEditable={false}>
-            {t('This database is no longer available.')}
+            {t('This collection is no longer available.')}
           </div>
         );
       }

@@ -186,7 +186,11 @@ export default function TemplateGallery({
                 <>
                   <div className="tpl-preview-head">
                     <strong>{current.title || t('Untitled')}</strong>
-                    {current.type === 'collection' && <span className="index-badge">DB</span>}
+                    {current.type === 'collection' && (
+                      <span className="index-badge" title={t('Collection')}>
+                        <Table2 size={11} />
+                      </span>
+                    )}
                   </div>
                   {preview === null ? (
                     <div className="dialog-hint">{t('Loading…')}</div>

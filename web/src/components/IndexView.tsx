@@ -5,7 +5,7 @@ import type { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
 import { compare, formatMoment } from '../format';
 import { plural, t } from '../i18n';
-import { Clock, Library, Lock, Star, Users, Workflow } from 'lucide-react';
+import { Clock, Library, Lock, Star, Table2, Users, Workflow } from 'lucide-react';
 
 type SortKey = 'title' | 'in' | 'out' | 'updated';
 type Mode = 'recent' | 'favorites' | 'shared' | 'private' | 'all' | 'tree';
@@ -191,7 +191,7 @@ export default function IndexView({
           <button className="idx-node-main" onClick={() => onNavigate(p.id)} title={p.id}>
             <span className="idx-node-icon"><PageIcon icon={p.icon} size={14} fallback={isDb ? '🗄' : '📄'} /></span>
             <span className={'idx-node-title' + (query && matches ? ' idx-hit' : '')}>{p.title || 'Untitled'}</span>
-            {isDb && <span className="index-badge">DB</span>}
+            {isDb && <span className="index-badge" title={t('Collection')}><Table2 size={11} /></span>}
           </button>
           <code className="idx-node-id">{p.id.slice(0, 8)}</code>
           <button className="idx-md" title={t('Copy Markdown link')} onClick={() => copyMd(p.id)}>md</button>
@@ -265,7 +265,11 @@ export default function IndexView({
                     <button className="db-title-link" onClick={() => onNavigate(page.id)}>
                       {page.icon && <span className="inline-icon"><PageIcon icon={page.icon} size={14} /> </span>}
                       {page.title || t('Untitled')}
-                      {page.type === 'collection' && <span className="index-badge">DB</span>}
+                      {page.type === 'collection' && (
+                        <span className="index-badge" title={t('Collection')}>
+                          <Table2 size={11} />
+                        </span>
+                      )}
                     </button>
                   </td>
                   <td className="idx-dim">{people.get(page.ownerId) ?? ''}</td>

@@ -837,7 +837,7 @@ export default function Sidebar({
               {currentWs && (
                 <button
                   className="menu-item"
-                  title={t('Native archive: pages, databases, files and tags — importable one-to-one into another instance')}
+                  title={t('Native archive: pages, collections, files and tags — importable one-to-one into another instance')}
                   onClick={() => { setWsMenuOpen(false); api.download(`/api/workspaces/${currentWs}/export`); }}
                 >
                   <Download size={15} /> {t('Export workspace')}
@@ -1012,16 +1012,16 @@ export default function Sidebar({
           )}
           <SidebarSection
             id="dbs"
-            label={t('Databases')}
+            label={t('Collections')}
             icon={<Table2 size={17} />}
             count={allDbs.length}
-            createTitle={t('New database')}
+            createTitle={t('New collection')}
             onCreate={() => onCreate(null, 'collection')}
           >
             {topDbs.length ? (
               topDbs.map((p) => <TreeItem key={p.id} p={p} depth={0} ctx={ctx} />)
             ) : (
-              <div className="sb-empty">{t('No database yet')}</div>
+              <div className="sb-empty">{t('No collection yet')}</div>
             )}
           </SidebarSection>
         </div>

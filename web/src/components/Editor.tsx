@@ -1284,8 +1284,8 @@ function BlockContent({
           insertOrUpdateBlockForSlashMenu(editor, { type: 'bookmark' } as never),
       },
       {
-        title: t('Embed a database'),
-        subtext: t('Show an existing database inside the document'),
+        title: t('Embed a collection'),
+        subtext: t('Show an existing collection inside the document'),
         aliases: ['datenbank', 'database', 'db', 'tabelle', 'board', 'kanban'],
         group: 'Basic blocks',
         icon: <span>▦</span>,

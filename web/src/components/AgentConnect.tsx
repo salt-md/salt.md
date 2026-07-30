@@ -184,7 +184,7 @@ export default function AgentConnectModal({
           </h2>
           <p className="dialog-hint">
             {t(
-              'Salt.md is AI-native: the built-in MCP server lets any agent read, write and search pages and maintain databases. One link is all it takes — the token sits inside the URL, so there is no header configuration any more. Treat the link like a password.',
+              'Salt.md is AI-native: the built-in MCP server lets any agent read, write and search pages and maintain collections. One link is all it takes — the token sits inside the URL, so there is no header configuration any more. Treat the link like a password.',
             )}
           </p>
 

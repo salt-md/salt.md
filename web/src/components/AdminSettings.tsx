@@ -763,7 +763,7 @@ export function CalendarSubModal({ onClose }: { onClose: () => void }) {
           <h2>{t('Subscribe to calendar')}</h2>
           <p className="dialog-hint">
             {t(
-              'Subscribe to every date property in your databases from Apple Calendar, Google Calendar or Outlook. The link is private — do not share it.',
+              'Subscribe to every date property in your collections from Apple Calendar, Google Calendar or Outlook. The link is private — do not share it.',
             )}
           </p>
           {loadErr ? (

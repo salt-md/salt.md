@@ -61,6 +61,16 @@ docs/search-and-ai.md  design paper: local semantic search, stages 0-2
 translation key: `t('Manage users')`. Comments are English too — they carry the
 *why*, and unlike the interface they will never get a translation layer.
 
+**A database is a "collection" to people and a "database" to agents** (W119).
+The interface says Collection / Sammlung — it covers table, board, calendar and
+gallery alike, promises no SQL, and matches what the code has always called it
+(`type: 'collection'`, `/api/collections`). The MCP surface keeps `create_database`,
+`embed_database`, `database_id` and its own error texts: renaming a tool breaks
+every agent config out there, and an agent reads a schema, not marketing. Do not
+"fix" one side into the other. Two words in the interface stay `Database`
+literally — the backup section's SQLite file size and its restore note, which
+really are about the database file.
+
 **All formatting goes through `format.ts`.** Nothing else may call
 `toLocale*`, `Intl.*`, `localeCompare` or `new Date(someString)`. Two functions,
 never mix them:
