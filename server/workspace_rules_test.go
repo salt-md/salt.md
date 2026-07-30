@@ -183,10 +183,14 @@ func TestProposeRulesIsInertUntilAdminApplies(t *testing.T) {
 	}
 
 	// A read-only token cannot even propose.
-	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member, TokenScope: "read"}, ws, "x"); err == nil {
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin, TokenScope: "read"}, ws, "x"); err == nil {
 		t.Errorf("read token proposed rules")
 	}
-	// A viewer cannot propose.
+	// Rules are the admin's domain end to end: a plain member cannot propose.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "x"); err == nil {
+		t.Errorf("member proposed rules")
+	}
+	// Neither can a viewer.
 	viewer, _ := signedIn(t, s, "c@example.com")
 	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'viewer')`, ws, viewer); err != nil {
 		t.Fatalf("insert viewer: %v", err)
@@ -200,22 +204,22 @@ func TestProposeRulesIsInertUntilAdminApplies(t *testing.T) {
 		t.Errorf("stranger proposed rules")
 	}
 	// Overlong drafts are refused.
-	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, strings.Repeat("a", 16001)); err == nil {
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin}, ws, strings.Repeat("a", 16001)); err == nil {
 		t.Errorf("overlong proposal accepted")
 	}
 
-	// A member's proposal lands in the slot — and the ACTIVE rules stay empty.
-	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "Draft one"); err != nil {
+	// The admin's token may propose — and the ACTIVE rules still stay empty.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin}, ws, "Draft one"); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
 	var rules, proposal, by string
 	s.db.QueryRow(`SELECT rules, rules_proposal, rules_proposal_by FROM workspaces WHERE id = ?`, ws).Scan(&rules, &proposal, &by)
-	if rules != "" || proposal != "Draft one" || by != member {
+	if rules != "" || proposal != "Draft one" || by != admin {
 		t.Fatalf("after propose: rules=%q proposal=%q by=%q", rules, proposal, by)
 	}
 
 	// A newer draft replaces the older one.
-	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "Draft two"); err != nil {
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin}, ws, "Draft two"); err != nil {
 		t.Fatalf("second propose: %v", err)
 	}
 	s.db.QueryRow(`SELECT rules, rules_proposal FROM workspaces WHERE id = ?`, ws).Scan(&rules, &proposal)
@@ -237,11 +241,13 @@ func TestProposalWithdrawOnlyOwn(t *testing.T) {
 	s := testServer(t)
 	admin, _ := signedIn(t, s, "a@example.com")
 	ws := makeWorkspace(t, s, admin)
+	// Two admins: proposing needs the admin role now, and the withdraw rule
+	// still distinguishes WHOSE draft it is.
 	alice, _ := signedIn(t, s, "alice@example.com")
 	bob, _ := signedIn(t, s, "bob@example.com")
 	for _, id := range []string{alice, bob} {
-		if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, id); err != nil {
-			t.Fatalf("insert member: %v", err)
+		if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')`, ws, id); err != nil {
+			t.Fatalf("insert admin: %v", err)
 		}
 	}
 	if _, err := s.mcpProposeWorkspaceRules(&user{ID: alice}, ws, "Alice's draft"); err != nil {
@@ -270,7 +276,7 @@ func TestDismissProposalGuards(t *testing.T) {
 	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, member); err != nil {
 		t.Fatalf("insert member: %v", err)
 	}
-	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "Draft"); err != nil {
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin}, ws, "Draft"); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
 
@@ -314,15 +320,26 @@ func TestDismissProposalGuards(t *testing.T) {
 
 func TestRulesAddendumHints(t *testing.T) {
 	// Pure function, fixed voices: the addendum is server-authored and must
-	// never carry user text beyond the admin's rules themselves.
-	if a := rulesAddendum("", ""); !strings.Contains(a, "no rules yet") || !strings.Contains(a, "propose_workspace_rules") {
-		t.Errorf("empty/empty addendum: %q", a)
+	// never carry user text beyond the admin's rules themselves. The nudges
+	// (draft some, one is waiting) go to admins alone — a member's agent gets
+	// the rules to follow and nothing to raise.
+	if a := rulesAddendum("", "", true); !strings.Contains(a, "no rules yet") || !strings.Contains(a, "propose_workspace_rules") {
+		t.Errorf("admin empty/empty addendum: %q", a)
 	}
-	if a := rulesAddendum("", "pending"); !strings.Contains(a, "already waiting") || strings.Contains(a, "pending") {
+	if a := rulesAddendum("", "", false); a != "" {
+		t.Errorf("member got a rules nudge: %q", a)
+	}
+	if a := rulesAddendum("", "pending", true); !strings.Contains(a, "already waiting") || strings.Contains(a, "pending") {
 		t.Errorf("proposal-only addendum leaks or lacks hint: %q", a)
 	}
-	if a := rulesAddendum("Rule.", "pending"); !strings.Contains(a, "BEGIN WORKSPACE RULES") || !strings.Contains(a, "also waiting") {
+	if a := rulesAddendum("", "pending", false); a != "" {
+		t.Errorf("member learned about a pending proposal: %q", a)
+	}
+	if a := rulesAddendum("Rule.", "pending", true); !strings.Contains(a, "BEGIN WORKSPACE RULES") || !strings.Contains(a, "also waiting") {
 		t.Errorf("rules+proposal addendum: %q", a)
+	}
+	if a := rulesAddendum("Rule.", "pending", false); !strings.Contains(a, "BEGIN WORKSPACE RULES") || strings.Contains(a, "waiting") {
+		t.Errorf("member addendum must carry the rules and no proposal talk: %q", a)
 	}
 
 	// And get_workspace reports the pending flag inside the JSON.
@@ -341,5 +358,36 @@ func TestRulesAddendumHints(t *testing.T) {
 	}
 	if strings.Contains(addendum, "Draft") {
 		t.Errorf("proposal text leaked into the addendum: %q", addendum)
+	}
+}
+
+func TestProposalHiddenFromMembers(t *testing.T) {
+	s := testServer(t)
+	admin, adminCookie := signedIn(t, s, "a@example.com")
+	ws := makeWorkspace(t, s, admin)
+	member, memberCookie := signedIn(t, s, "b@example.com")
+	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, member); err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin}, ws, "Secret draft"); err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+
+	get := func(cookie string) string {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("GET", "/api/workspaces", nil)
+		req.Header.Set("Cookie", cookie)
+		s.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET workspaces: %d", rec.Code)
+		}
+		return rec.Body.String()
+	}
+	// The admin sees the draft; the member does not even receive it.
+	if body := get(adminCookie); !strings.Contains(body, "Secret draft") {
+		t.Errorf("admin list lacks the proposal: %s", body)
+	}
+	if body := get(memberCookie); strings.Contains(body, "Secret draft") {
+		t.Errorf("member list leaks the proposal: %s", body)
 	}
 }

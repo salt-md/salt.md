@@ -70,20 +70,16 @@ export default function WorkspaceRules({
           <p className="dialog-hint">
             {t('Conventions for working in this workspace. Agents receive them over MCP before they write here; members can read them too.')}
           </p>
-          {proposal && (
+          {proposal && canEdit && (
             <div className="ws-rules-proposal">
               <div className="ws-rules-proposal-head">
                 {t('Proposed by {name} — {when}', { name: proposalBy, when: formatMoment(proposalAt, 'datetime') })}
               </div>
               <div className="ws-rules-view">{proposal}</div>
-              {canEdit ? (
-                <div className="dialog-buttons">
-                  <button className="btn" onClick={() => void dismissProposal()}>{t('Dismiss proposal')}</button>
-                  <button className="btn primary" onClick={() => setText(proposal)}>{t('Load into editor')}</button>
-                </div>
-              ) : (
-                <p className="dialog-hint">{t('A workspace admin can apply or dismiss it.')}</p>
-              )}
+              <div className="dialog-buttons">
+                <button className="btn" onClick={() => void dismissProposal()}>{t('Dismiss proposal')}</button>
+                <button className="btn primary" onClick={() => setText(proposal)}>{t('Load into editor')}</button>
+              </div>
             </div>
           )}
           {canEdit ? (

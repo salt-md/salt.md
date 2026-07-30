@@ -342,6 +342,12 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin, &x.Rules,
 			&x.RulesProposal, &x.RulesProposalBy, &x.RulesProposalAt)
 		x.Personal, x.AutoJoin = personal != 0, autoJoin != 0
+		// A pending proposal is admin business — reviewing it is a governance
+		// act, and members have no rights over the rules beyond reading the
+		// active ones. So the draft does not even travel to them.
+		if x.Role != "admin" {
+			x.RulesProposal, x.RulesProposalBy, x.RulesProposalAt = "", "", ""
+		}
 		list = append(list, x)
 	}
 	writeJSON(w, list)

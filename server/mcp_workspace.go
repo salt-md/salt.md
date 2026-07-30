@@ -45,7 +45,7 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 			"two-factor settings", "API tokens", "creating or deleting accounts",
 			"backup/restore", "tunnel and instance settings",
 			"workspace membership and roles",
-			"applying workspace rules (propose_workspace_rules submits a draft; an admin applies it in the browser)",
+			"applying workspace rules (workspace admins may submit a draft via propose_workspace_rules; applying it stays in the browser)",
 		},
 		"note": "list_users names only the people you share a workspace with; " +
 			"account administration needs a signed-in browser session.",
@@ -141,32 +141,42 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	s.db.QueryRow(`SELECT COUNT(*) FROM pages WHERE workspace_id = ? AND trashed_at IS NULL AND type != 'collection'`, wsID).Scan(&pages)
 	s.db.QueryRow(`SELECT COUNT(*) FROM pages WHERE workspace_id = ? AND trashed_at IS NULL AND type = 'collection'`, wsID).Scan(&dbs)
 
+	role := s.workspaceRole(u.ID, wsID)
 	b, err := json.Marshal(map[string]any{
-		"id": wsID, "name": name, "my_role": s.workspaceRole(u.ID, wsID),
+		"id": wsID, "name": name, "my_role": role,
 		"members": members, "page_count": pages, "database_count": dbs,
 		"has_rules": rules != "", "has_pending_rules_proposal": proposal != "",
 	})
 	if err != nil {
 		return "", "", err
 	}
-	return string(b), rulesAddendum(rules, proposal), nil
+	return string(b), rulesAddendum(rules, proposal, role == "admin"), nil
 }
 
 // rulesAddendum builds what get_workspace appends after the untrusted block:
-// the active rules (framed to be followed), or a hint that none exist yet —
-// so an agent tells the user and offers to draft some — or that a proposal is
-// already waiting, so it does not pile a second one on top unasked.
-func rulesAddendum(rules, proposal string) string {
+// the active rules (framed to be followed), and — for ADMINS only — a hint
+// that none exist yet (so the agent tells the user and offers to draft some)
+// or that a proposal is already waiting (so it does not pile a second one on
+// top unasked). Rules are the admin's domain end to end: an agent working for
+// a plain member follows them but is never nudged to raise or change them.
+func rulesAddendum(rules, proposal string, isAdmin bool) string {
+	base := ""
+	if rules != "" {
+		base = wrapWorkspaceRules(rules)
+	}
+	if !isAdmin {
+		return base
+	}
 	switch {
 	case rules != "" && proposal != "":
-		return wrapWorkspaceRules(rules) +
-			"\n\nA rules proposal is also waiting for admin review in the browser — do not submit another unless the user asks for changes."
-	case rules != "":
-		return wrapWorkspaceRules(rules)
-	case proposal != "":
-		return "\n\nThis workspace has no active rules yet, but a rules proposal is already waiting for admin review in the browser — do not submit another unless the user asks for changes."
+		return base +
+			"\n\nA rules proposal is also waiting for your human's review in the browser (workspace menu → Workspace rules) — do not submit another unless the user asks for changes."
+	case rules == "" && proposal != "":
+		return "\n\nThis workspace has no active rules yet, but a rules proposal is already waiting for your human's review in the browser (workspace menu → Workspace rules) — do not submit another unless the user asks for changes."
+	case rules == "":
+		return "\n\nThis workspace has no rules yet. Mention that to the user; if they want some, draft a short set together (naming, structure, where content goes, what to leave alone) and submit it with propose_workspace_rules — applying it stays in the browser."
 	default:
-		return "\n\nThis workspace has no rules yet. Mention that to the user; if they want some, draft a short set together (naming, structure, where content goes, what to leave alone) and submit it with propose_workspace_rules — a workspace admin then applies it in the browser."
+		return base
 	}
 }
 
@@ -176,6 +186,10 @@ func rulesAddendum(rules, proposal string) string {
 // where the server can actually see the approval. One slot per workspace; a
 // newer proposal replaces the older one, and an empty proposal withdraws the
 // caller's own pending draft.
+//
+// Rules are the admin's domain on the WAY IN too: only a token whose human is
+// a workspace admin may even propose. A member's agent follows the rules; it
+// has no standing to raise them, and no reason to ask its user about them.
 func (s *Server) mcpProposeWorkspaceRules(u *user, wsID, rules string) (string, error) {
 	if u.TokenScope == "read" {
 		// The dispatch's write-gate covers this too; rules deserve the second lock.
@@ -187,8 +201,8 @@ func (s *Server) mcpProposeWorkspaceRules(u *user, wsID, rules string) (string, 
 	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
 		return "", fmt.Errorf("workspace %q not found", wsID)
 	}
-	if s.workspaceRole(u.ID, wsID) == "viewer" {
-		return "", fmt.Errorf("you are a viewer in this workspace and cannot propose rules")
+	if s.workspaceRole(u.ID, wsID) != "admin" {
+		return "", fmt.Errorf("workspace rules are managed by workspace admins; your token's account is not one here")
 	}
 	rules = strings.TrimSpace(rules)
 	if utf8.RuneCountInString(rules) > 16000 {

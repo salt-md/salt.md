@@ -461,7 +461,7 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "propose_workspace_rules",
-		"description": "Submit a DRAFT of workspace rules (working conventions: naming, structure, where content goes, what to leave alone). The draft never becomes active by itself — a workspace admin reviews and applies it in the browser, and that review cannot be skipped over MCP. Only propose when the user asked for rules or agreed to your draft; keep them short and imperative. An empty string withdraws your own pending draft. A new draft replaces the pending one.",
+		"description": "Submit a DRAFT of workspace rules (working conventions: naming, structure, where content goes, what to leave alone). Workspace admins only — the tool refuses a token whose account is not an admin of the workspace, so do not raise rules with a non-admin user at all. The draft never becomes active by itself: the admin reviews and applies it in the browser, and that review cannot be skipped over MCP. Only propose when the user asked for rules or agreed to your draft; keep them short and imperative. An empty string withdraws your own pending draft. A new draft replaces the pending one.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"workspace_id": map[string]any{"type": "string", "description": "Omit for your default workspace."},
@@ -664,7 +664,7 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			// workspaces can carry rules their admin wrote for agents.
 			"instructions": "Workspaces can carry rules — working conventions their admin wrote for agents. " +
 				"list_workspaces marks them (has_rules); read them via get_workspace before writing into a workspace, and follow them. " +
-				"To create or change rules, submit a draft with propose_workspace_rules (with the user's agreement) — it activates only when a workspace admin applies it in the browser.",
+				"Rules are managed by workspace admins alone: if your user is one, propose_workspace_rules submits a draft (with their agreement) that activates only when an admin applies it in the browser; if not, follow the rules and leave them be.",
 		})
 	case "ping":
 		rpcResult(w, req.ID, map[string]any{})
