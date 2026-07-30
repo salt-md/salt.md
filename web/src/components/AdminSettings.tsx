@@ -747,8 +747,12 @@ ingress:
 // Calendar subscription: a read-only ICS feed of every date property.
 export function CalendarSubModal({ onClose }: { onClose: () => void }) {
   useExclusiveModal(onClose);
-  const [info, setInfo] = useState<{ url: string; webcal: string } | null>(null);
+  type Info = Awaited<ReturnType<typeof api.icsInfo>>;
+  const [info, setInfo] = useState<Info | null>(null);
   const [loadErr, setLoadErr] = useState<string | null>(null);
+  // Which feed the links below refer to. '' is the whole account, which is what
+  // the dialog offered before W120 and stays the default.
+  const [pick, setPick] = useState('');
   useEffect(() => {
     void api.icsInfo().then(setInfo).catch((e) => setLoadErr((e as Error).message || t('Loading failed')));
   }, []);
@@ -756,6 +760,11 @@ export function CalendarSubModal({ onClose }: { onClose: () => void }) {
     setInfo(await api.icsInfo(true));
     toast(t('New calendar link created (the old one no longer works)'));
   };
+  const scopes = info?.scopes ?? [];
+  const key = (s: { kind: string; id: string }) => s.kind + ':' + s.id;
+  const current = scopes.find((s) => key(s) === pick) ?? scopes[0];
+  const workspaces = scopes.filter((s) => s.kind === 'workspace');
+  const collections = scopes.filter((s) => s.kind === 'collection');
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -772,12 +781,61 @@ export function CalendarSubModal({ onClose }: { onClose: () => void }) {
             <div className="dialog-hint">{t('Loading…')}</div>
           ) : (
             <>
+              {/* One feed for everything is rarely what a calendar app wants:
+                  a separate subscription per workspace or per collection can be
+                  switched off in the app without touching the others. */}
+              <label className="dialog-hint">{t('What should the calendar contain?')}</label>
+              <select
+                className="prop-select"
+                value={pick}
+                onChange={(e) => setPick(e.target.value)}
+                aria-label={t('What should the calendar contain?')}
+              >
+                <option value="">{t('Everything I can see')}</option>
+                {workspaces.length > 0 && (
+                  <optgroup label={t('Workspaces')}>
+                    {workspaces.map((s) => (
+                      <option key={key(s)} value={key(s)}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+                {collections.length > 0 && (
+                  <optgroup label={t('Collections')}>
+                    {collections.map((s) => (
+                      <option key={key(s)} value={key(s)}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+              {collections.length === 0 && (
+                <p className="dialog-hint">
+                  {t('A collection appears here once it has a date property.')}
+                </p>
+              )}
               <label className="dialog-hint">{t('Subscription link (webcal):')}</label>
-              <input className="prop-input invite-input" readOnly value={info.webcal} onFocus={(e) => e.currentTarget.select()} />
+              <input
+                className="prop-input invite-input"
+                readOnly
+                value={current?.links.webcal ?? info.webcal}
+                onFocus={(e) => e.currentTarget.select()}
+              />
               <div className="dialog-buttons" style={{ justifyContent: 'flex-start', gap: 8 }}>
-                <a className="btn primary" href={info.webcal}>{t('Open in calendar')}</a>
-                <button className="btn" onClick={() => void navigator.clipboard?.writeText(info.url)}>{t('Copy URL')}</button>
-                <button className="btn" onClick={() => void rotate()}>{t('Reset the link')}</button>
+                <a className="btn primary" href={current?.links.webcal ?? info.webcal}>{t('Open in calendar')}</a>
+                <button
+                  className="btn"
+                  onClick={() => void navigator.clipboard?.writeText(current?.links.url ?? info.url)}
+                >
+                  {t('Copy URL')}
+                </button>
+                {/* Rotating kills EVERY feed at once, because there is one token
+                    behind all of them — say so where the button is. */}
+                <button className="btn" onClick={() => void rotate()} title={t('Invalidates all calendar links')}>
+                  {t('Reset the link')}
+                </button>
               </div>
             </>
           )}

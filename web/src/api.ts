@@ -174,8 +174,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, email, password, code }),
     }),
+  // scopes: the whole account, each workspace, and each collection that has a
+  // date property at all (W120). url/webcal stay the unscoped pair.
   icsInfo: (rotate = false) =>
-    req<{ url: string; webcal: string }>(`/api/ics${rotate ? '?rotate=1' : ''}`),
+    req<{
+      url: string;
+      webcal: string;
+      scopes: {
+        id: string;
+        kind: 'all' | 'workspace' | 'collection';
+        name: string;
+        links: { url: string; webcal: string };
+      }[];
+    }>(`/api/ics${rotate ? '?rotate=1' : ''}`),
   twoFAStatus: () => req<{ enabled: boolean }>('/api/2fa'),
   twoFASetup: () =>
     req<{ secret: string; otpauthUrl: string; qr: string }>('/api/2fa/setup', { method: 'POST' }),

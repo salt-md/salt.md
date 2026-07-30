@@ -11,9 +11,21 @@ import (
 )
 
 // Calendar subscription (Welle 22): a stable per-user token grants a read-only
-// iCalendar feed of every date-typed property across the databases the user can
-// read. Calendar apps (Apple/Google/Outlook) poll GET /ics/{token}.ics; no
+// iCalendar feed of every date-typed property across the collections the user
+// can read. Calendar apps (Apple/Google/Outlook) poll GET /ics/{token}.ics; no
 // login, the token IS the credential (like a share link).
+//
+// W120: the feed takes a SCOPE — everything (as before), one workspace, or one
+// collection. One token still, because the token is the identity: narrowing is
+// a view on what that person may read, never a way to see more. Every scope
+// therefore runs through the same two checks (visible workspaces, then no
+// forbidden private ancestor); an id the subscriber cannot read yields an empty
+// calendar rather than an error, so a collection that gets moved or made
+// private does not leave a broken subscription in somebody's calendar app.
+//
+// Why in the URL and not one token per scope: a calendar app remembers a URL
+// and nothing else. Rotating the token then has to invalidate every feed at
+// once — which is exactly what people expect from "revoke my calendar links".
 
 func (s *Server) icsToken(userID string) string {
 	tok := s.setting("ics_token_"+userID, "")
@@ -36,9 +48,83 @@ func (s *Server) handleICSInfo(w http.ResponseWriter, r *http.Request) {
 	// External calendar apps subscribe to this URL — use the public base
 	// (Domain/Tunnel) so the feed also works outside the LAN.
 	base := s.publicShareBase(r)
-	writeJSON(w, map[string]string{
+	host := strings.TrimPrefix(strings.TrimPrefix(base, "https://"), "http://")
+	feed := func(query string) map[string]string {
+		return map[string]string{
+			"url":    base + "/ics/" + tok + ".ics" + query,
+			"webcal": "webcal://" + host + "/ics/" + tok + ".ics" + query,
+		}
+	}
+
+	// The scopes on offer: the whole account, each workspace, and each
+	// collection that actually HAS a date property — offering a calendar for a
+	// collection without dates would hand out a permanently empty feed.
+	type scope struct {
+		ID    string            `json:"id"`
+		Kind  string            `json:"kind"` // all | workspace | collection
+		Name  string            `json:"name"`
+		Links map[string]string `json:"links"`
+	}
+	scopes := []scope{{ID: "", Kind: "all", Name: "", Links: feed("")}}
+
+	ws := s.visibleWorkspaces(uid)
+	if len(ws) > 0 {
+		wargs := make([]any, len(ws))
+		for i, v := range ws {
+			wargs[i] = v
+		}
+		wrows, err := s.db.Query(`SELECT id, name FROM workspaces WHERE id IN (`+placeholders(len(ws))+`) ORDER BY name`, wargs...)
+		if err == nil {
+			for wrows.Next() {
+				var id, nm string
+				if wrows.Scan(&id, &nm) == nil {
+					scopes = append(scopes, scope{ID: id, Kind: "workspace", Name: nm, Links: feed("?workspace=" + id)})
+				}
+			}
+			wrows.Close()
+		}
+		crows, err := s.db.Query(`SELECT c.page_id, c.schema, p.title, p.workspace_id FROM collections c
+			JOIN pages p ON p.id = c.page_id
+			WHERE p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)
+			ORDER BY p.title`, wargs...)
+		if err == nil {
+			type cand struct{ id, schema, title, ws string }
+			var cands []cand
+			for crows.Next() {
+				var c cand
+				if crows.Scan(&c.id, &c.schema, &c.title, &c.ws) == nil {
+					cands = append(cands, c)
+				}
+			}
+			crows.Close() // drain before the per-row permission checks (single conn)
+			for _, c := range cands {
+				var defs []propDef
+				json.Unmarshal([]byte(c.schema), &defs)
+				hasDate := false
+				for _, d := range defs {
+					if d.Type == "date" {
+						hasDate = true
+						break
+					}
+				}
+				if !hasDate || s.forbiddenPrivateAncestor(uid, c.id, c.ws) {
+					continue
+				}
+				title := c.title
+				if title == "" {
+					title = "Untitled"
+				}
+				scopes = append(scopes, scope{ID: c.id, Kind: "collection", Name: title, Links: feed("?collection=" + c.id)})
+			}
+		}
+	}
+
+	writeJSON(w, map[string]any{
+		// The unscoped pair stays at the top level: older clients read exactly
+		// these two fields.
 		"url":    base + "/ics/" + tok + ".ics",
-		"webcal": "webcal://" + strings.TrimPrefix(strings.TrimPrefix(base, "https://"), "http://") + "/ics/" + tok + ".ics",
+		"webcal": "webcal://" + host + "/ics/" + tok + ".ics",
+		"scopes": scopes,
 	})
 }
 
@@ -81,18 +167,54 @@ func (s *Server) handleICSFeed(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ws := s.visibleWorkspaces(userID)
+	// Scope. A workspace the subscriber is not a member of simply drops out of
+	// `ws` below, so a guessed id cannot widen the feed.
+	scopeWS := r.URL.Query().Get("workspace")
+	scopeCol := r.URL.Query().Get("collection")
+	if scopeWS != "" {
+		only := ws[:0]
+		for _, w := range ws {
+			if w == scopeWS {
+				only = append(only, w)
+			}
+		}
+		ws = only
+	}
+
 	var b strings.Builder
-	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Salt.md//Calendar//EN\r\nCALSCALE:GREGORIAN\r\nX-WR-CALNAME:Salt.md\r\n")
+	name := "Salt.md"
+	if scopeCol != "" {
+		// The calendar's NAME is what the subscriber sees in their app, so it
+		// says which collection or workspace this feed is — three feeds called
+		// "Salt.md" would be indistinguishable there.
+		var title string
+		s.db.QueryRow(`SELECT title FROM pages WHERE id = ?`, scopeCol).Scan(&title)
+		if title != "" {
+			name = "Salt.md · " + title
+		}
+	} else if scopeWS != "" {
+		var title string
+		s.db.QueryRow(`SELECT name FROM workspaces WHERE id = ?`, scopeWS).Scan(&title)
+		if title != "" {
+			name = "Salt.md · " + title
+		}
+	}
+	b.WriteString("BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Salt.md//Calendar//EN\r\nCALSCALE:GREGORIAN\r\nX-WR-CALNAME:" + icsEscape(name) + "\r\n")
 
 	if len(ws) > 0 {
 		wargs := make([]any, len(ws))
 		for i, v := range ws {
 			wargs[i] = v
 		}
-		// Every collection in the visible workspaces + its date-typed props.
-		crows, err := s.db.Query(`SELECT c.page_id, c.schema, p.title, p.workspace_id FROM collections c
+		q := `SELECT c.page_id, c.schema, p.title, p.workspace_id FROM collections c
 			JOIN pages p ON p.id = c.page_id
-			WHERE p.trashed_at IS NULL AND p.workspace_id IN (`+placeholders(len(ws))+`)`, wargs...)
+			WHERE p.trashed_at IS NULL AND p.workspace_id IN (` + placeholders(len(ws)) + `)`
+		if scopeCol != "" {
+			q += ` AND c.page_id = ?`
+			wargs = append(wargs, scopeCol)
+		}
+		// Every collection in scope + its date-typed props.
+		crows, err := s.db.Query(q, wargs...)
 		if err == nil {
 			type coll struct{ id, schema, title, ws string }
 			var colls []coll
