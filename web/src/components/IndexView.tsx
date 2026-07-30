@@ -5,7 +5,8 @@ import type { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
 import { compare, formatMoment } from '../format';
 import { plural, t } from '../i18n';
-import { Clock, Library, Lock, Star, Table2, Users, Workflow } from 'lucide-react';
+import { tagColorClass } from '../tags';
+import { Clock, FileText, Library, Lock, Star, Table2, Users, Workflow } from 'lucide-react';
 
 type SortKey = 'title' | 'in' | 'out' | 'updated';
 type Mode = 'recent' | 'favorites' | 'shared' | 'private' | 'all' | 'tree';
@@ -67,13 +68,19 @@ export default function IndexView({
   // where it is empty and the library would greet you with nothing at all.
   const [mode, setMode] = useState<Mode>(recents.length ? 'recent' : 'all');
   const [people, setPeople] = useState<Map<string, string>>(new Map());
+  const [spaces, setSpaces] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     void api.graph().then((g) => setEdges(g.edges)).catch(() => {});
     // Who created a page is stored as an id; the roster turns it into a name.
+    // The workspace names come from the same call — a top-level page has no
+    // parent to show under "source", and its workspace is the honest answer.
     void api
       .listWorkspaces()
-      .then((ws) => Promise.all(ws.map((w) => api.listMembers(w.id).catch(() => []))))
+      .then((ws) => {
+        setSpaces(new Map(ws.map((w) => [w.id, w.name])));
+        return Promise.all(ws.map((w) => api.listMembers(w.id).catch(() => [])));
+      })
       .then((lists) => {
         const m = new Map<string, string>();
         for (const p of lists.flat()) m.set(p.userId, p.name);
@@ -148,6 +155,20 @@ export default function IndexView({
   const titleOf = (id: string | null) =>
     id ? live.find((p) => p.id === id)?.title || t('Untitled') : '';
 
+  // A count per shelf, so the tabs say how much is behind them before you
+  // click — an empty shelf you can see is not a library that looks broken.
+  const counts = useMemo(() => {
+    const favSet = new Set(favorites);
+    return {
+      recent: live.filter((p) => recents.includes(p.id)).length,
+      favorites: live.filter((p) => favSet.has(p.id)).length,
+      shared: live.filter((p) => p.visibility !== 'private').length,
+      private: live.filter((p) => p.visibility === 'private').length,
+      all: live.length,
+      tree: live.length,
+    } as Record<Mode, number>;
+  }, [live, favorites, recents]);
+
   // Parent → children map for the tree view (same hierarchy the sidebar shows).
   const childrenMap = useMemo(() => {
     const ids = new Set(live.map((p) => p.id));
@@ -219,6 +240,7 @@ export default function IndexView({
               onClick={() => setMode(tab.id)}
             >
               {tab.icon} {tab.label}
+              {tab.id !== 'tree' && <span className="index-mode-count">{counts[tab.id]}</span>}
             </button>
           ))}
         </div>
@@ -261,15 +283,42 @@ export default function IndexView({
             <tbody>
               {rows.map(({ page, out, in: inc }) => (
                 <tr key={page.id}>
+                  {/* One row carries what a shelf card carries: the icon, the
+                      title, and the first line of what is inside. description
+                      if the page has one, else the server-derived snippet —
+                      both were already in the payload and shown nowhere. */}
                   <td>
-                    <button className="db-title-link" onClick={() => onNavigate(page.id)}>
-                      {page.icon && <span className="inline-icon"><PageIcon icon={page.icon} size={14} /> </span>}
-                      {page.title || t('Untitled')}
-                      {page.type === 'collection' && (
-                        <span className="index-badge" title={t('Collection')}>
-                          <Table2 size={11} />
+                    <button className="idx-row" onClick={() => onNavigate(page.id)}>
+                      <span className="idx-row-icon">
+                        <PageIcon
+                          icon={page.icon}
+                          size={17}
+                          fallback={page.type === 'collection' ? <Table2 size={16} /> : <FileText size={16} />}
+                        />
+                      </span>
+                      <span className="idx-row-main">
+                        <span className="idx-row-title">
+                          {page.title || t('Untitled')}
+                          {page.type === 'collection' && (
+                            <span className="index-badge" title={t('Collection')}>
+                              <Table2 size={11} />
+                            </span>
+                          )}
                         </span>
-                      )}
+                        {(page.description || page.snippet) && (
+                          <span className="idx-row-sub">{page.description || page.snippet}</span>
+                        )}
+                        {page.tags?.length > 0 && (
+                          <span className="idx-row-tags">
+                            {page.tags.slice(0, 4).map((tag) => (
+                              <span key={tag} className={'tag-chip ' + tagColorClass(tag, {})}>
+                                #{tag}
+                              </span>
+                            ))}
+                          </span>
+                        )}
+                      </span>
+                      {page.thumb && <img className="idx-row-thumb" src={page.thumb} alt="" />}
                     </button>
                   </td>
                   <td className="idx-dim">{people.get(page.ownerId) ?? ''}</td>
@@ -286,7 +335,9 @@ export default function IndexView({
                         <Lock size={11} /> {t('Private')}
                       </span>
                     ) : (
-                      ''
+                      // No parent, not private: the workspace is where it comes
+                      // from. Better than the empty cell that used to sit here.
+                      spaces.get(page.workspaceId) ?? ''
                     )}
                   </td>
                   <td className="idx-dim">{page.updatedAt ? formatMoment(page.updatedAt) : ''}</td>

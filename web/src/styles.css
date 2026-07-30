@@ -3086,9 +3086,11 @@ button {
   min-height: 0;
   overflow-y: auto;
   width: 100%;
-  max-width: 860px;
+  /* Was 860px, which left a wide screen mostly black beside a narrow table.
+     A library is a shelf: it uses the wall it has. */
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 40px 24px calc(60px + env(safe-area-inset-bottom));
+  padding: 32px 24px calc(60px + env(safe-area-inset-bottom));
 }
 
 .index-head {
@@ -5112,6 +5114,80 @@ a.btn {
     max-width: 100%;
     overflow-x: auto;
   }
+}
+
+.index-mode-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--muted);
+}
+
+.index-mode.active .index-mode-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* A library row is a shelf card, not a line of text: icon, title, the first
+   line of what is inside, its tags — and the page's first image if it has one.
+   All of it was already in the payload and shown nowhere. */
+.idx-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 2px 0;
+}
+
+.idx-row-icon {
+  display: inline-flex;
+  flex: none;
+  padding-top: 1px;
+}
+
+.idx-row-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.idx-row-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.idx-row:hover .idx-row-title {
+  color: var(--accent);
+}
+
+.idx-row-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  /* One line — a shelf stays scannable only if every row is the same height. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60ch;
+}
+
+.idx-row-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.idx-row-thumb {
+  width: 44px;
+  height: 34px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex: none;
 }
 
 /* The library's own columns: metadata, deliberately quieter than the title. */
