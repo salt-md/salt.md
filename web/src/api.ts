@@ -478,6 +478,15 @@ export const api = {
   removeFavorite: (pageId: string) =>
     req<{ ok: boolean }>(`/api/favorites/${pageId}`, { method: 'DELETE' }),
 
+  // The Markdown a page exports, as text rather than as a download — the
+  // template gallery shows it as a preview, so you can see what you are about
+  // to copy instead of trusting its title.
+  exportText: async (id: string) => {
+    const res = await fetch(`/api/export/${id}`, { credentials: 'same-origin' });
+    if (!res.ok) throw await toApiError(res, t('Could not be loaded'));
+    return res.text();
+  },
+
   // Anchor-based download: immune to popup blockers, unlike window.open.
   download: (url: string) => {
     const a = document.createElement('a');

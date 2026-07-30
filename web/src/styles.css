@@ -5468,6 +5468,167 @@ a.btn {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+/* ---- Template gallery (W118) ---- */
+
+/* Wider than a normal dialog: a preview beside a list is the whole point, and
+   at 680px the two columns squeeze each other. */
+.tpl-dialog {
+  width: min(900px, 96vw);
+}
+
+.tpl-dialog h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tpl-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.tpl-cats {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tpl-cat {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--muted);
+  background: var(--hover);
+}
+
+.tpl-cat.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tpl-body {
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.tpl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+
+.tpl-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  text-align: left;
+  border: 1px solid transparent;
+}
+
+.tpl-item:hover {
+  background: var(--hover);
+}
+
+.tpl-item.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.tpl-item-icon {
+  display: inline-flex;
+  flex: none;
+  padding-top: 1px;
+}
+
+.tpl-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.tpl-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.tpl-item-desc {
+  font-size: 12px;
+  color: var(--muted);
+  /* Two lines of description, then it stops — a long one must not push the
+     next template out of view. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tpl-item-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tpl-preview {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  max-height: 52vh;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.tpl-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tpl-preview-text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--fg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.tpl-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.tpl-count {
+  font-size: 12.5px;
+  color: var(--muted);
+  /* Pushes every button to the right; the count stays a caption, not an action. */
+  margin-right: auto;
+}
+
+@media (max-width: 720px) {
+  .tpl-body {
+    grid-template-columns: 1fr;
+  }
+  .tpl-list,
+  .tpl-preview {
+    max-height: 32vh;
+  }
+}
+
 /* ---- Checklist property (W116) ---- */
 
 /* A finished checklist turns green — the one moment where the accent colour is

@@ -13,6 +13,7 @@ import { compare } from '../format';
 import { plural, t } from '../i18n';
 import AgentConnectModal from './AgentConnect';
 import BreakGlassLog from './BreakGlassLog';
+import TemplateGallery from './TemplateGallery';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
 import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert } from 'lucide-react';
@@ -515,6 +516,9 @@ export default function Sidebar({
   };
   // ⋯ menu on a template row (remove the flag / trash the snapshot).
   const [tplMenuFor, setTplMenuFor] = useState<string | null>(null);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const unflagTemplate = (id: string) =>
+    void api.updatePage(id, { isTemplate: false }).catch(() => toast(t('Could not be changed')));
 
   const { childrenMap, parentKeyOf, trashRoots } = useMemo(() => {
     const visible = pages.filter((p) => !p.trashed && inWs(p));
@@ -1022,8 +1026,18 @@ export default function Sidebar({
           </SidebarSection>
         </div>
       )}
+      {/* The ＋ of the Templates section means "start from a template" — which
+          is the gallery, where you can see one before copying it. */}
       {templatePages.length > 0 && (
-        <SidebarSection id="tpl" label={t('Templates')} icon={<LayoutTemplate size={17} />} count={templatePages.length} defaultOpen={false}>
+        <SidebarSection
+          id="tpl"
+          label={t('Templates')}
+          icon={<LayoutTemplate size={17} />}
+          count={templatePages.length}
+          defaultOpen={false}
+          createTitle={t('New page from a template')}
+          onCreate={() => setGalleryOpen(true)}
+        >
           {templatePages.map((p) => (
               <div
                 key={p.id}
@@ -1052,9 +1066,7 @@ export default function Sidebar({
                           setTplMenuFor(null);
                           // Back to a normal page: it leaves this list and
                           // reappears in the tree.
-                          void api
-                            .updatePage(p.id, { isTemplate: false })
-                            .catch(() => toast(t('Could not be changed')));
+                          unflagTemplate(p.id);
                         }}
                       >
                         {t('📋 Remove template flag')}
@@ -1135,6 +1147,15 @@ export default function Sidebar({
         )}
         {agentOpen && (
           <AgentConnectModal workspaces={workspaces} currentWs={currentWs} onClose={() => setAgentOpen(false)} />
+        )}
+        {galleryOpen && (
+          <TemplateGallery
+            templates={templatePages}
+            onUse={instantiateTemplate}
+            onUnflag={unflagTemplate}
+            onTrash={onTrash}
+            onClose={() => setGalleryOpen(false)}
+          />
         )}
         {wsImageOpen && activeWs && (
           <WorkspaceImageModal
