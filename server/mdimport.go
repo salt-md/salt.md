@@ -64,6 +64,17 @@ var linkRe = regexp.MustCompile(`^\[([^\]]*)\]\(([^)]+)\)`)
 // is the safe direction to be wrong in.
 var pageHrefRe = regexp.MustCompile(`(?:^|/)p/([0-9a-f]{32})/?$`)
 
+// pageLinkHint tells an agent that the conversion above exists. It goes in
+// every tool description that takes Markdown, because the schema is the only
+// documentation an agent reliably reads — and until this sentence was there,
+// the feature was invisible: agents kept writing plain links and wondering why
+// get_backlinks came back empty on pages they had just wired together.
+const pageLinkHint = `A Markdown link whose target is a page of this instance ` +
+	`(` + "`[Handbook](/p/<32-hex-id>)`" + `, or the absolute URL share_page ` +
+	`returns) becomes a REAL page link: it shows up in get_backlinks and in the ` +
+	`graph. Use it whenever you mention another page — a plain link navigates ` +
+	`but leaves the page an island.`
+
 // parseInline converts inline markdown to BlockNote inline content.
 func parseInline(md string) []any {
 	var out []any

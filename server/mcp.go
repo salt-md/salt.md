@@ -88,7 +88,7 @@ var mcpTools = []map[string]any{
 				"title":        map[string]any{"type": "string"},
 				"parent_id":    map[string]any{"type": "string", "description": "Optional parent page id. Pass a database id to create a ROW in that database."},
 				"workspace_id": map[string]any{"type": "string", "description": "Which workspace to create in when there is no parent_id. Call list_workspaces first — without this the page lands in your first workspace, which may not be the one you mean."},
-				"markdown":     map[string]any{"type": "string", "description": "Optional initial content as Markdown"},
+				"markdown":     map[string]any{"type": "string", "description": "Optional initial content as Markdown. " + pageLinkHint},
 				"icon":         map[string]any{"type": "string", "description": "Optional emoji, \"lucide:Name\", \"mdi:Name\" or image URL"},
 				"properties":   map[string]any{"type": "object", "description": "Typed property values when creating a database row — same shape as set_properties. Call get_schema first for property ids."},
 				"cover":        map[string]any{"type": "string", "description": coverHint},
@@ -106,7 +106,7 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "append_markdown",
-		"description": "Append Markdown content to the end of an existing page.",
+		"description": "Append Markdown content to the end of an existing page. " + pageLinkHint,
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"page_id":  map[string]any{"type": "string"},
@@ -133,7 +133,7 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "replace_content",
-		"description": "Replace a page's ENTIRE body with the given Markdown. Use this to correct or rewrite existing text — append_markdown can only add at the end. Caution: this bypasses the realtime CRDT, so anyone with the page open in an editor right now loses unsaved edits. Prefer append_markdown when you only add.",
+		"description": "Replace a page's ENTIRE body with the given Markdown. Use this to correct or rewrite existing text — append_markdown can only add at the end. Caution: this bypasses the realtime CRDT, so anyone with the page open in an editor right now loses unsaved edits. Prefer append_markdown when you only add. " + pageLinkHint,
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"page_id":  map[string]any{"type": "string"},
@@ -143,13 +143,41 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "prepend_markdown",
-		"description": "Insert Markdown at the START of a page, before the existing content (append_markdown adds at the end).",
+		"description": "Insert Markdown at the START of a page, before the existing content (append_markdown adds at the end). " + pageLinkHint,
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"page_id":  map[string]any{"type": "string"},
 				"markdown": map[string]any{"type": "string"},
 			},
 			"required": []string{"page_id", "markdown"}},
+	},
+	{
+		"name": "list_templates",
+		"description": "The templates of this instance: prepared pages and databases to start from. " +
+			"A template is a SNAPSHOT — using one copies it, and neither side changes the other. " +
+			"Look here before building a structure by hand; somebody may have prepared it. Read-only.",
+		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
+	},
+	{
+		"name": "create_from_template",
+		"description": "Create a new page or database from a template (call list_templates for ids). " +
+			"The copy carries the template's whole subtree — content, database schema, views and rows — " +
+			"keeps its title unless you pass one, and is a normal page: editing it never touches the template.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{
+				"template_id": map[string]any{"type": "string", "description": "Template page id from list_templates"},
+				"title":       map[string]any{"type": "string", "description": "Optional title for the new page (default: the template's own)"},
+			},
+			"required": []string{"template_id"}},
+	},
+	{
+		"name": "save_as_template",
+		"description": "Save an existing page (with its subtree) as a template. This SNAPSHOTS it: " +
+			"the copy becomes the template and the page stays a normal page, so later edits to it " +
+			"do not change what the template offers.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{"page_id": map[string]any{"type": "string"}},
+			"required":   []string{"page_id"}},
 	},
 	{
 		"name":        "get_backlinks",
@@ -689,6 +717,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		JobID         string `json:"job_id"`
 		ExpiresInDays int    `json:"expires_in_days"`
 		Password      string `json:"password"`
+		// Templates (W115).
+		TemplateID string `json:"template_id"`
 	}
 	if len(rawArgs) > 0 {
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -1092,6 +1122,12 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 				return "", err
 			}
 			return "Duplicated page → new id " + nid, nil
+		case "list_templates":
+			return s.mcpListTemplates(u)
+		case "create_from_template":
+			return s.mcpCreateFromTemplate(u, args.TemplateID, args.Title)
+		case "save_as_template":
+			return s.mcpSaveAsTemplate(u, args.PageID)
 		case "get_comments":
 			list, err := s.pageComments(args.PageID)
 			if err != nil {
