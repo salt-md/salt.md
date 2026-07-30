@@ -62,7 +62,7 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 // mcpListWorkspaces: which workspaces this token sees, and in which role. The
 // workspace used to hang off the token implicitly and was invisible.
 func (s *Server) mcpListWorkspaces(u *user) (string, error) {
-	rows, err := s.db.Query(`SELECT w.id, w.name, m.role FROM workspaces w
+	rows, err := s.db.Query(`SELECT w.id, w.name, m.role, w.rules != '' FROM workspaces w
 		JOIN workspace_members m ON m.workspace_id = w.id
 		WHERE m.user_id = ? ORDER BY w.name`, u.ID)
 	if err != nil {
@@ -73,11 +73,15 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 		Name    string `json:"name"`
 		Role    string `json:"role"`
 		InScope bool   `json:"in_token_scope"`
+		// HasRules says "read them via get_workspace before you write here" —
+		// the rules themselves stay out of the list so they are delivered once,
+		// with their framing, not scattered through an untrusted-content block.
+		HasRules bool `json:"has_rules"`
 	}
 	out := []ws{}
 	for rows.Next() {
 		var w ws
-		if err := rows.Scan(&w.ID, &w.Name, &w.Role); err != nil {
+		if err := rows.Scan(&w.ID, &w.Name, &w.Role, &w.HasRules); err != nil {
 			rows.Close()
 			return "", err
 		}
@@ -93,22 +97,26 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 }
 
 // mcpGetWorkspace returns context and members — needed to fill person fields
-// or to assign work.
-func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, error) {
+// or to assign work. The workspace rules travel back separately (second return)
+// because they must NOT sit inside the untrusted-content block the rest of the
+// answer is wrapped in: the rest is user-authored data to read, the rules are
+// admin-authored conventions to follow, and one wrapper saying both would say
+// nothing.
+func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	if wsID == "" {
 		wsID = s.userDefaultWorkspace(u.ID)
 	}
 	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
-		return "", fmt.Errorf("workspace %q not found", wsID)
+		return "", "", fmt.Errorf("workspace %q not found", wsID)
 	}
-	var name string
-	if err := s.db.QueryRow(`SELECT name FROM workspaces WHERE id = ?`, wsID).Scan(&name); err != nil {
-		return "", fmt.Errorf("workspace %q not found", wsID)
+	var name, rules string
+	if err := s.db.QueryRow(`SELECT name, rules FROM workspaces WHERE id = ?`, wsID).Scan(&name, &rules); err != nil {
+		return "", "", fmt.Errorf("workspace %q not found", wsID)
 	}
 	rows, err := s.db.Query(`SELECT u.id, u.name, u.email, m.role FROM workspace_members m
 		JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ? ORDER BY u.name`, wsID)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	type member struct {
 		ID    string `json:"id"`
@@ -121,7 +129,7 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, error) {
 		var m member
 		if err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Role); err != nil {
 			rows.Close()
-			return "", err
+			return "", "", err
 		}
 		members = append(members, m)
 	}
@@ -133,11 +141,12 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, error) {
 	b, err := json.Marshal(map[string]any{
 		"id": wsID, "name": name, "my_role": s.workspaceRole(u.ID, wsID),
 		"members": members, "page_count": pages, "database_count": dbs,
+		"has_rules": rules != "",
 	})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return string(b), nil
+	return string(b), rules, nil
 }
 
 // mcpGetPermissions answers up front what is allowed on a page — "check

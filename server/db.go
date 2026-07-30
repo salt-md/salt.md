@@ -297,6 +297,13 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "workspaces", "image", `image TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.image: %w", err)
 	}
+	// Workspace rules: working conventions a workspace admin writes down for
+	// everyone — especially agents — working in the workspace. Every member
+	// reads them; writing is admin-only and browser-only (sessionOnly), because
+	// an agent that can rewrite its own guardrails has none.
+	if err := ensureColumn(db, "workspaces", "rules", `rules TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.rules: %w", err)
+	}
 	// Optional password on public share links.
 	if err := ensureColumn(db, "share_links", "password_hash", `password_hash TEXT`); err != nil {
 		return nil, fmt.Errorf("migrate share_links.password_hash: %w", err)

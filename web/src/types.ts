@@ -31,6 +31,8 @@ export interface Workspace {
   personal?: boolean;
   /** Every newly created account joins automatically (only the owner sets this). */
   autoJoin?: boolean;
+  /** Working conventions the admin wrote down — agents get them over MCP, members read them here. */
+  rules?: string;
 }
 
 export interface AuditEntry {

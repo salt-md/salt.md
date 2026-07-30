@@ -222,6 +222,9 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("GET /api/workspaces/{id}/break-glass", s.auth(s.handleListBreakGlass))
 	m.HandleFunc("DELETE /api/workspaces/{id}/break-glass/{grantId}", s.auth(s.handleRevokeBreakGlass))
 	m.HandleFunc("PATCH /api/workspaces/{id}", s.auth(s.handleUpdateWorkspace))
+	// Rules are what agents are told to follow, so no API token may write them
+	// (sessionOnly) — see handleWorkspaceRules.
+	m.HandleFunc("PUT /api/workspaces/{id}/rules", s.auth(s.sessionOnly(s.handleWorkspaceRules)))
 	m.HandleFunc("DELETE /api/workspaces/{id}", s.auth(s.handleDeleteWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/members", s.auth(s.handleListMembers))
 	m.HandleFunc("POST /api/workspaces/{id}/members", s.auth(s.handleAddWorkspaceMember))

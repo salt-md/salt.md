@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Workspaces are the isolation boundary: every page belongs to exactly one
@@ -311,11 +312,15 @@ type workspaceJSON struct {
 	// both drive what the interface offers.
 	Personal bool `json:"personal"`
 	AutoJoin bool `json:"autoJoin"`
+	// Rules: the admin's working conventions for this workspace (see
+	// handleWorkspaceRules). Along for the ride here so the dialog needs no
+	// second request.
+	Rules string `json:"rules"`
 }
 
 func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`
-		SELECT w.id, w.name, m.role, w.icon, w.image, w.is_personal, w.auto_join FROM workspace_members m
+		SELECT w.id, w.name, m.role, w.icon, w.image, w.is_personal, w.auto_join, w.rules FROM workspace_members m
 		JOIN workspaces w ON w.id = m.workspace_id
 		WHERE m.user_id = ? ORDER BY w.is_personal DESC, w.created_at`, requestUser(r).ID)
 	if err != nil {
@@ -327,7 +332,7 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var x workspaceJSON
 		var personal, autoJoin int
-		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin)
+		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin, &x.Rules)
 		x.Personal, x.AutoJoin = personal != 0, autoJoin != 0
 		list = append(list, x)
 	}
@@ -414,6 +419,47 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	args = append(args, wsID)
 	if _, err := s.db.Exec(`UPDATE workspaces SET `+strings.Join(sets, ", ")+` WHERE id = ?`, args...); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleWorkspaceRules stores the workspace rules: working conventions an
+// admin writes down for everyone — especially agents — working in this
+// workspace ("invoices go into Finance/Inbox", "titles start with the date").
+// Members read them (they ride along in GET /api/workspaces); MCP hands them
+// to agents in get_workspace.
+//
+// Admin-only AND session-only, and the session gate is the point, not
+// decoration: agents are told to FOLLOW these rules, so anything holding a
+// mere API token must never be able to write them — otherwise the rules
+// channel is the injection channel. Same line as membership and roles, which
+// are not reachable over MCP either.
+func (s *Server) handleWorkspaceRules(w http.ResponseWriter, r *http.Request) {
+	wsID := r.PathValue("id")
+	if !s.isMember(requestUser(r).ID, wsID) {
+		// Do not give away that the workspace exists.
+		httpError(w, 404, "workspace not found")
+		return
+	}
+	if !s.isWorkspaceAdmin(requestUser(r).ID, wsID) {
+		httpError(w, 403, "workspace admin only")
+		return
+	}
+	var body struct {
+		Rules string `json:"rules"`
+	}
+	if err := decodeJSON(w, r, &body); err != nil {
+		httpError(w, 400, "invalid JSON")
+		return
+	}
+	rules := strings.TrimSpace(body.Rules)
+	if utf8.RuneCountInString(rules) > 16000 {
+		httpErrorCode(w, 400, "rules_too_long", "Workspace rules are limited to 16000 characters.")
+		return
+	}
+	if _, err := s.db.Exec(`UPDATE workspaces SET rules = ? WHERE id = ?`, rules, wsID); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}

@@ -4,6 +4,7 @@ import type { FontPref } from '../App';
 import type { PageMeta, User, Workspace } from '../types';
 import UserMenu from './UserMenu';
 import WorkspaceMembers from './WorkspaceMembers';
+import WorkspaceRules from './WorkspaceRules';
 import { promptText } from '../dialog';
 import { toast } from '../toast';
 import Portal from './Portal';
@@ -16,7 +17,7 @@ import BreakGlassLog from './BreakGlassLog';
 import TemplateGallery from './TemplateGallery';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert } from 'lucide-react';
+import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -457,6 +458,7 @@ export default function Sidebar({
   const wsMenuRef = useRef<HTMLDivElement>(null);
   useMenuDismiss(wsMenuOpen, wsMenuRef, () => setWsMenuOpen(false));
   const [membersOpen, setMembersOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [wsImageOpen, setWsImageOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -815,6 +817,15 @@ export default function Sidebar({
                   <Users size={15} /> {t('Members')}
                 </button>
               )}
+              {currentWs && (
+                <button
+                  className="menu-item"
+                  title={t('Conventions everyone — especially agents — follows in this workspace')}
+                  onClick={() => { setWsMenuOpen(false); setRulesOpen(true); }}
+                >
+                  <ScrollText size={15} /> {t('Workspace rules')}
+                </button>
+              )}
               {user.orgRole === 'owner' && activeWs && !activeWs.personal && (
                 <button
                   className="menu-item"
@@ -1133,6 +1144,15 @@ export default function Sidebar({
             myRole={activeWs?.role ?? 'member'}
             onClose={() => setMembersOpen(false)}
             onChanged={onWorkspacesChanged}
+          />
+        )}
+        {rulesOpen && currentWs && (
+          <WorkspaceRules
+            workspaceId={currentWs}
+            initial={activeWs?.rules ?? ''}
+            canEdit={activeWs?.role === 'admin'}
+            onClose={() => setRulesOpen(false)}
+            onSaved={onWorkspacesChanged}
           />
         )}
         {strandedOpen && (

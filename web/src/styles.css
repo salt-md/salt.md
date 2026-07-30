@@ -1429,6 +1429,28 @@ button {
   margin-top: 16px;
 }
 
+/* Workspace rules: one textarea for admins, the same text read-only for
+   everyone else. pre-wrap keeps the admin's line breaks without inventing
+   any rendering. */
+.ws-rules-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 180px;
+  margin-bottom: 12px;
+}
+
+.ws-rules-view {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 50vh;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.5;
+  background: var(--hover);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
 .dialog-buttons {
   display: flex;
   justify-content: flex-end;
