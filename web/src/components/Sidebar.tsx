@@ -819,8 +819,12 @@ export default function Sidebar({
               )}
               {currentWs && (
                 <button
-                  className="menu-item"
-                  title={t('Conventions everyone — especially agents — follows in this workspace')}
+                  className={'menu-item' + (activeWs?.rulesProposal ? ' has-pending-dot' : '')}
+                  title={
+                    activeWs?.rulesProposal
+                      ? t('A rules proposal is waiting for review')
+                      : t('Conventions everyone — especially agents — follows in this workspace')
+                  }
                   onClick={() => { setWsMenuOpen(false); setRulesOpen(true); }}
                 >
                   <ScrollText size={15} /> {t('Workspace rules')}
@@ -1150,6 +1154,9 @@ export default function Sidebar({
           <WorkspaceRules
             workspaceId={currentWs}
             initial={activeWs?.rules ?? ''}
+            proposal={activeWs?.rulesProposal ?? ''}
+            proposalBy={activeWs?.rulesProposalBy ?? ''}
+            proposalAt={activeWs?.rulesProposalAt ?? ''}
             canEdit={activeWs?.role === 'admin'}
             onClose={() => setRulesOpen(false)}
             onSaved={onWorkspacesChanged}

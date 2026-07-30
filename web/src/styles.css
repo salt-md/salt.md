@@ -1451,6 +1451,34 @@ button {
   padding: 12px 14px;
 }
 
+/* A pending proposal: visually a parcel awaiting review, not active rules. */
+.ws-rules-proposal {
+  border: 1px dashed var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.ws-rules-proposal .ws-rules-view {
+  max-height: 30vh;
+  margin: 8px 0;
+}
+
+.ws-rules-proposal-head {
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The workspace-menu entry grows a dot while a proposal waits. */
+.menu-item.has-pending-dot::after {
+  content: '●';
+  font-size: 7px;
+  color: var(--accent);
+  margin-left: 6px;
+  align-self: center;
+}
+
 .dialog-buttons {
   display: flex;
   justify-content: flex-end;

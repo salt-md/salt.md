@@ -4,26 +4,36 @@ import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
 import { t } from '../i18n';
+import { formatMoment } from '../format';
 
 // The workspace rules: working conventions an admin writes down once — agents
 // receive the same text over MCP (get_workspace) before they work here, and
 // members read it in this dialog. Editing stays with admins, and only through
-// the browser: the server refuses API tokens on the rules route, so an agent
-// can never rewrite its own guardrails.
+// the browser: the server refuses API tokens on the rules routes, so an agent
+// can never rewrite its own guardrails. What an agent CAN do is propose a
+// draft (propose_workspace_rules); it lands here, inert, until an admin loads
+// it into the editor and saves — or dismisses it.
 export default function WorkspaceRules({
   workspaceId,
   initial,
+  proposal: initialProposal,
+  proposalBy,
+  proposalAt,
   canEdit,
   onClose,
   onSaved,
 }: {
   workspaceId: string;
   initial: string;
+  proposal: string;
+  proposalBy: string;
+  proposalAt: string;
   canEdit: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [text, setText] = useState(initial);
+  const [proposal, setProposal] = useState(initialProposal);
   const [saving, setSaving] = useState(false);
   useExclusiveModal(onClose);
 
@@ -41,6 +51,17 @@ export default function WorkspaceRules({
     }
   };
 
+  const dismissProposal = async () => {
+    try {
+      await api.dismissRulesProposal(workspaceId);
+      setProposal('');
+      onSaved();
+      toast(t('Proposal dismissed'));
+    } catch (e) {
+      toast((e as Error).message || t('Saving failed'));
+    }
+  };
+
   return (
     <Portal>
       <div className="modal-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -49,6 +70,22 @@ export default function WorkspaceRules({
           <p className="dialog-hint">
             {t('Conventions for working in this workspace. Agents receive them over MCP before they write here; members can read them too.')}
           </p>
+          {proposal && (
+            <div className="ws-rules-proposal">
+              <div className="ws-rules-proposal-head">
+                {t('Proposed by {name} — {when}', { name: proposalBy, when: formatMoment(proposalAt, 'datetime') })}
+              </div>
+              <div className="ws-rules-view">{proposal}</div>
+              {canEdit ? (
+                <div className="dialog-buttons">
+                  <button className="btn" onClick={() => void dismissProposal()}>{t('Dismiss proposal')}</button>
+                  <button className="btn primary" onClick={() => setText(proposal)}>{t('Load into editor')}</button>
+                </div>
+              ) : (
+                <p className="dialog-hint">{t('A workspace admin can apply or dismiss it.')}</p>
+              )}
+            </div>
+          )}
           {canEdit ? (
             <>
               <textarea

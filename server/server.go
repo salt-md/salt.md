@@ -223,8 +223,11 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("DELETE /api/workspaces/{id}/break-glass/{grantId}", s.auth(s.handleRevokeBreakGlass))
 	m.HandleFunc("PATCH /api/workspaces/{id}", s.auth(s.handleUpdateWorkspace))
 	// Rules are what agents are told to follow, so no API token may write them
-	// (sessionOnly) — see handleWorkspaceRules.
+	// (sessionOnly) — see handleWorkspaceRules. Agents may PROPOSE rules over
+	// MCP; applying or dismissing a proposal is the same governance act as
+	// writing rules and sits behind the same gates.
 	m.HandleFunc("PUT /api/workspaces/{id}/rules", s.auth(s.sessionOnly(s.handleWorkspaceRules)))
+	m.HandleFunc("DELETE /api/workspaces/{id}/rules-proposal", s.auth(s.sessionOnly(s.handleDismissRulesProposal)))
 	m.HandleFunc("DELETE /api/workspaces/{id}", s.auth(s.handleDeleteWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/members", s.auth(s.handleListMembers))
 	m.HandleFunc("POST /api/workspaces/{id}/members", s.auth(s.handleAddWorkspaceMember))

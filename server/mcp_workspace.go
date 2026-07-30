@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Agent parity, part 4: self-description, workspaces, sharing.
@@ -43,6 +45,7 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 			"two-factor settings", "API tokens", "creating or deleting accounts",
 			"backup/restore", "tunnel and instance settings",
 			"workspace membership and roles",
+			"applying workspace rules (propose_workspace_rules submits a draft; an admin applies it in the browser)",
 		},
 		"note": "list_users names only the people you share a workspace with; " +
 			"account administration needs a signed-in browser session.",
@@ -97,11 +100,11 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 }
 
 // mcpGetWorkspace returns context and members — needed to fill person fields
-// or to assign work. The workspace rules travel back separately (second return)
-// because they must NOT sit inside the untrusted-content block the rest of the
-// answer is wrapped in: the rest is user-authored data to read, the rules are
-// admin-authored conventions to follow, and one wrapper saying both would say
-// nothing.
+// or to assign work. The second return is an addendum for OUTSIDE the
+// untrusted-content block: the active rules with their follow-this framing,
+// or a server-authored hint about missing/proposed rules. It must never carry
+// user-authored text apart from the admin's rules themselves — a member name
+// out there would be an injection surface with a server voice.
 func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	if wsID == "" {
 		wsID = s.userDefaultWorkspace(u.ID)
@@ -109,8 +112,8 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
 		return "", "", fmt.Errorf("workspace %q not found", wsID)
 	}
-	var name, rules string
-	if err := s.db.QueryRow(`SELECT name, rules FROM workspaces WHERE id = ?`, wsID).Scan(&name, &rules); err != nil {
+	var name, rules, proposal string
+	if err := s.db.QueryRow(`SELECT name, rules, rules_proposal FROM workspaces WHERE id = ?`, wsID).Scan(&name, &rules, &proposal); err != nil {
 		return "", "", fmt.Errorf("workspace %q not found", wsID)
 	}
 	rows, err := s.db.Query(`SELECT u.id, u.name, u.email, m.role FROM workspace_members m
@@ -141,12 +144,85 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	b, err := json.Marshal(map[string]any{
 		"id": wsID, "name": name, "my_role": s.workspaceRole(u.ID, wsID),
 		"members": members, "page_count": pages, "database_count": dbs,
-		"has_rules": rules != "",
+		"has_rules": rules != "", "has_pending_rules_proposal": proposal != "",
 	})
 	if err != nil {
 		return "", "", err
 	}
-	return string(b), rules, nil
+	return string(b), rulesAddendum(rules, proposal), nil
+}
+
+// rulesAddendum builds what get_workspace appends after the untrusted block:
+// the active rules (framed to be followed), or a hint that none exist yet —
+// so an agent tells the user and offers to draft some — or that a proposal is
+// already waiting, so it does not pile a second one on top unasked.
+func rulesAddendum(rules, proposal string) string {
+	switch {
+	case rules != "" && proposal != "":
+		return wrapWorkspaceRules(rules) +
+			"\n\nA rules proposal is also waiting for admin review in the browser — do not submit another unless the user asks for changes."
+	case rules != "":
+		return wrapWorkspaceRules(rules)
+	case proposal != "":
+		return "\n\nThis workspace has no active rules yet, but a rules proposal is already waiting for admin review in the browser — do not submit another unless the user asks for changes."
+	default:
+		return "\n\nThis workspace has no rules yet. Mention that to the user; if they want some, draft a short set together (naming, structure, where content goes, what to leave alone) and submit it with propose_workspace_rules — a workspace admin then applies it in the browser."
+	}
+}
+
+// mcpProposeWorkspaceRules stores a rules DRAFT. It never touches the active
+// rules: only a workspace admin can apply the draft, in the browser
+// (handleWorkspaceRules) — that is the hard rule the user asked for, enforced
+// where the server can actually see the approval. One slot per workspace; a
+// newer proposal replaces the older one, and an empty proposal withdraws the
+// caller's own pending draft.
+func (s *Server) mcpProposeWorkspaceRules(u *user, wsID, rules string) (string, error) {
+	if u.TokenScope == "read" {
+		// The dispatch's write-gate covers this too; rules deserve the second lock.
+		return "", fmt.Errorf("this API token is read-only; proposing rules requires a write token")
+	}
+	if wsID == "" {
+		wsID = s.userDefaultWorkspace(u.ID)
+	}
+	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
+		return "", fmt.Errorf("workspace %q not found", wsID)
+	}
+	if s.workspaceRole(u.ID, wsID) == "viewer" {
+		return "", fmt.Errorf("you are a viewer in this workspace and cannot propose rules")
+	}
+	rules = strings.TrimSpace(rules)
+	if utf8.RuneCountInString(rules) > 16000 {
+		return "", fmt.Errorf("workspace rules are limited to 16000 characters")
+	}
+	if rules == "" {
+		var by string
+		s.db.QueryRow(`SELECT rules_proposal_by FROM workspaces WHERE id = ?`, wsID).Scan(&by)
+		if by == "" {
+			return "There is no pending proposal to withdraw.", nil
+		}
+		if by != u.ID {
+			return "", fmt.Errorf("the pending proposal is not yours to withdraw — an admin can dismiss it in the browser")
+		}
+		if _, err := s.db.Exec(`UPDATE workspaces SET rules_proposal = '', rules_proposal_by = '', rules_proposal_at = '' WHERE id = ?`, wsID); err != nil {
+			return "", err
+		}
+		return "Withdrew your pending rules proposal.", nil
+	}
+	var replaced string
+	s.db.QueryRow(`SELECT rules_proposal FROM workspaces WHERE id = ?`, wsID).Scan(&replaced)
+	if _, err := s.db.Exec(`UPDATE workspaces SET rules_proposal = ?, rules_proposal_by = ?, rules_proposal_at = ? WHERE id = ?`,
+		rules, u.ID, now(), wsID); err != nil {
+		return "", err
+	}
+	note := "Proposed — NOT active yet. A workspace admin reviews and applies it in the browser (workspace menu → Workspace rules). Tell the user it is waiting there."
+	if replaced != "" {
+		note = "Proposed, replacing the previous pending proposal — NOT active yet. A workspace admin reviews and applies it in the browser (workspace menu → Workspace rules). Tell the user it is waiting there."
+	}
+	b, err := json.Marshal(map[string]any{"ok": true, "workspace_id": wsID, "note": note})
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 // mcpGetPermissions answers up front what is allowed on a page — "check

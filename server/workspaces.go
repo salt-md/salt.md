@@ -314,14 +314,21 @@ type workspaceJSON struct {
 	AutoJoin bool `json:"autoJoin"`
 	// Rules: the admin's working conventions for this workspace (see
 	// handleWorkspaceRules). Along for the ride here so the dialog needs no
-	// second request.
-	Rules string `json:"rules"`
+	// second request. A pending proposal (usually from an agent, via MCP)
+	// travels with them — inert text until an admin applies or dismisses it.
+	Rules           string `json:"rules"`
+	RulesProposal   string `json:"rulesProposal"`
+	RulesProposalBy string `json:"rulesProposalBy"`
+	RulesProposalAt string `json:"rulesProposalAt"`
 }
 
 func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`
-		SELECT w.id, w.name, m.role, w.icon, w.image, w.is_personal, w.auto_join, w.rules FROM workspace_members m
+		SELECT w.id, w.name, m.role, w.icon, w.image, w.is_personal, w.auto_join, w.rules,
+		       w.rules_proposal, COALESCE(pu.name, ''), w.rules_proposal_at
+		FROM workspace_members m
 		JOIN workspaces w ON w.id = m.workspace_id
+		LEFT JOIN users pu ON pu.id = w.rules_proposal_by
 		WHERE m.user_id = ? ORDER BY w.is_personal DESC, w.created_at`, requestUser(r).ID)
 	if err != nil {
 		httpError(w, 500, err.Error())
@@ -332,7 +339,8 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var x workspaceJSON
 		var personal, autoJoin int
-		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin, &x.Rules)
+		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin, &x.Rules,
+			&x.RulesProposal, &x.RulesProposalBy, &x.RulesProposalAt)
 		x.Personal, x.AutoJoin = personal != 0, autoJoin != 0
 		list = append(list, x)
 	}
@@ -459,10 +467,42 @@ func (s *Server) handleWorkspaceRules(w http.ResponseWriter, r *http.Request) {
 		httpErrorCode(w, 400, "rules_too_long", "Workspace rules are limited to 16000 characters.")
 		return
 	}
-	if _, err := s.db.Exec(`UPDATE workspaces SET rules = ? WHERE id = ?`, rules, wsID); err != nil {
+	// Writing the rules settles any pending proposal: the admin either loaded
+	// it into the editor (accepted) or wrote something else (overruled) —
+	// either way it has been reviewed, and keeping it would re-raise a
+	// question that was just answered.
+	var hadProposal string
+	s.db.QueryRow(`SELECT rules_proposal FROM workspaces WHERE id = ?`, wsID).Scan(&hadProposal)
+	if _, err := s.db.Exec(`UPDATE workspaces SET rules = ?, rules_proposal = '', rules_proposal_by = '', rules_proposal_at = '' WHERE id = ?`, rules, wsID); err != nil {
 		httpError(w, 500, err.Error())
 		return
 	}
+	detail := ""
+	if hadProposal != "" {
+		detail = "settled a pending proposal"
+	}
+	s.audit("human", requestUser(r).ID, requestUser(r).Name, "workspace_rules_set", "", wsID, detail)
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// handleDismissRulesProposal drops a pending rules proposal without changing
+// the active rules. Same gates as writing the rules themselves — reviewing a
+// proposal IS rules governance, so it happens in the browser, by an admin.
+func (s *Server) handleDismissRulesProposal(w http.ResponseWriter, r *http.Request) {
+	wsID := r.PathValue("id")
+	if !s.isMember(requestUser(r).ID, wsID) {
+		httpError(w, 404, "workspace not found")
+		return
+	}
+	if !s.isWorkspaceAdmin(requestUser(r).ID, wsID) {
+		httpError(w, 403, "workspace admin only")
+		return
+	}
+	if _, err := s.db.Exec(`UPDATE workspaces SET rules_proposal = '', rules_proposal_by = '', rules_proposal_at = '' WHERE id = ?`, wsID); err != nil {
+		httpError(w, 500, err.Error())
+		return
+	}
+	s.audit("human", requestUser(r).ID, requestUser(r).Name, "workspace_rules_proposal_dismissed", "", wsID, "")
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

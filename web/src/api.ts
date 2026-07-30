@@ -429,9 +429,13 @@ export const api = {
   updateWorkspace: (id: string, patch: Partial<{ name: string; icon: string; image: string; autoJoin: boolean }>) =>
     req<{ ok: boolean }>(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   // Rules go through their own endpoint: the server refuses API tokens on it
-  // (sessionOnly) — agents follow the rules, they never write them.
+  // (sessionOnly) — agents follow the rules, they never write them. They may
+  // PROPOSE a draft over MCP; applying (setWorkspaceRules settles it) or
+  // dismissing it is the admin's browser-only act.
   setWorkspaceRules: (id: string, rules: string) =>
     req<{ ok: boolean }>(`/api/workspaces/${id}/rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
+  dismissRulesProposal: (id: string) =>
+    req<{ ok: boolean }>(`/api/workspaces/${id}/rules-proposal`, { method: 'DELETE' }),
   addWorkspaceMember: (workspaceId: string, email: string, role: 'admin' | 'member' | 'viewer') =>
     req<{ ok: boolean }>(`/api/workspaces/${workspaceId}/members`, {
       method: 'POST',

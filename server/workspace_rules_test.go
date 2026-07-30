@@ -115,12 +115,12 @@ func TestWorkspaceRulesReachAgentsOutsideTheUntrustedBlock(t *testing.T) {
 	}
 
 	u := &user{ID: uid}
-	out, rules, err := s.mcpGetWorkspace(u, ws)
+	out, addendum, err := s.mcpGetWorkspace(u, ws)
 	if err != nil {
 		t.Fatalf("mcpGetWorkspace: %v", err)
 	}
-	if rules != "Titles start with the date." {
-		t.Errorf("rules = %q", rules)
+	if !strings.Contains(addendum, "Titles start with the date.") || !strings.Contains(addendum, "BEGIN WORKSPACE RULES") {
+		t.Errorf("addendum does not carry the framed rules: %q", addendum)
 	}
 	// has_rules travels inside the JSON; the text itself must not — the JSON
 	// ends up inside the untrusted block, and the rules must sit outside it.
@@ -133,7 +133,7 @@ func TestWorkspaceRulesReachAgentsOutsideTheUntrustedBlock(t *testing.T) {
 
 	// The composed tool answer: untrusted block first, the rules after it,
 	// with their own frame.
-	full := wrapUntrusted(out) + wrapWorkspaceRules(rules)
+	full := wrapUntrusted(out) + addendum
 	endUntrusted := strings.Index(full, "END UNTRUSTED CONTENT")
 	beginRules := strings.Index(full, "BEGIN WORKSPACE RULES")
 	if endUntrusted == -1 || beginRules == -1 || beginRules < endUntrusted {
@@ -166,5 +166,180 @@ func TestWorkspaceRulesReachAgentsOutsideTheUntrustedBlock(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("list_workspaces does not mark has_rules for %s: %s", ws, lst)
+	}
+}
+
+// The proposal path (W123b): an agent may DRAFT rules over MCP, and the draft
+// is inert — the active rules move only through the admin's browser. That
+// asymmetry is the entire point; these tests nail it down.
+
+func TestProposeRulesIsInertUntilAdminApplies(t *testing.T) {
+	s := testServer(t)
+	admin, adminCookie := signedIn(t, s, "a@example.com")
+	ws := makeWorkspace(t, s, admin)
+	member, _ := signedIn(t, s, "b@example.com")
+	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, member); err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+
+	// A read-only token cannot even propose.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member, TokenScope: "read"}, ws, "x"); err == nil {
+		t.Errorf("read token proposed rules")
+	}
+	// A viewer cannot propose.
+	viewer, _ := signedIn(t, s, "c@example.com")
+	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'viewer')`, ws, viewer); err != nil {
+		t.Fatalf("insert viewer: %v", err)
+	}
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: viewer}, ws, "x"); err == nil {
+		t.Errorf("viewer proposed rules")
+	}
+	// A stranger sees no workspace.
+	stranger, _ := signedIn(t, s, "d@example.com")
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: stranger}, ws, "x"); err == nil {
+		t.Errorf("stranger proposed rules")
+	}
+	// Overlong drafts are refused.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, strings.Repeat("a", 16001)); err == nil {
+		t.Errorf("overlong proposal accepted")
+	}
+
+	// A member's proposal lands in the slot — and the ACTIVE rules stay empty.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "Draft one"); err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+	var rules, proposal, by string
+	s.db.QueryRow(`SELECT rules, rules_proposal, rules_proposal_by FROM workspaces WHERE id = ?`, ws).Scan(&rules, &proposal, &by)
+	if rules != "" || proposal != "Draft one" || by != member {
+		t.Fatalf("after propose: rules=%q proposal=%q by=%q", rules, proposal, by)
+	}
+
+	// A newer draft replaces the older one.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "Draft two"); err != nil {
+		t.Fatalf("second propose: %v", err)
+	}
+	s.db.QueryRow(`SELECT rules, rules_proposal FROM workspaces WHERE id = ?`, ws).Scan(&rules, &proposal)
+	if rules != "" || proposal != "Draft two" {
+		t.Fatalf("after second propose: rules=%q proposal=%q", rules, proposal)
+	}
+
+	// The admin applies in the browser: rules become active, the slot empties.
+	if rec := putRules(t, s, ws, `{"rules":"Draft two"}`, map[string]string{"Cookie": adminCookie}); rec.Code != http.StatusOK {
+		t.Fatalf("admin apply: %d", rec.Code)
+	}
+	s.db.QueryRow(`SELECT rules, rules_proposal, rules_proposal_by FROM workspaces WHERE id = ?`, ws).Scan(&rules, &proposal, &by)
+	if rules != "Draft two" || proposal != "" || by != "" {
+		t.Fatalf("after apply: rules=%q proposal=%q by=%q", rules, proposal, by)
+	}
+}
+
+func TestProposalWithdrawOnlyOwn(t *testing.T) {
+	s := testServer(t)
+	admin, _ := signedIn(t, s, "a@example.com")
+	ws := makeWorkspace(t, s, admin)
+	alice, _ := signedIn(t, s, "alice@example.com")
+	bob, _ := signedIn(t, s, "bob@example.com")
+	for _, id := range []string{alice, bob} {
+		if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, id); err != nil {
+			t.Fatalf("insert member: %v", err)
+		}
+	}
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: alice}, ws, "Alice's draft"); err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+	// Bob cannot withdraw Alice's draft.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: bob}, ws, ""); err == nil {
+		t.Errorf("bob withdrew alice's proposal")
+	}
+	// Alice can.
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: alice}, ws, ""); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	var proposal string
+	s.db.QueryRow(`SELECT rules_proposal FROM workspaces WHERE id = ?`, ws).Scan(&proposal)
+	if proposal != "" {
+		t.Errorf("proposal still there: %q", proposal)
+	}
+}
+
+func TestDismissProposalGuards(t *testing.T) {
+	s := testServer(t)
+	admin, adminCookie := signedIn(t, s, "a@example.com")
+	ws := makeWorkspace(t, s, admin)
+	member, memberCookie := signedIn(t, s, "b@example.com")
+	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'member')`, ws, member); err != nil {
+		t.Fatalf("insert member: %v", err)
+	}
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: member}, ws, "Draft"); err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+
+	del := func(hdr map[string]string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest("DELETE", "/api/workspaces/"+ws+"/rules-proposal", nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		s.ServeHTTP(rec, req)
+		return rec
+	}
+
+	// An API token — even the admin's — is turned away (sessionOnly).
+	raw := newID()
+	if _, err := s.db.Exec(`INSERT INTO api_tokens (id, user_id, name, token_hash, scope, created_at)
+		VALUES (?, ?, 'probe', ?, 'write', ?)`, newID(), admin, tokenHash(raw), now()); err != nil {
+		t.Fatalf("insert token: %v", err)
+	}
+	if rec := del(map[string]string{"Authorization": "Bearer " + raw}); rec.Code != http.StatusForbidden {
+		t.Errorf("token DELETE: got %d, want 403", rec.Code)
+	}
+	// A plain member cannot dismiss.
+	if rec := del(map[string]string{"Cookie": memberCookie}); rec.Code != http.StatusForbidden {
+		t.Errorf("member DELETE: got %d, want 403", rec.Code)
+	}
+	var proposal string
+	s.db.QueryRow(`SELECT rules_proposal FROM workspaces WHERE id = ?`, ws).Scan(&proposal)
+	if proposal != "Draft" {
+		t.Fatalf("a refused dismiss removed the proposal: %q", proposal)
+	}
+	// The admin in the browser can.
+	if rec := del(map[string]string{"Cookie": adminCookie}); rec.Code != http.StatusOK {
+		t.Fatalf("admin DELETE: got %d, want 200", rec.Code)
+	}
+	s.db.QueryRow(`SELECT rules_proposal FROM workspaces WHERE id = ?`, ws).Scan(&proposal)
+	if proposal != "" {
+		t.Errorf("proposal survived the dismiss: %q", proposal)
+	}
+}
+
+func TestRulesAddendumHints(t *testing.T) {
+	// Pure function, fixed voices: the addendum is server-authored and must
+	// never carry user text beyond the admin's rules themselves.
+	if a := rulesAddendum("", ""); !strings.Contains(a, "no rules yet") || !strings.Contains(a, "propose_workspace_rules") {
+		t.Errorf("empty/empty addendum: %q", a)
+	}
+	if a := rulesAddendum("", "pending"); !strings.Contains(a, "already waiting") || strings.Contains(a, "pending") {
+		t.Errorf("proposal-only addendum leaks or lacks hint: %q", a)
+	}
+	if a := rulesAddendum("Rule.", "pending"); !strings.Contains(a, "BEGIN WORKSPACE RULES") || !strings.Contains(a, "also waiting") {
+		t.Errorf("rules+proposal addendum: %q", a)
+	}
+
+	// And get_workspace reports the pending flag inside the JSON.
+	s := testServer(t)
+	admin, _ := signedIn(t, s, "a@example.com")
+	ws := makeWorkspace(t, s, admin)
+	if _, err := s.mcpProposeWorkspaceRules(&user{ID: admin}, ws, "Draft"); err != nil {
+		t.Fatalf("propose: %v", err)
+	}
+	out, addendum, err := s.mcpGetWorkspace(&user{ID: admin}, ws)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if !strings.Contains(out, `"has_pending_rules_proposal":true`) {
+		t.Errorf("JSON lacks pending flag: %s", out)
+	}
+	if strings.Contains(addendum, "Draft") {
+		t.Errorf("proposal text leaked into the addendum: %q", addendum)
 	}
 }

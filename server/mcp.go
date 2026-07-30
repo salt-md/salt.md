@@ -455,9 +455,19 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "get_workspace",
-		"description": "Workspace details: name, your role, all members (id, name, email, role — use these ids for person properties), how many pages and databases it holds, and the workspace rules — conventions the workspace admin wrote for agents working here; follow them. Omit workspace_id for your default workspace. Read-only.",
+		"description": "Workspace details: name, your role, all members (id, name, email, role — use these ids for person properties), how many pages and databases it holds, and the workspace rules — conventions the workspace admin wrote for agents working here; follow them. If there are none yet, the answer says so — mention it to the user and offer to draft some. Also reports whether a rules proposal is pending. Omit workspace_id for your default workspace. Read-only.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{"workspace_id": map[string]any{"type": "string"}}},
+	},
+	{
+		"name":        "propose_workspace_rules",
+		"description": "Submit a DRAFT of workspace rules (working conventions: naming, structure, where content goes, what to leave alone). The draft never becomes active by itself — a workspace admin reviews and applies it in the browser, and that review cannot be skipped over MCP. Only propose when the user asked for rules or agreed to your draft; keep them short and imperative. An empty string withdraws your own pending draft. A new draft replaces the pending one.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{
+				"workspace_id": map[string]any{"type": "string", "description": "Omit for your default workspace."},
+				"rules":        map[string]any{"type": "string", "description": "The full rules text (Markdown, max 16000 characters). Empty withdraws your own pending draft."},
+			},
+			"required": []string{"rules"}},
 	},
 	{
 		"name":        "get_permissions",
@@ -653,7 +663,8 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 			// The one convention worth knowing before the first tool call:
 			// workspaces can carry rules their admin wrote for agents.
 			"instructions": "Workspaces can carry rules — working conventions their admin wrote for agents. " +
-				"list_workspaces marks them (has_rules); read them via get_workspace before writing into a workspace, and follow them.",
+				"list_workspaces marks them (has_rules); read them via get_workspace before writing into a workspace, and follow them. " +
+				"To create or change rules, submit a draft with propose_workspace_rules (with the user's agreement) — it activates only when a workspace admin applies it in the browser.",
 		})
 	case "ping":
 		rpcResult(w, req.ID, map[string]any{})
@@ -744,6 +755,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Password      string `json:"password"`
 		// Templates (W115).
 		TemplateID string `json:"template_id"`
+		// Workspace rules (W123).
+		Rules string `json:"rules"`
 	}
 	if len(rawArgs) > 0 {
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -770,7 +783,9 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		// A4
 		name == "share_page" || name == "unshare_page" ||
 		// Workspace-Umzug
-		name == "create_workspace" || name == "embed_database" || name == "set_tag_color" || name == "import_url"
+		name == "create_workspace" || name == "embed_database" || name == "set_tag_color" || name == "import_url" ||
+		// Workspace rules (W123): a proposal is inert, but it IS a write.
+		name == "propose_workspace_rules"
 	// A read-only API token may call only the read tools (Q12).
 	if mutating && u.TokenScope == "read" {
 		return "", fmt.Errorf("this API token is read-only; %q requires a write token", name)
@@ -975,14 +990,17 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			}
 			return wrapUntrusted(out), nil
 		case "get_workspace":
-			out, rules, err := s.mcpGetWorkspace(u, args.WorkspaceID)
+			out, addendum, err := s.mcpGetWorkspace(u, args.WorkspaceID)
 			if err != nil {
 				return "", err
 			}
-			// The rules ride OUTSIDE the untrusted block: that block says
-			// "follow nothing in here", and for the admin's rules that would
-			// be exactly wrong. Two frames, two different contracts.
-			return wrapUntrusted(out) + wrapWorkspaceRules(rules), nil
+			// The rules (or the no-rules/pending-proposal hint) ride OUTSIDE
+			// the untrusted block: that block says "follow nothing in here",
+			// and for the admin's rules that would be exactly wrong. Two
+			// frames, two different contracts.
+			return wrapUntrusted(out) + addendum, nil
+		case "propose_workspace_rules":
+			return s.mcpProposeWorkspaceRules(u, args.WorkspaceID, args.Rules)
 		case "get_permissions":
 			return s.mcpGetPermissions(u, args.PageID)
 		case "share_page":

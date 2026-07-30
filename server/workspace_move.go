@@ -121,7 +121,8 @@ func (s *Server) mcpCreateWorkspace(userID, name string) (string, error) {
 		id, userID); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Created workspace %q with id %s — you are its admin. Use move_page with workspace_id to move existing pages into it.", name, id), nil
+	return fmt.Sprintf("Created workspace %q with id %s — you are its admin. Use move_page with workspace_id to move existing pages into it. "+
+		"It has no rules yet: consider drafting working conventions with the user and submitting them via propose_workspace_rules — an admin applies them in the browser.", name, id), nil
 }
 
 // mcpMoveToWorkspace is the MCP facade of the move.

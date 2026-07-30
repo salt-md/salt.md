@@ -33,6 +33,10 @@ export interface Workspace {
   autoJoin?: boolean;
   /** Working conventions the admin wrote down — agents get them over MCP, members read them here. */
   rules?: string;
+  /** A pending rules draft (usually from an agent) — inert until an admin applies it. */
+  rulesProposal?: string;
+  rulesProposalBy?: string;
+  rulesProposalAt?: string;
 }
 
 export interface AuditEntry {

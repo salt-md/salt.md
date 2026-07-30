@@ -304,6 +304,18 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "workspaces", "rules", `rules TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate workspaces.rules: %w", err)
 	}
+	// A rules PROPOSAL: an agent (or member) may draft rules over MCP, but the
+	// draft is inert — it becomes active only when a workspace admin applies it
+	// in the browser. One slot per workspace; a new proposal replaces the old.
+	if err := ensureColumn(db, "workspaces", "rules_proposal", `rules_proposal TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.rules_proposal: %w", err)
+	}
+	if err := ensureColumn(db, "workspaces", "rules_proposal_by", `rules_proposal_by TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.rules_proposal_by: %w", err)
+	}
+	if err := ensureColumn(db, "workspaces", "rules_proposal_at", `rules_proposal_at TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.rules_proposal_at: %w", err)
+	}
 	// Optional password on public share links.
 	if err := ensureColumn(db, "share_links", "password_hash", `password_hash TEXT`); err != nil {
 		return nil, fmt.Errorf("migrate share_links.password_hash: %w", err)
