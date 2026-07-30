@@ -5091,10 +5091,54 @@ a.btn {
 }
 
 .index-mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 5px 11px;
   border-radius: 6px;
   font-size: 13px;
   color: var(--muted);
+  white-space: nowrap;
+}
+
+.index-mode svg {
+  flex: none;
+}
+
+/* Six shelves do not fit a narrow window; the row scrolls instead of wrapping
+   into two, which would push the table down on every visit. */
+@media (max-width: 900px) {
+  .index-modes {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
+/* The library's own columns: metadata, deliberately quieter than the title. */
+.idx-dim {
+  color: var(--muted);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.idx-src {
+  color: var(--muted);
+  font-size: 12.5px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.idx-src:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.idx-src-priv {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .index-mode.active {

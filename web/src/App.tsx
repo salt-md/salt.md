@@ -848,6 +848,7 @@ export default function App() {
         {indexOpen ? (
           <IndexView
             pages={pages}
+            favorites={favorites}
             onNavigate={(id) => {
               setIndexOpen(false);
               navigate(id);

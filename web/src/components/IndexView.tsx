@@ -3,33 +3,83 @@ import { api } from '../api';
 import { toast } from '../toast';
 import type { PageMeta } from '../types';
 import { PageIcon } from '../pageIcon';
-import { compare } from '../format';
-import { t } from '../i18n';
+import { compare, formatMoment } from '../format';
+import { plural, t } from '../i18n';
+import { Clock, Library, Lock, Star, Users, Workflow } from 'lucide-react';
 
 type SortKey = 'title' | 'in' | 'out' | 'updated';
-type Mode = 'liste' | 'baum';
+type Mode = 'recent' | 'favorites' | 'shared' | 'private' | 'all' | 'tree';
 
-// "All pages" index: every page (documents + databases, excluding database
-// rows) — as a sortable link-count table OR as the plain indented tree the way
-// an agent reads the structure (mirrors the MCP list_pages output), each node
-// carrying a stable Markdown link. Read-only; touches nothing in the block /
-// collab store.
+// The library: every page of this instance (documents + databases, database rows
+// excluded), the way a shelf is browsed rather than a list is read — by what was
+// open lately, what is starred, what the workspace sees, what only you see.
+//
+// It used to be an "index" with two columns of link counts, which answered a
+// question nobody asks first. The counts are still here (last two columns), but
+// they no longer decide the shape.
+//
+// The agent view stays a tab of its own: the same indented tree the MCP
+// list_pages returns, each node carrying a stable Markdown link. Read-only
+// throughout; touches nothing in the block / collab store.
+
+/** Tabs, built in a function — a module-level array would resolve t() once at
+    import and keep that language for the session. */
+function tabs(): { id: Mode; label: string; icon: React.ReactNode }[] {
+  return [
+    { id: 'recent', label: t('Recently used'), icon: <Clock size={14} /> },
+    { id: 'favorites', label: t('Favorites'), icon: <Star size={14} /> },
+    { id: 'shared', label: t('Shared'), icon: <Users size={14} /> },
+    { id: 'private', label: t('Private'), icon: <Lock size={14} /> },
+    { id: 'all', label: t('All pages'), icon: <Library size={14} /> },
+    { id: 'tree', label: t('Tree · agent view'), icon: <Workflow size={14} /> },
+  ];
+}
+
+/** The pages this browser opened last, newest first. localStorage, written by
+    App's rememberRecent — per browser, so the phone and the laptop disagree.
+    Moving it onto the account is its own small job (see W112 for why that
+    matters); until then this is honest about what it knows. */
+function recentIDs(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem('salt-recents') ?? '[]');
+    return Array.isArray(v) ? (v as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
 export default function IndexView({
   pages,
+  favorites,
   onNavigate,
   onClose,
 }: {
   pages: PageMeta[];
+  favorites: string[];
   onNavigate: (id: string) => void;
   onClose: () => void;
 }) {
   const [edges, setEdges] = useState<{ source: string; target: string }[]>([]);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortKey>('title');
-  const [mode, setMode] = useState<Mode>('liste');
+  const recents = useMemo(recentIDs, []);
+  // "Recently used" is the right shelf to land on — except on a fresh browser,
+  // where it is empty and the library would greet you with nothing at all.
+  const [mode, setMode] = useState<Mode>(recents.length ? 'recent' : 'all');
+  const [people, setPeople] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     void api.graph().then((g) => setEdges(g.edges)).catch(() => {});
+    // Who created a page is stored as an id; the roster turns it into a name.
+    void api
+      .listWorkspaces()
+      .then((ws) => Promise.all(ws.map((w) => api.listMembers(w.id).catch(() => []))))
+      .then((lists) => {
+        const m = new Map<string, string>();
+        for (const p of lists.flat()) m.set(p.userId, p.name);
+        setPeople(m);
+      })
+      .catch(() => {});
   }, []);
 
   const { outCount, inCount } = useMemo(() => {
@@ -46,13 +96,34 @@ export default function IndexView({
 
   const rows = useMemo(() => {
     const q = query.toLowerCase();
-    const list = live
+    const favSet = new Set(favorites);
+    const shelf = live.filter((p) => {
+      switch (mode) {
+        case 'favorites':
+          return favSet.has(p.id);
+        case 'shared':
+          return p.visibility !== 'private';
+        case 'private':
+          return p.visibility === 'private';
+        case 'recent':
+          return recents.includes(p.id);
+        default:
+          return true;
+      }
+    });
+    const list = shelf
       .filter((p) => (p.title || 'Untitled').toLowerCase().includes(q))
       .map((p) => ({
         page: p,
         out: outCount.get(p.id) ?? 0,
         in: inCount.get(p.id) ?? 0,
       }));
+    // "Recently used" carries its own order — the order they were opened in.
+    // Sorting it by name would throw away the only thing that shelf knows.
+    if (mode === 'recent' && sort === 'title') {
+      list.sort((a, b) => recents.indexOf(a.page.id) - recents.indexOf(b.page.id));
+      return list;
+    }
     list.sort((a, b) => {
       switch (sort) {
         case 'in':
@@ -71,9 +142,11 @@ export default function IndexView({
       }
     });
     return list;
-  }, [live, query, sort, outCount, inCount]);
+  }, [live, query, sort, outCount, inCount, mode, favorites, recents]);
 
   const orphans = rows.filter((r) => r.in === 0 && r.out === 0).length;
+  const titleOf = (id: string | null) =>
+    id ? live.find((p) => p.id === id)?.title || t('Untitled') : '';
 
   // Parent → children map for the tree view (same hierarchy the sidebar shows).
   const childrenMap = useMemo(() => {
@@ -91,7 +164,7 @@ export default function IndexView({
 
   const copyMd = (id: string) => {
     void navigator.clipboard?.writeText(window.location.origin + '/api/export/' + id);
-    toast('Markdown-Link kopiert');
+    toast(t('Markdown link copied'));
   };
 
   const q = query.toLowerCase();
@@ -127,18 +200,27 @@ export default function IndexView({
     }
     return anyMatch;
   };
-  if (mode === 'baum') renderSubtree('', 0);
+  if (mode === 'tree') renderSubtree('', 0);
 
   return (
     <div className="index-view">
       <div className="index-head">
-        <h1>{t('📑 Index — every page')}</h1>
+        <h1>
+          <Library size={20} /> {t('Library')}
+        </h1>
         <button className="btn-sm" onClick={onClose}>{t('Close')}</button>
       </div>
       <div className="index-controls">
         <div className="index-modes">
-          <button className={'index-mode' + (mode === 'liste' ? ' active' : '')} onClick={() => setMode('liste')}>{t('List')}</button>
-          <button className={'index-mode' + (mode === 'baum' ? ' active' : '')} onClick={() => setMode('baum')}>{t('Tree · agent view')}</button>
+          {tabs().map((tab) => (
+            <button
+              key={tab.id}
+              className={'index-mode' + (mode === tab.id ? ' active' : '')}
+              onClick={() => setMode(tab.id)}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
         </div>
         <input
           className="prop-input index-search"
@@ -147,23 +229,31 @@ export default function IndexView({
           onChange={(e) => setQuery(e.target.value)}
           aria-label={t('Filter pages')}
         />
-        {mode === 'liste' && (
+        {mode !== 'tree' && (
           <select className="prop-select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label={t('Sort')}>
-            <option value="title">Name (A–Z)</option>
+            <option value="title">{mode === 'recent' ? t('Last opened') : t('Name (A–Z)')}</option>
+            <option value="updated">{t('Recently changed')}</option>
             <option value="in">{t('Most backlinks')}</option>
             <option value="out">{t('Most outgoing links')}</option>
-            <option value="updated">{t('Recently changed')}</option>
           </select>
         )}
-        <span className="index-stat">{rows.length} Seiten · {orphans} ohne Links</span>
+        {/* plural(), not t(): the catalog holds "{n} pages" as plural FORMS, so
+            t() would hand back the key and the count read "7 pages" in German. */}
+        <span className="index-stat">
+          {plural(rows.length, '{n} page', '{n} pages')}
+          {mode === 'all' && ` · ${t('{n} without links', { n: orphans })}`}
+        </span>
       </div>
 
-      {mode === 'liste' ? (
+      {mode !== 'tree' ? (
         <div className="table-wrap">
           <table className="db-table index-table">
             <thead>
               <tr>
                 <th>{t('Page')}</th>
+                <th>{t('Created by')}</th>
+                <th>{t('Source')}</th>
+                <th>{t('Changed')}</th>
                 <th title={t('Outgoing @-links')}>{t('→ Links')}</th>
                 <th title={t('Incoming links (backlinks)')}>{t('← Backlinks')}</th>
               </tr>
@@ -174,17 +264,35 @@ export default function IndexView({
                   <td>
                     <button className="db-title-link" onClick={() => onNavigate(page.id)}>
                       {page.icon && <span className="inline-icon"><PageIcon icon={page.icon} size={14} /> </span>}
-                      {page.title || 'Untitled'}
+                      {page.title || t('Untitled')}
                       {page.type === 'collection' && <span className="index-badge">DB</span>}
                     </button>
                   </td>
+                  <td className="idx-dim">{people.get(page.ownerId) ?? ''}</td>
+                  {/* Where it sits: the parent page, or the lock for a page only
+                      its owner sees — the two answers to "where does this come
+                      from" that the shelf tabs sort by. */}
+                  <td className="idx-dim">
+                    {page.parentId ? (
+                      <button className="idx-src" onClick={() => onNavigate(page.parentId!)}>
+                        {titleOf(page.parentId)}
+                      </button>
+                    ) : page.visibility === 'private' ? (
+                      <span className="idx-src-priv">
+                        <Lock size={11} /> {t('Private')}
+                      </span>
+                    ) : (
+                      ''
+                    )}
+                  </td>
+                  <td className="idx-dim">{page.updatedAt ? formatMoment(page.updatedAt) : ''}</td>
                   <td>{out || ''}</td>
                   <td>{inc || ''}</td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="db-empty">{t('No pages.')}</td>
+                  <td colSpan={6} className="db-empty">{t('No pages.')}</td>
                 </tr>
               )}
             </tbody>
