@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Trash2, Upload as UploadIcon } from 'lucide-react';
+import Portal from './Portal';
 import { EMOJI_GROUPS } from '../emojiData';
 import { LUCIDE_SET, LUCIDE_NAMES } from '../lucideSet';
 import { api } from '../api';
@@ -27,10 +28,43 @@ interface Props {
   onRemove: () => void;
   onClose: () => void;
   pageId?: string;
+  /** The element the picker hangs off. With it, the picker leaves its container
+   *  through a Portal and positions itself against the viewport — necessary
+   *  wherever an ancestor scrolls or clips: inside the Workspace-image dialog
+   *  (.dialog is `overflow-y: auto`) the list was cut off after a single row of
+   *  smileys. Without it the picker stays where it always was, absolutely
+   *  positioned under its wrapper. */
+  anchor?: React.RefObject<HTMLElement | null>;
 }
 
-export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props) {
+export default function IconPicker({ onPick, onRemove, onClose, pageId, anchor }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  // Same shape as SelectCell's popover: clamp to the viewport, flip upward when
+  // there is more room above, and never exceed the space actually available.
+  const [pos, setPos] = useState<{
+    left: number;
+    top?: number;
+    bottom?: number;
+    maxHeight: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const el = anchor?.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const width = Math.min(348, vw - 16);
+    const spaceBelow = vh - r.bottom - 12;
+    const spaceAbove = r.top - 12;
+    const below = spaceBelow >= 320 || spaceBelow >= spaceAbove;
+    setPos({
+      left: Math.max(8, Math.min(r.left, vw - width - 8)),
+      top: below ? r.bottom + 6 : undefined,
+      bottom: below ? undefined : vh - r.top + 6,
+      maxHeight: Math.max(240, below ? spaceBelow : spaceAbove),
+    });
+  }, [anchor]);
   const [tab, setTab] = useState<'emoji' | 'icon' | 'upload'>('emoji');
   const [q, setQ] = useState('');
   const [color, setColor] = useState('');
@@ -86,8 +120,12 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
     }
   };
 
-  return (
-    <div className="icon-picker" ref={ref}>
+  const body = (
+    <div
+      className={'icon-picker' + (anchor ? ' is-anchored' : '')}
+      ref={ref}
+      style={anchor && pos ? { left: pos.left, top: pos.top, bottom: pos.bottom, maxHeight: pos.maxHeight } : undefined}
+    >
       <div className="icon-picker-tabs">
         <button type="button" className={tab === 'emoji' ? 'on' : ''} onClick={() => { setTab('emoji'); setQ(''); }}>
           {t('Emoji')}
@@ -214,4 +252,8 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId }: Props)
       </div>
     </div>
   );
+
+  // Anchored means "out of the box": the picker goes to <body>, so no scrolling
+  // or clipping ancestor can cut it off.
+  return anchor ? <Portal>{body}</Portal> : body;
 }

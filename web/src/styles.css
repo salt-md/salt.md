@@ -823,6 +823,19 @@ button {
 }
 
 /* Icon picker — emoji (searchable), Lucide icons (+ colour), image upload. */
+/* Anchored variant (W122): positioned against the VIEWPORT and portalled to
+   <body>, so a scrolling or clipping ancestor cannot cut the list off. Inside
+   the Workspace-image dialog it showed exactly one row of smileys before.
+   z-index above .modal-overlay, or it would open behind the dialog it belongs
+   to. Inline coordinates come from the component. */
+.icon-picker.is-anchored {
+  position: fixed;
+  top: auto;
+  left: auto;
+  z-index: 1200;
+  overflow-y: auto;
+}
+
 .icon-picker {
   position: absolute;
   top: 100%;

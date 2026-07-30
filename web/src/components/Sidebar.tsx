@@ -1192,6 +1192,9 @@ function WorkspaceImageModal({
   const [emoji, setEmoji] = useState(ws.icon);
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // The picker hangs off this button and leaves the dialog through a Portal —
+  // .dialog scrolls, and inside it the list was cut off after one row.
+  const pickerBtnRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const saveEmoji = async (val: string = emoji) => {
@@ -1245,7 +1248,7 @@ function WorkspaceImageModal({
           <p className="dialog-hint">{t('Pick an emoji or upload a logo (a company or project logo, say).')}</p>
           <label className="dialog-hint">{t('Emoji')}</label>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', position: 'relative' }}>
-            <button className="btn" onClick={() => setPickerOpen((o) => !o)}>
+            <button className="btn icon-trigger" ref={pickerBtnRef} onClick={() => setPickerOpen((o) => !o)}>
               {emoji || '🙂'} {t('Choose…')}
             </button>
             <input
@@ -1259,6 +1262,7 @@ function WorkspaceImageModal({
             <button className="btn primary" disabled={busy || !emoji.trim()} onClick={() => void saveEmoji()}>{t('Save')}</button>
             {pickerOpen && (
               <IconPicker
+                anchor={pickerBtnRef}
                 onPick={(e) => {
                   setPickerOpen(false);
                   setEmoji(e);
