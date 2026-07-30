@@ -446,20 +446,10 @@ function loadMembers(): Promise<Member[]> {
   return memberCache;
 }
 
-/** A person value used to render as grey text — the same name that appears as a
-    face in presence and in comments. Matches by id first, then by name; an
-    unknown value stays readable text rather than disappearing. */
-function PersonValue({ value }: { value: unknown }) {
-  const raw = String(value ?? '').trim();
-  const [members, setMembers] = useState<Member[]>([]);
-  useEffect(() => {
-    let alive = true;
-    void loadMembers().then((m) => alive && setMembers(m));
-    return () => {
-      alive = false;
-    };
-  }, []);
-  if (!raw) return null;
+/** The chip: a face plus the name. Matches by id first, then by name, so a
+    value an agent wrote as plain text still finds its person; an unknown value
+    stays readable text rather than disappearing. */
+function PersonChip({ raw, members }: { raw: string; members: Member[] }) {
   const lower = raw.toLowerCase();
   const hit = members.find((m) => m.userId === raw) ?? members.find((m) => m.name.toLowerCase() === lower);
   const name = hit?.name ?? raw;
@@ -473,6 +463,106 @@ function PersonValue({ value }: { value: unknown }) {
       </span>
       <span className="prop-person-name">{name}</span>
     </span>
+  );
+}
+
+/** A person cell: pick a colleague from a list, or type a name for somebody
+    without an account.
+ *
+ *  The first version was a free-text field, and that was a dead end twice over:
+ *  an empty cell rendered as a 0×0 span (nothing to click, so the whole column
+ *  looked broken), and even once open it asked you to type a colleague's name
+ *  exactly — with the roster sitting right there. Picking stores the USER ID, so
+ *  the cell follows a rename; free text is kept as a fallback and stored as
+ *  typed. */
+function PersonValue({ value, onChange, readOnly, compact }: Props) {
+  const raw = String(value ?? '').trim();
+  const [members, setMembers] = useState<Member[]>([]);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const boxRef = useRef<HTMLDivElement>(null);
+  const ro = readOnly || !onChange;
+
+  useEffect(() => {
+    let alive = true;
+    void loadMembers().then((m) => alive && setMembers(m));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!boxRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [open]);
+
+  if (ro || compact) return raw ? <PersonChip raw={raw} members={members} /> : null;
+
+  const q = query.trim().toLowerCase();
+  const filtered = members.filter((m) => m.name.toLowerCase().includes(q));
+  const pick = (v: string) => {
+    onChange!(v || null);
+    setQuery('');
+    setOpen(false);
+  };
+
+  return (
+    <div className="relation-value" ref={boxRef}>
+      {/* Always a real hit target: an empty cell says "＋ Person" instead of
+          being an invisible nothing. */}
+      <button type="button" className="relation-open" onClick={() => setOpen((v) => !v)}>
+        {raw ? <PersonChip raw={raw} members={members} /> : <span className="prop-empty">{t('＋ Person')}</span>}
+      </button>
+      {open && (
+        <div className="menu relation-menu">
+          <input
+            className="prop-input"
+            autoFocus
+            placeholder={t('Search or type a name…')}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter takes the single match, else what was typed — so somebody
+              // without an account can be entered without leaving the keyboard.
+              if (e.key !== 'Enter') return;
+              e.preventDefault();
+              if (filtered.length === 1) pick(filtered[0].userId);
+              else if (query.trim()) pick(query.trim());
+            }}
+          />
+          <div className="relation-options">
+            {filtered.map((m) => (
+              <button
+                key={m.userId}
+                type="button"
+                className={'relation-option' + (m.userId === raw || m.name === raw ? ' on' : '')}
+                onClick={() => pick(m.userId)}
+              >
+                <span className="relation-check">{m.userId === raw || m.name === raw ? '✓' : ''}</span>
+                <PersonChip raw={m.userId} members={members} />
+              </button>
+            ))}
+            {q && !filtered.some((m) => m.name.toLowerCase() === q) && (
+              <button type="button" className="relation-option" onClick={() => pick(query.trim())}>
+                <span className="relation-check" />
+                {t('Use “{name}”', { name: query.trim() })}
+              </button>
+            )}
+            {!members.length && !q && <div className="relation-empty">{t('No members')}</div>}
+            {raw && (
+              <button type="button" className="relation-option danger" onClick={() => pick('')}>
+                <span className="relation-check" />
+                {t('Remove')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -718,31 +808,7 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
       );
     }
     case 'person':
-      // Showing the face is the whole point, so a person renders as a chip
-      // until it is clicked; the editor is the same free-text field as before,
-      // because a person value may also be somebody without an account.
-      if (ro || !editing) {
-        if (!value) return compact ? null : <span className="prop-empty" onClick={ro ? undefined : () => setEditing(true)} />;
-        return (
-          <span onClick={ro ? undefined : () => setEditing(true)}>
-            <PersonValue value={value} />
-          </span>
-        );
-      }
-      return (
-        <input
-          className="prop-input"
-          autoFocus
-          defaultValue={(value as string) || ''}
-          onBlur={(e) => {
-            setEditing(false);
-            onChange!(e.target.value);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
-        />
-      );
+      return <PersonValue def={def} value={value} onChange={onChange} readOnly={readOnly} compact={compact} />;
     case 'text':
     default:
       if (compact) return value ? <span className="prop-text-chip">{String(value)}</span> : null;
