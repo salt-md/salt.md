@@ -423,15 +423,27 @@ lines with no rebuild and no error. Backup before it:
 `/root/salt-backups/salt-data-20260726-155337-vor-1.5.0.tar.gz` (21M, gzip
 verified); the `salt.md:1.4.0` image is still on the box for a rollback.
 
+**Production runs `1.5.3`** (2026-07-30), for the first time through the whole
+fixed path in one line: anonymous `docker pull` from GHCR, stop + volume backup
++ swap in one command — on his explicit word, the permission layer let it
+through this time. Verified by behaviour: `.cp-bar`, `color-scheme:dark`,
+`scrollbar-width:none`, `asTemplate=1` and the tab menu item all in the served
+bundle; three-line startup, no rebuild. Backup:
+`/root/salt-backups/salt-data-20260730-085502-vor-1.5.3.tar.gz` (21M, gzip
+verified); the `1.5.2` image stays on the box for a rollback.
+
 **Reading that database from outside needs the WAL.** `docker cp salt:/data/salt.db`
 alone shows a stale schema — the migration sat in `salt.db-wal` and the copy
 looked as if it had never run. Copy `salt.db`, `salt.db-wal` and `salt.db-shm`
 together, or conclude nothing.
 
-**GHCR is not public.** Not even `1.0.2` can be pulled anonymously, so
-production cannot `docker pull` its way to a release — it builds from the
-cloned tag. Needs `DOCKER_BUILDKIT=1`: the Docker there is too old for
-`$BUILDPLATFORM` and fails with an unhelpful platform error without it.
+**GHCR is public now** — proven 2026-07-30: production pulled `1.5.3`
+anonymously, no `docker login` on the box. This paragraph used to claim the
+opposite (and before that, the DNS note was wrong the same way); both claims
+sent an instance down the build-on-production road. If a pull fails, diagnose
+THAT failure — auth and DNS separately — instead of trusting either note. The
+build-from-tag fallback needs `DOCKER_BUILDKIT=1` (the Docker there is too old
+for `$BUILDPLATFORM`), but it is the last resort, not the path.
 
 A `v*` tag fires both `.github/workflows/release.yml` and `docker.yml`, which
 publish platform binaries to a GitHub Release (where `install.sh` fetches from)
