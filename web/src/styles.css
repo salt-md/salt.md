@@ -1200,6 +1200,31 @@ button {
   opacity: 0.75;
 }
 
+/* The path down to this page. Quieter than the sections below it: it is
+   context, not something you came here to read. */
+.structure-above {
+  padding-bottom: 2px;
+}
+
+.structure-above .structure-item {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.structure-above .structure-item:hover {
+  color: var(--fg);
+}
+
+.structure-here {
+  color: var(--fg);
+  font-weight: 500;
+  cursor: default;
+}
+
+.structure-here:hover {
+  background: none;
+}
+
 /* The kind badge earns colour only where it helps the eye sort a list; every
    other extension keeps the neutral border so the column stays calm. */
 .ext-pdf {

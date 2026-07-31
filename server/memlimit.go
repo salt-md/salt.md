@@ -16,9 +16,47 @@ import (
 // has 64 GB, sizes its work accordingly, and gets killed by the first large
 // document. The cgroup files below are the only place the real cap is written.
 
+// containerWithoutCap is what a plain `docker run ghcr.io/salt-md/salt.md`
+// produces: a container with no --memory, on a host with plenty. There the
+// host's figure is NOT a promise — the operator may hand this container 512 MB
+// tomorrow, and nothing in the container would notice. Assuming the host's
+// size is how a 512 MB container on a 64 GB machine talks itself into work
+// that gets it killed.
+//
+// So an uncapped container is treated as a small one. Being wrong in this
+// direction costs a bit of search coverage on a big machine; being wrong the
+// other way costs the server. Operators who know better say so, either with
+// --memory (which is worth setting anyway) or with SALT_MEMORY_MB.
+const containerWithoutCap = 2 << 30 // 2 GiB
+
+// inContainer reports whether we are inside a container runtime. /.dockerenv
+// covers Docker and Podman; the cgroup path catches the rest.
+func inContainer() bool {
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return true
+	}
+	b, err := os.ReadFile("/proc/1/cgroup")
+	if err != nil {
+		return false
+	}
+	s := string(b)
+	return strings.Contains(s, "docker") || strings.Contains(s, "kubepods") ||
+		strings.Contains(s, "containerd") || strings.Contains(s, "lxc")
+}
+
 // availableMemory returns the memory ceiling in bytes, or 0 when it cannot be
-// determined. cgroup v2 first (every current runtime), then v1.
+// determined. In order: what the operator declared, what the container runtime
+// enforces, and only then what the machine reports.
 func availableMemory() int64 {
+	// The operator's word beats every guess — and it is the only answer for
+	// nested setups (LXC → Docker), where the inner container can see neither
+	// the outer cap nor a truthful /proc/meminfo.
+	if v := Env("MEMORY_MB"); v != "" {
+		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && n > 0 {
+			return n << 20
+		}
+		log.Printf("memory: SALT_MEMORY_MB=%q is not a positive number of megabytes — ignoring it", v)
+	}
 	for _, p := range []string{
 		"/sys/fs/cgroup/memory.max",                   // cgroup v2
 		"/sys/fs/cgroup/memory/memory.limit_in_bytes", // cgroup v1
@@ -29,8 +67,7 @@ func availableMemory() int64 {
 		}
 		s := strings.TrimSpace(string(b))
 		// v2 writes "max" when unlimited; v1 writes a number so large it means
-		// the same thing. Both mean "no container cap" — fall through to the
-		// host figure.
+		// the same thing. Both mean "this container has no cap".
 		if s == "max" {
 			break
 		}
@@ -40,7 +77,17 @@ func availableMemory() int64 {
 		}
 		return n
 	}
-	return hostMemory()
+	host := hostMemory()
+	if inContainer() {
+		// No cap, and we are in a container: the host figure describes the
+		// machine, not our share of it. Take the smaller of the two — on a
+		// small host the host figure is still the real ceiling.
+		if host > 0 && host < containerWithoutCap {
+			return host
+		}
+		return containerWithoutCap
+	}
+	return host
 }
 
 // hostMemory reads the machine's total memory from /proc/meminfo. Linux only,
@@ -82,6 +129,14 @@ func applyMemoryLimit() {
 	debug.SetMemoryLimit(avail / 100 * 80)
 	log.Printf("memory: %d MB available, soft limit %d MB, PDF indexing up to %d MB, %d extraction(s) at a time",
 		avail>>20, (avail/100*80)>>20, pdfExtractLimit()>>20, extractionSlots())
+	// Say why, and how to change it. Without this line an operator on a large
+	// machine sees a small figure, has no way to tell an assumption from a
+	// reading, and cannot know that one flag fixes it.
+	if Env("MEMORY_MB") == "" && inContainer() && avail == containerWithoutCap {
+		log.Printf("memory: no container limit is set, so this assumes a small instance. " +
+			"Run with --memory=<size> (recommended) or set SALT_MEMORY_MB=<megabytes> " +
+			"to use more — it only affects how much gets indexed, never whether an upload succeeds.")
+	}
 }
 
 // pdfExtractLimit is the largest PDF whose text we are willing to build in

@@ -68,6 +68,25 @@ func TestExtractionSlotsScaleWithMemory(t *testing.T) {
 	}
 }
 
+// The case a plain `docker run` produces: no --memory, a big host. Assuming
+// the host's size there is how a small container talks itself into work that
+// gets it killed — so an uncapped container counts as small, and the operator
+// raises it deliberately.
+func TestUncappedContainerAssumesSmall(t *testing.T) {
+	if containerWithoutCap > 4<<30 {
+		t.Errorf("the no-cap assumption is %d MB — that is not a careful default",
+			containerWithoutCap>>20)
+	}
+	// It has to leave a usable instance behind, not switch indexing off.
+	if extractLimitFor(containerWithoutCap) < 5<<20 {
+		t.Errorf("at the no-cap assumption only %d bytes would be indexed",
+			extractLimitFor(containerWithoutCap))
+	}
+	if extractionSlotsFor(containerWithoutCap) < 1 {
+		t.Error("the no-cap assumption would leave zero extraction slots")
+	}
+}
+
 // Whatever the machine, one extraction must never be allowed to build more
 // text than we are willing to keep — otherwise the cap is decoration.
 func TestLimitsStayCoherentAcrossMachineSizes(t *testing.T) {

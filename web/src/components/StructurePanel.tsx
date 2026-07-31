@@ -27,6 +27,25 @@ export function setStructurePanelOpen(open: boolean): void {
 
 type TreeItem = { page: PageMeta; depth: number };
 
+// The chain from the top down to (but not including) this page. The panel used
+// to look only downwards, so standing on a sub-page you could see everything
+// below you and nothing about where you were — the breadcrumb in the topbar
+// knows, but that is above the reading line and easy to miss. Nearest parent
+// last, so the list reads top-down like the tree does.
+function ancestors(pageId: string, pagesById: Map<string, PageMeta>): PageMeta[] {
+	const out: PageMeta[] = [];
+	const seen = new Set<string>([pageId]);
+	let cur = pagesById.get(pageId)?.parentId ?? null;
+	while (cur && !seen.has(cur)) {
+		seen.add(cur); // a cycle cannot happen, but a bad import must not hang the panel
+		const p = pagesById.get(cur);
+		if (!p) break; // a database row's parent is not in the tree map — stop there
+		out.unshift(p);
+		cur = p.parentId;
+	}
+	return out;
+}
+
 // Children of `rootId`, depth-first, so the panel shows the shape of the
 // subtree and not just its first level. Database rows are absent by design:
 // the page tree endpoint leaves them out (they belong in the collection view,
@@ -96,6 +115,7 @@ export default function StructurePanel({
   const [preview, setPreview] = useState<{ name: string; url: string } | null>(null);
 
   const pages = useMemo(() => subtree(pageId, pagesById), [pageId, pagesById]);
+  const above = useMemo(() => ancestors(pageId, pagesById), [pageId, pagesById]);
 
   useEffect(() => {
     let alive = true;
@@ -126,6 +146,40 @@ export default function StructurePanel({
           <PanelRightClose size={17} />
         </button>
       </div>
+
+      {/* Where this page sits, before what sits under it. Shown only when
+          there is somewhere to go: on a top-level page the section would be an
+          empty box saying nothing. */}
+      {above.length > 0 && (
+        <div className="structure-section structure-above">
+          {above.map((p, i) => (
+            <button
+              key={p.id}
+              className="structure-item"
+              style={{ paddingLeft: 8 + i * 10 }}
+              onClick={() => onNavigate(p.id)}
+              title={p.title || t('Untitled')}
+            >
+              <span className="structure-icon">
+                <PageIcon
+                  icon={p.icon}
+                  size={14}
+                  fallback={p.type === 'collection' ? <Table2 size={14} /> : <FileText size={14} />}
+                />
+              </span>
+              <span className="structure-text">{p.title || t('Untitled')}</span>
+            </button>
+          ))}
+          {/* The current page closes the chain, so the panel shows a position
+              and not just a list of strangers. Not a button: you are here. */}
+          <div className="structure-item structure-here" style={{ paddingLeft: 8 + above.length * 10 }}>
+            <span className="structure-icon">
+              <CornerDownRight size={13} />
+            </span>
+            <span className="structure-text">{t('This page')}</span>
+          </div>
+        </div>
+      )}
 
       {/* A database's rows ARE its sub-pages, but they live in the table and
           are deliberately kept out of the page tree. Showing an empty
