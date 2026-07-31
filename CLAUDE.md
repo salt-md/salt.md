@@ -463,7 +463,21 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production runs `1.6.3`** (2026-08-01 00:19), on his word ("push live"): the
+**Production runs `1.6.4`** (2026-08-01 00:38), on his word ("auf prod
+pushen"): the structure panel and the PDF preview, rebased onto the 1.6.3
+hotfix. Verified by behaviour, not by the version string — `structure-panel`,
+`file-preview-frame`, `structure-ext` and `structure-from` all appear in the
+served JS **and** CSS, and `/api/health` answers `1.6.4`. No index rebuild at
+startup (filesVersion unchanged), 636 files in the volume, backup
+`/root/salt-backups/salt-data-20260731-223838-vor-1.6.4.tar.gz` (392M); images
+`1.6.3`, `1.6.2`, `1.6.1` remain for rollback.
+
+**Disk is the next thing to run out** — 3.1G free (59% used) with backups at
+975M and each new one weighing ~390M now that the file store is full. Two more
+deploys and it is tight. Prune the oldest backups before the next one, or move
+them off the box.
+
+**Production ran `1.6.3`** (2026-08-01 00:19), on his word ("push live"): the
 hotfix for the outage below. Startup proves both halves in two lines — `file
 index: built (version 2, 626 files on 248 pages, 0 unreferenced)` and `memory:
 … PDF indexing up to 50 MB, 3 extraction(s) at a time`. `/api/health` answers
