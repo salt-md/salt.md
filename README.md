@@ -65,9 +65,15 @@ in your browser and create the admin account.
 ### Docker
 
 ```bash
-docker run -d -p 8420:8420 -v salt-data:/data ghcr.io/salt-md/salt.md
+docker run -d -p 8420:8420 -v salt-data:/data --memory=4g ghcr.io/salt-md/salt.md
 # or: docker compose up
 ```
+
+`--memory` is worth setting: a container cannot see how much the host means to
+give it, so without a limit Salt.md assumes a small machine and indexes fewer
+large PDFs than it could. It never affects whether an upload succeeds — only
+how much of a document's text reaches the search index. If you cannot set a
+limit (nested containers, for instance), `SALT_MEMORY_MB` says it directly.
 
 ### Build from source
 

@@ -77,11 +77,28 @@ func availableMemory() int64 {
 		}
 		return n
 	}
-	host := hostMemory()
-	if inContainer() {
-		// No cap, and we are in a container: the host figure describes the
-		// machine, not our share of it. Take the smaller of the two — on a
-		// small host the host figure is still the real ceiling.
+	return resolveMemory(0, 0, hostMemory(), inContainer())
+}
+
+// resolveMemory is the decision on its own, so it can be checked against real
+// deployment shapes without needing that deployment. All four inputs in bytes
+// except the flag; 0 means "this source had nothing to say".
+//
+//	declared  — SALT_MEMORY_MB, the operator's word
+//	cgroupCap — an enforced container limit (0 when unlimited or unreadable)
+//	host      — what /proc/meminfo reports, which inside a container may be
+//	            the machine rather than our share of it
+func resolveMemory(declared, cgroupCap, host int64, container bool) int64 {
+	if declared > 0 {
+		return declared
+	}
+	if cgroupCap > 0 {
+		return cgroupCap
+	}
+	if container {
+		// No cap and we are in a container: the host figure describes the
+		// machine, not our share. Take the smaller of assumption and host —
+		// on a genuinely small host the host figure is still the real ceiling.
 		if host > 0 && host < containerWithoutCap {
 			return host
 		}
