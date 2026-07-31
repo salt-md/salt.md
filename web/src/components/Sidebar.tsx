@@ -103,15 +103,19 @@ interface TreeCtx {
 }
 
 // DbRows lazily loads and lists a database's rows when it is expanded in the
-// tree — Notion-style "open a database to see its entries".
+// tree — Notion-style "open a database to see its entries". A row that carries
+// sub-pages (those rows travel in /api/pages since W124) gets a chevron and
+// unfolds its subtree as regular tree items: DB → row → dossier pages, four
+// levels deep if need be, instead of the sub-pages floating flat under
+// Documents with no hint of their parent.
 function DbRows({
   collectionId,
   depth,
-  onNavigate,
+  ctx,
 }: {
   collectionId: string;
   depth: number;
-  onNavigate: (id: string) => void;
+  ctx: TreeCtx;
 }) {
   const [rows, setRows] = useState<{ id: string; title: string; icon: string }[] | null>(null);
   useEffect(() => {
@@ -126,15 +130,41 @@ function DbRows({
   }, [collectionId]);
   const pad = { paddingLeft: 6 + depth * 14 };
   if (rows === null) return <div className="tree-db-empty" style={pad}>{t('Loading…')}</div>;
-  if (rows.length === 0) return <div className="tree-db-empty" style={pad}>{t('No entries')}</div>;
+  // Rows with sub-pages exist in the tree data regardless of the lazy window
+  // of 50 — append any that the window missed, so a subtree is never
+  // unreachable just because its row sorts late.
+  const inTree = ctx.childrenMap.get(collectionId) ?? [];
+  const missing = inTree.filter((w) => !rows.some((r) => r.id === w.id));
+  const all = [...rows, ...missing.map((m) => ({ id: m.id, title: m.title, icon: m.icon }))];
+  if (all.length === 0) return <div className="tree-db-empty" style={pad}>{t('No entries')}</div>;
   return (
     <div className="tree-db-rows">
-      {rows.map((r) => (
-        <div key={r.id} className="tree-db-row" style={pad} onClick={() => onNavigate(r.id)}>
-          <span className="tree-icon"><PageIcon icon={r.icon} size={14} fallback={<FileText size={14} />} /></span>
-          <span className="tree-title">{r.title || 'Untitled'}</span>
-        </div>
-      ))}
+      {all.map((r) => {
+        const kids = ctx.childrenMap.get(r.id) ?? [];
+        const isOpen = ctx.expanded.has(r.id);
+        return (
+          <div key={r.id}>
+            <div className="tree-db-row" style={pad} onClick={() => ctx.onNavigate(r.id)}>
+              {kids.length > 0 ? (
+                <button
+                  className="chevron"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    ctx.toggleExpand(r.id);
+                  }}
+                >
+                  {isOpen ? '▾' : '▸'}
+                </button>
+              ) : (
+                <span className="chevron spacer" />
+              )}
+              <span className="tree-icon"><PageIcon icon={r.icon} size={14} fallback={<FileText size={14} />} /></span>
+              <span className="tree-title">{r.title || 'Untitled'}</span>
+            </div>
+            {isOpen && kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} />)}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -392,7 +422,7 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
           )}
         </span>
       </div>
-      {isExpanded && isDb && <DbRows collectionId={p.id} depth={depth + 1} onNavigate={ctx.onNavigate} />}
+      {isExpanded && isDb && <DbRows collectionId={p.id} depth={depth + 1} ctx={ctx} />}
       {isExpanded &&
         !isDb &&
         kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} />)}
@@ -669,8 +699,21 @@ export default function Sidebar({
   // page you can't see is exactly the one you're trying to find. Hits render
   // flat (with their parent as context) because tree indentation is noise once
   // the list is already narrowed down.
+  //
+  // A page whose ancestor chain passes through a database belongs to that
+  // database's subtree, not to Documents (W124) — the rows themselves and the
+  // dossier pages under them live in the Databases section now.
+  const chainHasDb = (p: PageMeta): boolean => {
+    let cur = p.parentId ? byId.get(p.parentId) : undefined;
+    let guard = 0;
+    while (cur && guard++ < 100) {
+      if (cur.type === 'collection') return true;
+      cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+    }
+    return false;
+  };
   const allDocs = useMemo(
-    () => pages.filter((p) => !p.trashed && !p.isTemplate && inWs(p) && p.type !== 'collection'),
+    () => pages.filter((p) => !p.trashed && !p.isTemplate && inWs(p) && p.type !== 'collection' && !chainHasDb(p)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pages, currentWs],
   );

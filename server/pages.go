@@ -76,10 +76,16 @@ func (s *Server) handleListPages(w http.ResponseWriter, r *http.Request) {
 	// Exclude database rows (children of a collection): they can number in the
 	// tens of thousands and belong in the paginated collection view, not the
 	// sidebar tree. Trashed rows are still returned so the trash works.
+	//
+	// EXCEPT rows that carry live sub-pages (W124): without their row those
+	// sub-pages have no parent in the list, and the sidebar showed them flat
+	// under Documents, stripped of their context. Rows with children are the
+	// rare case, so the tens-of-thousands argument above keeps holding.
 	rows, err := s.db.Query(`SELECT `+pageMetaCols+` FROM pages p
 		WHERE workspace_id IN (`+placeholders(len(ws))+`)
 		AND (parent_id IS NULL OR trashed_at IS NOT NULL
-		     OR (SELECT type FROM pages parent WHERE parent.id = p.parent_id) != 'collection')
+		     OR (SELECT type FROM pages parent WHERE parent.id = p.parent_id) != 'collection'
+		     OR EXISTS (SELECT 1 FROM pages c WHERE c.parent_id = p.id AND c.trashed_at IS NULL))
 		ORDER BY position, created_at`, args...)
 	if err != nil {
 		httpError(w, 500, err.Error())
