@@ -463,13 +463,39 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production's file store is EMPTY** — `/data/files` holds nothing (directory
-untouched since 2026-07-24) and the database is 18.4M, so the 635 attachments
-(~376 MB) that `salt-feature-anforderungen.md` reports as migrated are not on
-this instance. The file index says so plainly at startup ("0 files on 1
-pages"), and it is right: there is nothing to index. Whatever that document
-describes happened somewhere else or not at all — worth clearing up before
-anyone plans around those files being here.
+**Production runs `1.6.3`** (2026-08-01 00:19), on his word ("push live"): the
+hotfix for the outage below. Startup proves both halves in two lines — `file
+index: built (version 2, 626 files on 248 pages, 0 unreferenced)` and `memory:
+… PDF indexing up to 50 MB, 3 extraction(s) at a time`. `/api/health` answers
+`1.6.3`. Backup: `/root/salt-backups/salt-data-20260731-221915-vor-1.6.3.tar.gz`
+(366M — the first backup that contains the file store).
+
+**The file store is no longer empty** — the paragraph here used to say it was,
+and that was true on 2026-07-31 at 17:30. An agent then uploaded ~626 files
+(~340 MB) over MCP, and `list_files` reported none of them: the MCP upload path
+never called `recordFile`, only the HTTP one did. Fixed in 1.6.3, and
+`filesVersion 2` rebuilt the index on start, which is where the 626 above come
+from. If a count ever looks wrong again, the index is derived — bumping
+`filesVersion` rebuilds it from the blocks and the files directory.
+
+**A 24 MB PDF took production down** (2026-07-31, ~22:00): port open, HTTP
+dead, the host so short on memory that sshd could not start a session. Not the
+single DB connection — `extractPDFText` parsed any document whole and capped
+the text only afterwards, so one large file allocated a multiple of its size.
+`recover()` does not help; an OOM kill is not a panic. 1.6.3 refuses before
+reading (Content-Length, then the base64 length), caps during extraction rather
+than after, and queues extractions. The owner raised the box to 16 GB during
+the incident.
+
+**Memory detection under-counts on this box, and it is nested virtualisation.**
+`availableMemory()` reads 63413 MB there — the Proxmox host's figure — because
+production is an LXC (16 GB, `free` says so) running Docker WITHOUT
+`--memory`, so the container's `memory.max` is `max` and `/proc/meminfo` shows
+the outermost host. The practical effect today is small: both the 50 MB
+extraction cap and the 3-slot ceiling are the same at 16 GB as at 63 GB, so
+only `SetMemoryLimit` is too generous. It would matter on a small instance.
+The fix is operational, not code — add `--memory=14g` to the `docker run` and
+the cgroup file starts telling the truth.
 
 **Reading that database from outside needs the WAL.** `docker cp salt:/data/salt.db`
 alone shows a stale schema — the migration sat in `salt.db-wal` and the copy
