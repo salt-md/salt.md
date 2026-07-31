@@ -25,11 +25,13 @@ import { BlockContext } from '../blockContext';
 import CollectionView from './CollectionView';
 import { HistoryModal } from './PageHistory';
 import CommentsSection, { initials, OPEN_COMMENTS_EVENT } from './CommentsSection';
+import { FilePreview, isPreviewable } from './FilePreview';
+import StructurePanel, { structurePanelOpen, setStructurePanelOpen } from './StructurePanel';
 import { usePeers, setPeers, clearPeers } from '../presence';
 import { tagColorClass, TAG_PALETTE } from '../tags';
 import { collectTags, suggestTags } from '../tagSuggest';
 import { useMenuDismiss } from '../modal';
-import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile } from 'lucide-react';
+import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2 } from 'lucide-react';
 
 export interface EditorProps {
   pageId: string;
@@ -53,6 +55,15 @@ export default function Editor(props: EditorProps) {
   const [page, setPage] = useState<Page | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nonce, setNonce] = useState(0);
+  // The panel is a reading preference, not a property of the page: it stays
+  // put while you move through the workspace, like the comment column's.
+  const [structureOpen, setStructureOpen] = useState(structurePanelOpen);
+  const toggleStructure = () => {
+    setStructureOpen((open) => {
+      setStructurePanelOpen(!open);
+      return !open;
+    });
+  };
 
   useEffect(() => {
     let alive = true;
@@ -86,10 +97,12 @@ export default function Editor(props: EditorProps) {
   // The content renders INSIDE PageHeader's .page-body scroller so cover,
   // title and content scroll away together (only the topbar stays fixed).
   return (
-    <div className="editor-page">
+    <div className={'editor-page' + (structureOpen ? ' with-structure' : '')}>
       <PageHeader
         page={page}
         {...props}
+        structureOpen={structureOpen}
+        onToggleStructure={toggleStructure}
         onLocalMeta={(patch) => setPage((p) => (p ? { ...p, ...patch } : p))}
       >
         {page.type === 'collection' ? (
@@ -104,6 +117,7 @@ export default function Editor(props: EditorProps) {
         ) : (
           <CollabEditor
             key={page.id}
+            structureOpen={structureOpen}
             page={page}
             user={props.user}
             theme={props.theme}
@@ -117,6 +131,15 @@ export default function Editor(props: EditorProps) {
           />
         )}
       </PageHeader>
+      {structureOpen && (
+        <StructurePanel
+          pageId={page.id}
+          isCollection={page.type === 'collection'}
+          pagesById={props.pagesById}
+          onNavigate={props.onNavigate}
+          onClose={toggleStructure}
+        />
+      )}
     </div>
   );
 }
@@ -335,10 +358,14 @@ function PageHeader({
   onLocalMeta,
   onPagesChanged,
   pagesById,
+  structureOpen,
+  onToggleStructure,
   children,
 }: EditorProps & {
   page: Page;
   onLocalMeta: (patch: Partial<PageMeta>) => void;
+  structureOpen: boolean;
+  onToggleStructure: () => void;
   children?: React.ReactNode;
 }) {
   const [title, setTitle] = useState(page.title);
@@ -658,6 +685,13 @@ function PageHeader({
           >
             {commentsHidden ? <MessageSquareOff size={17} /> : <MessageSquare size={17} />}
             {openComments > 0 && <span className="badge-count">{openComments}</span>}
+          </button>
+          <button
+            className={'icon-btn' + (structureOpen ? ' active-star' : '')}
+            title={structureOpen ? t('Hide structure') : t('Show structure')}
+            onClick={onToggleStructure}
+          >
+            <PanelRight size={17} />
           </button>
           <button
             className={'icon-btn' + (favorite ? ' active-star' : '')}
@@ -1132,6 +1166,10 @@ interface CollabProps {
   onCreatePage: (parentId: string | null, type?: 'doc' | 'collection') => void;
   onPagesChanged: () => void;
   onReset: () => void;
+  /** The panel lists linked references too; the strip under the body stands in
+   *  while it is closed, so the information is never in two places at once and
+   *  never in none. */
+  structureOpen: boolean;
 }
 
 function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabProps) {
@@ -1238,11 +1276,13 @@ function BlockContent({
   onNavigate,
   onCreatePage,
   onPagesChanged,
+  structureOpen,
 }: {
   provider: SaltProvider;
   pageId: string;
   seed: unknown[] | null;
   hadContent: boolean;
+  structureOpen: boolean;
   user: User;
   theme: 'light' | 'dark';
   canEdit: boolean;
@@ -1269,6 +1309,8 @@ function BlockContent({
     dropCursor: multiColumnDropCursor,
     dictionary: { ...coreEn, multi_column: multiColumnLocales.en },
   });
+
+  const [preview, setPreview] = useState<{ name: string; url: string } | null>(null);
 
   // Slash menu: default items + column layout + our custom blocks.
   const getSlashItems = async (query: string) => {
@@ -1424,9 +1466,29 @@ function BlockContent({
     };
   }, [editor, provider, hadContent]);
 
+  // A file block otherwise goes straight to the download folder — you cannot
+  // glance at an attachment without leaving Salt and coming back. Catching the
+  // click in the CAPTURE phase is what makes this work without touching
+  // BlockNote's own file block: React registers capture listeners on its root
+  // container, so this runs before the event ever reaches the block's own
+  // handler, and stopPropagation keeps the download from firing underneath the
+  // viewer. Anything we do not preview is simply left alone.
+  const onFileClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (!target.closest('.bn-file-name-with-icon')) return;
+    const id = target.closest('[data-id]')?.getAttribute('data-id');
+    if (!id) return;
+    const props = editor.getBlock(id)?.props as { url?: string; name?: string } | undefined;
+    const url = props?.url;
+    if (!url || !isPreviewable(url)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setPreview({ name: props.name || url.split('/').pop() || url, url });
+  };
+
   return (
     <div className="editor-scroll">
-      <div className="editor-inner">
+      <div className="editor-inner" onClickCapture={onFileClick}>
         {/* The database block renders inside the editor and would otherwise
             not reach the page list, the tag colours or navigation. */}
         <BlockContext.Provider value={{ pagesById, tagColors, onNavigate, onPagesChanged }}>
@@ -1442,8 +1504,13 @@ function BlockContent({
           />
         </BlockNoteView>
         </BlockContext.Provider>
-        <Backlinks pageId={provider.pageId} pagesById={pagesById} onNavigate={onNavigate} />
+        {!structureOpen && (
+          <Backlinks pageId={provider.pageId} pagesById={pagesById} onNavigate={onNavigate} />
+        )}
       </div>
+      {preview && (
+        <FilePreview name={preview.name} url={preview.url} onClose={() => setPreview(null)} />
+      )}
     </div>
   );
 }
@@ -1476,10 +1543,15 @@ function Backlinks({
   if (links.length === 0) return null;
   return (
     <div className="backlinks">
-      <div className="backlinks-head">🔗 Linked references · {links.length}</div>
+      {/* Same glyphs as the structure panel: this strip and the panel's
+          "Linked from" show the same thing in two places, so they must not
+          look like two different features. */}
+      <div className="backlinks-head">
+        <Link2 size={14} /> {t('Linked from')} · {links.length}
+      </div>
       {links.map((l) => (
         <button key={l.id} className="backlink-item" onClick={() => onNavigate(l.id)}>
-          <span className="tree-icon"><PageIcon icon={l.icon} size={14} fallback="📄" /></span>
+          <span className="tree-icon"><PageIcon icon={l.icon} size={14} fallback={<FileText size={14} />} /></span>
           {l.title || 'Untitled'}
         </button>
       ))}

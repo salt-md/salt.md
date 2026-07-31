@@ -13,6 +13,9 @@
      That is exactly what made the page look unfinished. */
   --doc-width: 940px;
   --doc-pad: 56px;
+  /* Width of the structure panel. Read by the panel AND by the padding that
+     makes room for it, so the two can never drift apart. */
+  --structure-w: 248px;
   --bg: #ffffff;
   --fg: #37352f;
   --muted: #787774;
@@ -1144,6 +1147,217 @@ button {
 .modal-overlay > .dialog {
   max-height: calc(100dvh - 9dvh);
   overflow-y: auto;
+}
+
+/* ---- structure panel (sub-pages + files, right-hand side) ---- */
+
+/* Anchored to .editor-page, which is position:relative and sits OUTSIDE
+   .page-body — the same trick the comment column used, and the reason the
+   panel holds still while the document scrolls under it. */
+.structure-panel {
+  position: absolute;
+  top: var(--topbar-h);
+  right: 0;
+  bottom: 0;
+  width: var(--structure-w);
+  box-sizing: border-box;
+  border-left: 1px solid var(--border);
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 10px 24px;
+  z-index: 5;
+}
+
+/* The document keeps its own centring and simply gets a narrower stage, so
+   opening the panel shifts the text instead of covering it. */
+.editor-page.with-structure .page-body {
+  padding-right: var(--structure-w);
+}
+
+.structure-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 0 4px 8px;
+}
+
+.structure-section + .structure-section {
+  border-top: 1px solid var(--border);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.structure-label {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 0 4px 4px;
+}
+
+.structure-count {
+  opacity: 0.75;
+}
+
+/* The kind badge earns colour only where it helps the eye sort a list; every
+   other extension keeps the neutral border so the column stays calm. */
+.ext-pdf {
+  color: #b3453d;
+  border-color: currentColor;
+}
+
+.ext-sheet {
+  color: #2f7d4f;
+  border-color: currentColor;
+}
+
+.ext-doc {
+  color: #3b6fb5;
+  border-color: currentColor;
+}
+
+.ext-slide {
+  color: #b58a3b;
+  border-color: currentColor;
+}
+
+.structure-empty {
+  font-size: 12px;
+  color: var(--muted);
+  padding: 2px 4px 4px;
+}
+
+.structure-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  color: var(--fg);
+  padding: 4px 6px 4px 8px;
+  border-radius: 6px;
+}
+
+.structure-item:hover {
+  background: var(--hover);
+}
+
+.structure-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+}
+
+/* The extension as the icon: three letters carry more than a generic sheet
+   glyph, and it needs no per-format icon set. */
+.structure-ext {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 3px;
+  min-width: 22px;
+  justify-content: center;
+}
+
+.structure-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.structure-size {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* A file row carries two lines when it comes from further down the tree, so it
+   may not force its text onto one. */
+.structure-file {
+  align-items: flex-start;
+}
+
+.structure-file .structure-icon {
+  margin-top: 2px;
+}
+
+.structure-from {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A document does not fit beside a panel on a phone: it floats over the text
+   instead, and the body keeps its full width. */
+@media (max-width: 900px) {
+  .structure-panel {
+    width: min(280px, 84vw);
+    box-shadow: var(--shadow);
+  }
+  .editor-page.with-structure .page-body {
+    padding-right: 0;
+  }
+}
+
+/* A document deserves the screen: the usual dialog padding would leave an A4
+   page too small to read, so the preview overlay runs nearly edge to edge and
+   the frame takes every pixel the bar does not need. */
+.file-preview-overlay {
+  padding: 3dvh 3vw;
+  align-items: stretch;
+}
+
+.file-preview {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.file-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.file-preview-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+/* min-height: 0 — without it the flex item refuses to shrink below the
+   iframe's default 150px content height and the frame overflows the card. */
+.file-preview-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: var(--bg);
 }
 
 .search-modal {
@@ -3439,6 +3653,11 @@ button {
 }
 
 .backlinks-head {
+  /* flex, because the leading glyph is an SVG now and would otherwise sit on
+     the text baseline instead of centred against it. */
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
