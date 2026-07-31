@@ -17,7 +17,8 @@ import type {
   Sort,
   ViewDef,
 } from '../types';
-import PropertyValue from './PropertyValue';
+import PropertyValue, { PersonStack } from './PropertyValue';
+import { planCard, isBlank, zoneOf, contactKind, needsLabel } from '../cardLayout';
 import SchemaEditor from './SchemaEditor';
 import GalleryView from './GalleryView';
 import ListView from './ListView';
@@ -51,6 +52,9 @@ import {
   Globe,
   GanttChartSquare,
   MessageSquare,
+  Mail,
+  Phone,
+  MapPin,
 } from 'lucide-react';
 
 // Small type glyph shown next to each property (Notion-style visibility panel).
@@ -1043,6 +1047,121 @@ function FilterSortControls({
 
 // ---- Board (Kanban) ----
 
+// What a board card shows, in fixed zones (W126, see cardLayout.ts). The old
+// version rendered every property in schema order, so the card grew with the
+// schema instead of with what matters — two unlabelled dates, a bare number,
+// the same colleague once per person field, and four lines of address and
+// phone that nobody reads on a card.
+//
+// Nothing here hides a field by cleverness: the order is fixed and the tail
+// is counted, not dropped — "+3" opens in place and names what it holds.
+function BoardCardProps({
+  schema,
+  row,
+  groupBy,
+  expanded,
+  onToggleExpand,
+  onSetProp,
+  onSetOptions,
+}: {
+  schema: PropDef[];
+  row: Row;
+  groupBy: string;
+  expanded: boolean;
+  onToggleExpand: () => void;
+  onSetProp: (rowId: string, propId: string, value: unknown) => void;
+  onSetOptions: (propId: string, options: PropOption[]) => void;
+}) {
+  const defs = schema.filter((p) => p.id !== groupBy);
+  const filled = defs.filter((p) => !isBlank(row.props[p.id]));
+  const plan = planCard(filled, (p) => ({ def: p, value: row.props[p.id] }));
+
+  // Empty select fields stay reachable: they are invisible until the card is
+  // hovered, so a status can be set without opening the card — but they never
+  // put "— — —" under every title.
+  const emptySelects = defs.filter(
+    (p) => (p.type === 'select' || p.type === 'multiselect') && isBlank(row.props[p.id]),
+  );
+
+  const factRow = (p: PropDef) => (
+    <span key={p.id} className="card-fact">
+      {needsLabel(p, plan.facts.length) && <span className="card-fact-label">{p.name}</span>}
+      <PropertyValue def={p} value={row.props[p.id]} readOnly compact />
+    </span>
+  );
+
+  const contactIcon = (p: PropDef) => {
+    const kind = contactKind(p, row.props[p.id]);
+    const value = String(row.props[p.id] ?? '');
+    const Icon = kind === 'mail' ? Mail : kind === 'phone' ? Phone : kind === 'address' ? MapPin : Link2;
+    return (
+      <span key={p.id} className="card-contact" title={`${p.name}: ${value}`}>
+        <Icon size={13} />
+      </span>
+    );
+  };
+
+  return (
+    <div className="board-card-props">
+      {(plan.chips.length > 0 || emptySelects.length > 0) && (
+        <div className="card-chips">
+          {[...plan.chips, ...emptySelects].map((p) => (
+            <div
+              key={p.id}
+              className={'card-prop-edit' + (isBlank(row.props[p.id]) ? ' is-empty' : '')}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <PropertyValue
+                def={p}
+                value={row.props[p.id]}
+                onChange={(nv) => onSetProp(row.id, p.id, nv)}
+                onOptionsChange={(opts) => onSetOptions(p.id, opts)}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+      {plan.facts.length > 0 && <div className="card-facts">{plan.facts.map(factRow)}</div>}
+      {plan.notes.map((p) => (
+        <p key={p.id} className="card-note">
+          {String(row.props[p.id])}
+        </p>
+      ))}
+      {(plan.contacts.length > 0 || plan.overflow.length > 0) && (
+        <div className="card-footline">
+          {plan.contacts.map(contactIcon)}
+          {plan.overflow.length > 0 && (
+            <button
+              className="card-more"
+              title={plan.overflow.map((p) => p.name).join(', ')}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleExpand();
+              }}
+            >
+              {expanded ? t('less') : t('+{n} more', { n: String(plan.overflow.length) })}
+            </button>
+          )}
+        </div>
+      )}
+      {expanded && plan.overflow.length > 0 && (
+        <div className="card-facts card-overflow">
+          {plan.overflow.map((p) =>
+            zoneOf(p, row.props[p.id]) === 'fact' ? (
+              factRow(p)
+            ) : (
+              <span key={p.id} className="card-fact">
+                <span className="card-fact-label">{p.name}</span>
+                <span className="card-fact-text">{String(row.props[p.id])}</span>
+              </span>
+            ),
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BoardView({
   rows,
   schema,
@@ -1069,6 +1188,10 @@ function BoardView({
   // Keyed by "columnId:rowId" so a card that appears in multiple columns
   // (multiselect grouping) opens only the tapped copy's menu.
   const [moveMenu, setMoveMenu] = useState<string | null>(null);
+  // Cards whose overflow ("+3") the reader opened. Kept here rather than per
+  // card so it survives a re-render, and forgotten on leaving the view — an
+  // opened card is a glance, not a setting.
+  const [openCards, setOpenCards] = useState<Set<string>>(new Set());
   // Zeiger-basiertes Ziehen statt des ruckeligen nativen Drags (siehe boardDrag).
   const { drag, armedRow, startDrag, consumeClick } = useBoardDrag((rowId, toCol) =>
     onDrop(rowId, groupBy, toCol),
@@ -1154,6 +1277,17 @@ function BoardView({
                     {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
                     {r.title || 'Untitled'}
                   </div>
+                  {/* Who is on this card — one stack of faces, deduped across
+                      all person fields, in the corner where the eye looks for
+                      it (W126). */}
+                  <PersonStack
+                    values={schema
+                      .filter((p) => p.type === 'person' && p.id !== groupBy)
+                      .flatMap((p) => {
+                        const v = r.props[p.id];
+                        return Array.isArray(v) ? v.map(String) : [String(v ?? '')];
+                      })}
+                  />
                   {/* Touch devices can't HTML5-drag: a move menu is the
                       accessible way to change a card's column. */}
                   <div className="card-move" onClick={(e) => e.stopPropagation()}>
@@ -1197,46 +1331,22 @@ function BoardView({
                     <MessageSquare size={11} /> {commentCounts[r.id]}
                   </div>
                 )}
-                <div className="board-card-props">
-                  {schema
-                    .filter((p) => p.id !== groupBy)
-                    // Chips first, long text (Notizen) last — like a Notion card:
-                    // title, coloured chips, then the description underneath.
-                    .slice()
-                    .sort((a, b) => (a.type === 'text' ? 1 : 0) - (b.type === 'text' ? 1 : 0))
-                    .map((p) => {
-                      const v = r.props[p.id];
-                      const editable = p.type === 'select' || p.type === 'multiselect';
-                      if (!editable && (v === undefined || v === '' || (Array.isArray(v) && v.length === 0)))
-                        return null;
-                      if (editable) {
-                        // An empty select field left a placeholder on EVERY
-                        // card — with three fields that is "— — —" under every
-                        // title. That is the main reason the board looked
-                        // restless next to Trello. Empty fields therefore
-                        // disappear and come back when the card is hovered, so
-                        // they can still be set directly without opening the
-                        // card.
-                        const empty =
-                          v === undefined || v === null || v === '' || (Array.isArray(v) && v.length === 0);
-                        return (
-                          <div
-                            key={p.id}
-                            className={'card-prop-edit' + (empty ? ' is-empty' : '')}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <PropertyValue
-                              def={p}
-                              value={v}
-                              onChange={(nv) => onSetProp(r.id, p.id, nv)}
-                              onOptionsChange={(opts) => onSetOptions(p.id, opts)}
-                            />
-                          </div>
-                        );
-                      }
-                      return <PropertyValue key={p.id} def={p} value={v} readOnly compact />;
-                    })}
-                </div>
+                <BoardCardProps
+                  schema={schema}
+                  row={r}
+                  groupBy={groupBy}
+                  expanded={openCards.has(r.id)}
+                  onToggleExpand={() =>
+                    setOpenCards((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(r.id)) next.delete(r.id);
+                      else next.add(r.id);
+                      return next;
+                    })
+                  }
+                  onSetProp={onSetProp}
+                  onSetOptions={onSetOptions}
+                />
               </div>
             ))}
           </div>

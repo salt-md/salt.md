@@ -466,6 +466,62 @@ function PersonChip({ raw, members }: { raw: string; members: Member[] }) {
   );
 }
 
+/** The people on a card, as overlapping faces in the top right corner (W126).
+ *
+ *  Cards used to print every person field as a full-name chip, one per line —
+ *  so the same colleague appeared two or three times (once per field) and ate
+ *  three rows before the first real fact. The stack dedupes by person, not by
+ *  field: who is on this card is one question, however many fields answer it.
+ *  The name lives in the tooltip; the face is enough to recognise. */
+export function PersonStack({ values, max = 3 }: { values: string[]; max?: number }) {
+  const [members, setMembers] = useState<Member[]>([]);
+  useEffect(() => {
+    let alive = true;
+    void loadMembers().then((m) => alive && setMembers(m));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const people: { key: string; name: string; color: string; avatar: string }[] = [];
+  const seen = new Set<string>();
+  for (const raw of values) {
+    const v = raw.trim();
+    if (!v) continue;
+    const lower = v.toLowerCase();
+    const hit = members.find((m) => m.userId === v) ?? members.find((m) => m.name.toLowerCase() === lower);
+    const name = hit?.name ?? v;
+    // Dedupe on the resolved person: the same human written once as an id and
+    // once as a name is one face, not two.
+    const key = hit?.userId ?? name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    people.push({ key, name, color: hit?.color || nameColor(name), avatar: hit?.avatar ?? '' });
+  }
+  if (people.length === 0) return null;
+  const shown = people.slice(0, max);
+  const rest = people.slice(max);
+  return (
+    <span className="person-stack" title={people.map((p) => p.name).join(', ')}>
+      {shown.map((p) => (
+        <span
+          key={p.key}
+          className="cp-avatar person-stack-av"
+          style={{ background: p.avatar ? 'transparent' : p.color }}
+          title={p.name}
+        >
+          {p.avatar ? <img src={p.avatar} alt="" /> : initials(p.name)}
+        </span>
+      ))}
+      {rest.length > 0 && (
+        <span className="cp-avatar person-stack-av person-stack-more" title={rest.map((p) => p.name).join(', ')}>
+          +{rest.length}
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** A person cell: pick a colleague from a list, or type a name for somebody
     without an account.
  *
