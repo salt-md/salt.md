@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -615,9 +616,34 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
+	// Refuse before reading, not after. The largest legitimate request is an
+	// upload at the file limit, and base64 inflates by a third; anything past
+	// that plus a margin for the JSON around it cannot be valid.
+	//
+	// This ordering is the actual lesson from the outage. A limit that only
+	// bites once the body is in memory is not a limit — the server died while
+	// buffering, before it was ever in a position to say "too big". The size
+	// is in Content-Length before the first byte of the body is read, so the
+	// answer costs one comparison and zero copies.
+	maxBody := s.maxUploadBytes()/3*4 + 1<<20
+	if r.ContentLength > maxBody {
+		rpcError(w, nil, -32600, fmt.Sprintf(
+			"request is %d MB — the limit is %d MB; for a file this size use the HTTP upload at /api/upload",
+			r.ContentLength>>20, maxBody>>20))
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	raw, err := io.ReadAll(r.Body)
 	if err != nil {
+		// Distinguish "too big" from "malformed": a client that sent no
+		// Content-Length lands here, and "parse error" would send it hunting
+		// for a syntax mistake that does not exist.
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			rpcError(w, nil, -32600, fmt.Sprintf(
+				"request body exceeds the %d MB limit; for a file this size use the HTTP upload at /api/upload", maxBody>>20))
+			return
+		}
 		rpcError(w, nil, -32700, "parse error")
 		return
 	}
@@ -1114,6 +1140,16 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			s.pagesChanged()
 			return fmt.Sprintf("Moved page %s (and %d sub-pages) to trash", args.PageID, len(ids)-1), nil
 		case "upload_file":
+			// Judge the size from the ENCODED length, before decoding. Every
+			// 4 base64 characters are 3 bytes, so this is exact to within a
+			// byte or two — and it means an oversized upload never gets a
+			// second full-size copy made of it just to be measured and thrown
+			// away. Same reasoning as the Content-Length check above, one
+			// layer further in.
+			if size := int64(len(args.DataBase64)) / 4 * 3; size > s.maxUploadBytes() {
+				return "", fmt.Errorf("file is %d MB — the limit is %d MB; upload it through the browser (/api/upload) or raise max_upload_mb in the settings",
+					size>>20, s.maxUploadBytes()>>20)
+			}
 			data, err := base64.StdEncoding.DecodeString(args.DataBase64)
 			if err != nil {
 				return "", fmt.Errorf("data_base64 is not valid base64")
@@ -1145,6 +1181,11 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 					s.indexFileText(name, args.PageID, extractPDFText(path))
 				}
 			}
+			// The file index (W125). This was missing here while the HTTP
+			// upload had it, so several hundred files uploaded by an agent
+			// were on disk, on their pages, and searchable — but absent from
+			// list_files, which reads the index and nothing else.
+			s.recordFile(name, args.PageID, filepath.Base(args.FileName))
 			return fmt.Sprintf("Uploaded %s → %s", args.FileName, url), nil
 		case "get_schema":
 			return s.mcpGetSchema(args.PageID)

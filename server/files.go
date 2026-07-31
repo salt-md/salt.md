@@ -24,7 +24,14 @@ import (
 // The index is derived, never authoritative: the page's block and the byte on
 // disk are the truth. filesVersion below forces a rebuild when the extraction
 // rules change, exactly like ftsVersion for the search index.
-const filesVersion = "1"
+//
+// 2: the MCP upload never wrote to the index (only the HTTP one did), so an
+// instance could hold hundreds of files that list_files did not know about.
+// The write is fixed; this rebuild is what repairs the instances that already
+// ran with it. Being derived is exactly what makes that repair safe — the
+// blocks and the files directory still hold the truth, so the index can simply
+// be thrown away and built again.
+const filesVersion = "2"
 
 // fileRef is one `/files/…` reference found in a page's content.
 type fileRef struct {
@@ -159,7 +166,7 @@ func (s *Server) migrateFileIndex() error {
 
 // fileJSON is one entry of the file list.
 type fileJSON struct {
-	Name        string `json:"name"`      // stored name (the /files/ path segment)
+	Name        string `json:"name"` // stored name (the /files/ path segment)
 	DisplayName string `json:"displayName"`
 	Ext         string `json:"ext"`
 	Size        int64  `json:"size"`

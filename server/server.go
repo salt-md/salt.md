@@ -113,6 +113,10 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	if err := s.migrateFileIndex(); err != nil {
 		return nil, err
 	}
+	// Size the expensive work to the machine we are actually on, and log what
+	// we concluded — an admin wondering why a PDF is not searchable should
+	// find the answer in the startup lines, not by reading the source.
+	applyMemoryLimit()
 	s.backfillSnippets()
 	s.deleteExpiredSessions()
 	s.startCleanup()
