@@ -454,6 +454,23 @@ rules, W123–W123c); three-line startup, no rebuild. Backup:
 `/root/salt-backups/salt-data-20260730-193133-vor-1.6.1.tar.gz` (22M, gzip
 verified); the `1.6.0` image stays on the box for a rollback.
 
+**Production runs `1.6.2`** (2026-07-31 17:30), on his word ("deploy auf pod"):
+push → tag → both workflows green → anonymous pull → stop + volume backup +
+swap in one line. Verified by behaviour: `/api/health` answers `1.6.2`,
+`card-fact-label` and `person-stack-av` in the served CSS, `/api/files` and
+`Add sub-page` in the bundle; four-line startup, no search-index rebuild (the
+schema was recognised). Backup:
+`/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
+verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
+
+**Production's file store is EMPTY** — `/data/files` holds nothing (directory
+untouched since 2026-07-24) and the database is 18.4M, so the 635 attachments
+(~376 MB) that `salt-feature-anforderungen.md` reports as migrated are not on
+this instance. The file index says so plainly at startup ("0 files on 1
+pages"), and it is right: there is nothing to index. Whatever that document
+describes happened somewhere else or not at all — worth clearing up before
+anyone plans around those files being here.
+
 **Reading that database from outside needs the WAL.** `docker cp salt:/data/salt.db`
 alone shows a stale schema — the migration sat in `salt.db-wal` and the copy
 looked as if it had never run. Copy `salt.db`, `salt.db-wal` and `salt.db-shm`
