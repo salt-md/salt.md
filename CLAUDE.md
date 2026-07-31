@@ -484,6 +484,41 @@ the whole time — `dig @1.1.1.1` worked, `dig @10.10.20.1` timed out. If it
 happens again, compare those two before touching anything. The same fault is
 why `docker build` cannot pull on that box: not "no internet", no DNS.
 
+## Files and the sidebar tree (W124, W125)
+
+**A database row with sub-pages is part of the tree.** `/api/pages` still
+drops database rows — except rows that carry a live sub-page, because without
+the row the sub-pages have no parent and the sidebar showed them flat under
+Documents. Bare rows stay out (that is the tens-of-thousands argument), and
+Documents lists only pages whose ancestry never passes through a database.
+Rows also carry the same "+" as pages now: before that, a dossier under a deal
+was something an agent could build over MCP and a person could not build at
+all.
+
+**The file index is derived, and rebuildable on purpose.** `files` holds one
+row per upload (human name, type, size, date, carrier page); the truth remains
+the block on the page and the byte on disk, so `filesVersion` forces a rebuild
+the way `ftsVersion` does. The rebuild matches on **a url pointing into
+`/files/`**, not on block types — BlockNote writes file/image/video/audio, the
+MCP upload writes its own two, and that list keeps growing. It also indexes
+what no page references any more: those files were previously invisible while
+sitting in every backup.
+
+Reading it (`GET /api/files`, `list_files` over MCP) runs the **same two
+permission stages as search**: workspace scope, then `canRead` per carrier
+page. The second stage is what keeps somebody else's private page private.
+
+Uploads must carry their page id (`/api/upload?page=…`). The editor did not
+pass one, so a PDF dropped into a page in the browser never reached the search
+index while the same PDF added by an agent did — fixed in W125, and it is the
+reason the file index needs no separate "which page was that" guess.
+
+Workspace logos and account avatars are uploads too, but they hang off
+`workspaces.image` / the user row rather than a page, so the index counts them
+as unreferenced. They never show in a workspace file list (no workspace id);
+anything that later offers to delete "unreferenced" files has to exclude them
+first.
+
 ## What's next
 
 The translation wave (W111) is finished, and so is **W112**, the settings that
