@@ -460,6 +460,15 @@ var mcpTools = []map[string]any{
 			"properties": map[string]any{"workspace_id": map[string]any{"type": "string"}}},
 	},
 	{
+		"name":        "list_files",
+		"description": "List uploaded files — name, type, size, the page carrying them and their /files/ URL. Omit both arguments for your default workspace, pass workspace_id for another, or under=<page_id> for everything below one page (a deal, a customer dossier). Respects your read permissions. Read-only.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{
+				"workspace_id": map[string]any{"type": "string", "description": "Limit to one workspace (see list_workspaces)."},
+				"under":        map[string]any{"type": "string", "description": "Page id: only files on this page and its sub-pages."},
+			}},
+	},
+	{
 		"name":        "propose_workspace_rules",
 		"description": "Submit a DRAFT of workspace rules (working conventions: naming, structure, where content goes, what to leave alone). Workspace admins only — the tool refuses a token whose account is not an admin of the workspace, so do not raise rules with a non-admin user at all. The draft never becomes active by itself: the admin reviews and applies it in the browser, and that review cannot be skipped over MCP. Only propose when the user asked for rules or agreed to your draft; keep them short and imperative. An empty string withdraws your own pending draft. A new draft replaces the pending one.",
 		"inputSchema": map[string]any{"type": "object",
@@ -757,6 +766,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		TemplateID string `json:"template_id"`
 		// Workspace rules (W123).
 		Rules string `json:"rules"`
+		// File index (W125).
+		Under string `json:"under"`
 	}
 	if len(rawArgs) > 0 {
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -1001,6 +1012,12 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			return wrapUntrusted(out) + addendum, nil
 		case "propose_workspace_rules":
 			return s.mcpProposeWorkspaceRules(u, args.WorkspaceID, args.Rules)
+		case "list_files":
+			out, err := s.mcpListFiles(u, args.WorkspaceID, args.Under)
+			if err != nil {
+				return "", err
+			}
+			return wrapUntrusted(out), nil
 		case "get_permissions":
 			return s.mcpGetPermissions(u, args.PageID)
 		case "share_page":

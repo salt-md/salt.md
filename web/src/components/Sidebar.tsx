@@ -5,6 +5,7 @@ import type { PageMeta, User, Workspace } from '../types';
 import UserMenu from './UserMenu';
 import WorkspaceMembers from './WorkspaceMembers';
 import WorkspaceRules from './WorkspaceRules';
+import FileList from './FileList';
 import { promptText } from '../dialog';
 import { toast } from '../toast';
 import Portal from './Portal';
@@ -17,7 +18,7 @@ import BreakGlassLog from './BreakGlassLog';
 import TemplateGallery from './TemplateGallery';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText } from 'lucide-react';
+import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -89,6 +90,7 @@ interface TreeCtx {
   onOpenInNewTab: (id: string) => void;
   toggleExpand: (id: string) => void;
   onCreateChild: (id: string) => void;
+  onShowFiles: (id: string, title: string) => void;
   setMenuFor: (id: string | null) => void;
   onTrash: (id: string) => void;
   onDuplicate: (id: string) => void;
@@ -397,6 +399,14 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
               <button
                 onClick={() => {
                   ctx.setMenuFor(null);
+                  ctx.onShowFiles(p.id, p.title || t('Untitled'));
+                }}
+              >
+                {t('📎 Files in this subtree')}
+              </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
                   // A template is a SNAPSHOT: the copy becomes the template and
                   // keeps this moment's state; the page here stays a normal page.
                   // (Flagging the page itself kept template and original one
@@ -497,6 +507,9 @@ export default function Sidebar({
   useMenuDismiss(wsMenuOpen, wsMenuRef, () => setWsMenuOpen(false));
   const [membersOpen, setMembersOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  // The file view: for the whole workspace, or scoped to one page's subtree
+  // ("every document for this customer").
+  const [filesFor, setFilesFor] = useState<{ under?: string; title?: string } | null>(null);
   const [wsImageOpen, setWsImageOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [tagFilter, setTagFilter] = useState<string | null>(null);
@@ -651,6 +664,7 @@ export default function Sidebar({
       onCreate(id);
       expand(id);
     },
+    onShowFiles: (id, title) => setFilesFor({ under: id, title }),
     setMenuFor,
     onTrash,
     onDuplicate,
@@ -866,6 +880,15 @@ export default function Sidebar({
               {currentWs && (
                 <button className="menu-item" onClick={() => { setWsMenuOpen(false); setMembersOpen(true); }}>
                   <Users size={15} /> {t('Members')}
+                </button>
+              )}
+              {currentWs && (
+                <button
+                  className="menu-item"
+                  title={t('Every uploaded file in this workspace, with the page carrying it')}
+                  onClick={() => { setWsMenuOpen(false); setFilesFor({}); }}
+                >
+                  <Paperclip size={15} /> {t('Files')}
                 </button>
               )}
               {currentWs && (
@@ -1199,6 +1222,15 @@ export default function Sidebar({
             myRole={activeWs?.role ?? 'member'}
             onClose={() => setMembersOpen(false)}
             onChanged={onWorkspacesChanged}
+          />
+        )}
+        {filesFor && currentWs && (
+          <FileList
+            workspaceId={currentWs}
+            under={filesFor.under}
+            underTitle={filesFor.title}
+            onOpenPage={onNavigate}
+            onClose={() => setFilesFor(null)}
           />
         )}
         {rulesOpen && currentWs && (

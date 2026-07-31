@@ -1206,6 +1206,7 @@ function CollabEditor({ page, user, theme, canEdit, onReset, ...rest }: CollabPr
   return (
     <BlockContent
       provider={provider}
+      pageId={page.id}
       seed={seedRef.current}
       hadContent={Array.isArray(page.content) && page.content.length > 0}
       user={user}
@@ -1226,6 +1227,7 @@ function isEffectivelyEmpty(doc: unknown[]): boolean {
 
 function BlockContent({
   provider,
+  pageId,
   seed,
   hadContent,
   user,
@@ -1238,6 +1240,7 @@ function BlockContent({
   onPagesChanged,
 }: {
   provider: SaltProvider;
+  pageId: string;
   seed: unknown[] | null;
   hadContent: boolean;
   user: User;
@@ -1256,7 +1259,12 @@ function BlockContent({
       fragment: provider.doc.getXmlFragment('blocknote'),
       user: { name: user.name, color: user.color },
     },
-    uploadFile: (file: File) => api.upload(file),
+    // The page travels with the upload: it is what makes a dropped PDF
+    // searchable (indexFileText) and what puts the file in the workspace's
+    // file list. Without it a PDF added in the browser stayed invisible to
+    // both, while the same PDF added by an agent did not — the MCP path has
+    // always passed a page id.
+    uploadFile: (file: File) => api.upload(file, pageId),
     // Column layout: edge-drop cursor + its dictionary entries.
     dropCursor: multiColumnDropCursor,
     dictionary: { ...coreEn, multi_column: multiColumnLocales.en },

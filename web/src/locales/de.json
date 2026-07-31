@@ -52,6 +52,7 @@
   "All": "Alle",
   "All clear — every workspace has someone in charge.": "Alles in Ordnung — jeder Workspace hat einen Verantwortlichen.",
   "All pages": "Alle Seiten",
+  "All types": "Alle Typen",
   "All workspaces": "Alle Workspaces",
   "Allowed domains (comma separated)": "Erlaubte Domains (Komma-getrennt)",
   "Any MCP-capable client (streamable HTTP).": "Jeder MCP-fähige Client (Streamable HTTP).",
@@ -188,6 +189,7 @@
   "Enter the client ID and secret in the Access tab first.": "Trag zuerst Client-ID und Secret im Zugang-Tab ein.",
   "Every newly created account automatically becomes a member of this workspace": "Jedes neu angelegte Konto wird automatisch Mitglied dieses Workspace",
   "Every row carries a stable Markdown link — copy": "Jede Zeile trägt einen stabilen Markdown-Link — kopiere",
+  "Every uploaded file in this workspace, with the page carrying it": "Jede hochgeladene Datei in diesem Workspace, mit der Seite, auf der sie liegt",
   "Everything I can see": "Alles, was ich sehen kann",
   "Everything is tagged. 🎉": "Alles ist getaggt. 🎉",
   "Expired — please connect again.": "Abgelaufen — bitte erneut verbinden.",
@@ -199,6 +201,9 @@
   "Favourites": "Favoriten",
   "File too large ({size}) — 50 MB max.": "Datei zu groß ({size}) — max. 50 MB",
   "File upload": "Datei-Upload",
+  "Files": "Dateien",
+  "Files below “{name}”": "Dateien unterhalb von „{name}“",
+  "Filter by file or page…": "Nach Datei oder Seite filtern…",
   "Filter pages": "Seiten filtern",
   "Filter pages…": "Seiten filtern…",
   "For automatic backups, run": "Für automatische Backups:",
@@ -323,6 +328,7 @@
   "No comments yet.": "Noch keine Kommentare.",
   "No entries": "Keine Einträge",
   "No entries with a date yet. Set a start date so they appear on the timeline.": "Noch keine Einträge mit Datum. Setze ein Startdatum, damit sie auf der Timeline erscheinen.",
+  "No files here yet.": "Hier liegen noch keine Dateien.",
   "No headings.": "Keine Überschriften.",
   "No mail delivery is configured — set up SMTP, or connect Google or Microsoft.": "Es ist kein Mailversand eingerichtet — SMTP hinterlegen oder Google bzw. Microsoft verbinden.",
   "No mail provider is connected.": "Es ist kein Mail-Anbieter verbunden.",
@@ -381,6 +387,7 @@
   "Open (anyone)": "Offen (jeder)",
   "Open as page ↗": "Als Seite öffnen ↗",
   "Open in calendar": "In Kalender öffnen",
+  "Open the page carrying this file": "Die Seite öffnen, auf der diese Datei liegt",
   "Open to every new user": "Für alle neuen Nutzer öffnen",
   "Options not saved": "Optionen nicht gespeichert",
   "Or connect an agent in one step — paste this into your terminal:": "Oder in einem Schritt einen Agenten verbinden — das hier ins Terminal einfügen:",
@@ -712,6 +719,7 @@
   "last {name}": "zuletzt {name}",
   "moved to trash": "hat in den Papierkorb gelegt",
   "never used": "nie benutzt",
+  "no page": "keine Seite",
   "not called yet": "noch nicht angerufen",
   "not set": "nicht gesetzt",
   "open to all": "für alle",
@@ -744,6 +752,10 @@
   "{n} admins": {
     "one": "{n} Admin",
     "other": "{n} Admins"
+  },
+  "{n} files": {
+    "one": "{n} Datei",
+    "other": "{n} Dateien"
   },
   "{n} filled": "{n} gefüllt",
   "{n} members": {
@@ -789,5 +801,6 @@
   "＋ Person": "＋ Person",
   "📋 Remove template flag": "📋 Vorlagen-Markierung entfernen",
   "📋 Save as template": "📋 Als Vorlage speichern",
+  "📎 Files in this subtree": "📎 Dateien in diesem Teilbaum",
   "🗑 Move to trash": "🗑 In den Papierkorb"
 }

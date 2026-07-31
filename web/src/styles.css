@@ -4325,6 +4325,51 @@ button {
 .tree-db-row:hover .tree-actions { display: inline-flex; }
 .tree-db-empty { padding: 3px 8px; font-size: 12px; color: var(--muted); }
 
+/* The file list (W125): a wide dialog, because a file row carries a name, a
+   size, a date and its page. */
+.dialog.dialog-wide { max-width: 760px; width: calc(100vw - 48px); }
+
+.file-list-tools {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.file-list-tools .prop-input { flex: 1; }
+
+.file-list {
+  max-height: 55vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.file-row:hover { background: var(--hover); }
+.file-row-icon { display: inline-flex; color: var(--muted); }
+.file-row-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row-meta { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+.file-row-page {
+  color: var(--accent);
+  font-size: 12px;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-row-page:hover { text-decoration: underline; }
+
 /* Cleaner "create" area under the tree */
 .tree-create {
   margin-top: 6px;

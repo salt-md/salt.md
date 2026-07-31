@@ -1071,6 +1071,9 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 			s.indexFileText(name, pageID, extractPDFText(path))
 		}
 	}
+	// The file index (W125). header.Filename is the only place the human name
+	// survives — the stored name is an opaque id.
+	s.recordFile(name, r.URL.Query().Get("page"), filepath.Base(header.Filename))
 	writeJSON(w, map[string]string{"url": "/files/" + name})
 }
 

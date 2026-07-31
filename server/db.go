@@ -95,6 +95,26 @@ CREATE TABLE IF NOT EXISTS file_texts (
 	page_id TEXT REFERENCES pages(id) ON DELETE CASCADE,
 	text TEXT NOT NULL
 );
+-- The file index (W125): one row per uploaded file, so that "every document
+-- for this customer" is a query rather than a walk through every page's block
+-- JSON. It is DERIVED and rebuildable — like the search index, and for the
+-- same reason: the truth is the block on the page plus the byte on disk, and
+-- an index that claims otherwise would rot. filesVersion drives the rebuild.
+--
+-- page_id is the carrier page (NULL once the page is gone); display_name is
+-- the name a person recognises, which the stored file name deliberately is
+-- not (uploads are stored under an opaque id).
+CREATE TABLE IF NOT EXISTS files (
+	file_name TEXT PRIMARY KEY,
+	page_id TEXT REFERENCES pages(id) ON DELETE SET NULL,
+	workspace_id TEXT,
+	display_name TEXT NOT NULL DEFAULT '',
+	ext TEXT NOT NULL DEFAULT '',
+	size INTEGER NOT NULL DEFAULT 0,
+	created_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_files_page ON files(page_id);
+CREATE INDEX IF NOT EXISTS idx_files_ws ON files(workspace_id);
 CREATE TABLE IF NOT EXISTS favorites (
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

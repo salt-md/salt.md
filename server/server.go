@@ -108,6 +108,11 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	if err := s.migrateSearchIndex(); err != nil {
 		return nil, err
 	}
+	// The file index, built once from the pages' blocks and the files
+	// directory (files.go).
+	if err := s.migrateFileIndex(); err != nil {
+		return nil, err
+	}
 	s.backfillSnippets()
 	s.deleteExpiredSessions()
 	s.startCleanup()
@@ -198,6 +203,8 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("PUT /api/tag-colors", s.auth(s.handleSetTagColor))
 	m.HandleFunc("GET /api/search", s.auth(s.handleSearch))
 	m.HandleFunc("POST /api/upload", s.auth(s.handleUpload))
+	// "Every document for this customer" — the file index (W125).
+	m.HandleFunc("GET /api/files", s.auth(s.handleListFiles))
 	m.HandleFunc("GET /api/export/{id}", s.auth(s.handleExportPage))
 	m.HandleFunc("GET /api/export", s.auth(s.handleExportAll))
 

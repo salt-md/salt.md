@@ -6,6 +6,7 @@ import type {
   Page,
   PageMeta,
   PublicFormConfig,
+  SaltFile,
   SearchResult,
   User,
   Webhook,
@@ -436,6 +437,11 @@ export const api = {
     req<{ ok: boolean }>(`/api/workspaces/${id}/rules`, { method: 'PUT', body: JSON.stringify({ rules }) }),
   dismissRulesProposal: (id: string) =>
     req<{ ok: boolean }>(`/api/workspaces/${id}/rules-proposal`, { method: 'DELETE' }),
+  // The file index: a whole workspace, or everything below one page.
+  listFiles: (scope: { workspace?: string; under?: string }) =>
+    req<SaltFile[]>(
+      '/api/files?' + new URLSearchParams(scope as Record<string, string>).toString(),
+    ),
   addWorkspaceMember: (workspaceId: string, email: string, role: 'admin' | 'member' | 'viewer') =>
     req<{ ok: boolean }>(`/api/workspaces/${workspaceId}/members`, {
       method: 'POST',

@@ -39,6 +39,19 @@ export interface Workspace {
   rulesProposalAt?: string;
 }
 
+/** One entry of the file index (W125): a file plus the page carrying it. */
+export interface SaltFile {
+  /** Stored name — the segment behind /files/. */
+  name: string;
+  displayName: string;
+  ext: string;
+  size: number;
+  createdAt: string;
+  pageId: string;
+  pageTitle: string;
+  workspaceId: string;
+}
+
 export interface AuditEntry {
   id: number;
   createdAt: string;
