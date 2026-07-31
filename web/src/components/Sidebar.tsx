@@ -160,6 +160,14 @@ function DbRows({
               )}
               <span className="tree-icon"><PageIcon icon={r.icon} size={14} fallback={<FileText size={14} />} /></span>
               <span className="tree-title">{r.title || 'Untitled'}</span>
+              {/* Until now a row could only get sub-pages through MCP — the
+                  interface offered no way at all, so the dossier under a deal
+                  was something an agent could build and a person could not. */}
+              <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
+                <button title={t('Add sub-page')} onClick={() => ctx.onCreateChild(r.id)}>
+                  +
+                </button>
+              </span>
             </div>
             {isOpen && kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} />)}
           </div>

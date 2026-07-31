@@ -4320,6 +4320,9 @@ button {
   cursor: pointer;
 }
 .tree-db-row:hover { background: var(--hover); color: var(--fg); }
+/* The row's own actions ("+" for a sub-page) follow the tree's hover rule. */
+.tree-db-row .tree-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tree-db-row:hover .tree-actions { display: inline-flex; }
 .tree-db-empty { padding: 3px 8px; font-size: 12px; color: var(--muted); }
 
 /* Cleaner "create" area under the tree */
