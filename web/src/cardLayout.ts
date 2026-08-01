@@ -67,7 +67,19 @@ export function zoneOf(def: PropDef, value: unknown): CardZone {
       return 'person';
     case 'url':
       return 'contact';
+    // A relation names what this row belongs to — the customer, the system,
+    // the deal. It used to be banned from cards outright, which was defensible
+    // while a board could only group by a select: you saw the status in the
+    // column and nothing told you which project the card belonged to.
+    //
+    // It costs nothing on a board that groups BY this relation, because the
+    // grouped property is dropped from every card anyway (see BoardCardProps).
+    // So it shows where it informs and stays quiet where it would repeat.
     case 'relation':
+      return 'chip';
+    // A backrelation is a list of everything pointing here — on a system row
+    // that is every task it has. Useful in a table, far too much for a card.
+    case 'backrelation':
       return 'hidden';
     case 'text':
     default: {

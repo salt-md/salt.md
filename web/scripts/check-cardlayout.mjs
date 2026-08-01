@@ -59,7 +59,16 @@ try {
   check('checklist is a fact', cl.zoneOf(def('a', 'checklist'), []), 'fact');
   check('person is a person', cl.zoneOf(def('a', 'person'), 'u1'), 'person');
   check('url is a contact', cl.zoneOf(def('a', 'url'), 'https://trello.com/c/x'), 'contact');
-  check('relation stays off the card', cl.zoneOf(def('a', 'relation'), 'p1'), 'hidden');
+  // A relation used to be banned from cards. That held while a board could
+  // only group by a select: you saw the status in the column heading and
+  // nothing on the card said which system the task belonged to. Now that a
+  // board can group by the relation itself, the card may show it — and on a
+  // board grouped BY it the property is dropped anyway, so it never repeats
+  // its own column heading.
+  check('relation is a chip on the card', cl.zoneOf(def('a', 'relation'), ['p1']), 'chip');
+  // Its reverse is a different matter: on a system row that is every task
+  // pointing at it. Fine in a table, far too much for a card.
+  check('backrelation stays off the card', cl.zoneOf(def('a', 'backrelation'), ['p1']), 'hidden');
 
   // ---- Zones by VALUE: the part that is a guess ----
   const text = def('a', 'text');
