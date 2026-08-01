@@ -463,7 +463,21 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production runs `1.6.4`** (2026-08-01 00:38), on his word ("auf prod
+**Production runs `1.6.6` and is no longer Docker** (2026-08-01 00:17). On his
+word ("mach das") it was moved from the container to an `install.sh`-style
+systemd service: binary at `/opt/salt/salt`, data at `/opt/salt/data`, still
+port 8420. The reason was the memory reading below — a container in an LXC
+cannot see the LXC's cap, a binary on the system just sees what is there, and
+the startup line now says `16000 MB available` with no configuration at all.
+
+**That changes the deploy path for production**: fetch the release binary,
+verify it against `SHA256SUMS.txt`, `systemctl stop salt`, back up
+`/opt/salt/data`, `install -m 755`, start. No `docker pull`, no image swap. The
+stopped container and its volume are still there as a rollback
+(`systemctl stop salt && docker start salt` → 1.6.4) and should be cleaned up
+once systemd has held for a few days — there is a Vorgang for it.
+
+**Production ran `1.6.4`** (2026-08-01 00:38), on his word ("auf prod
 pushen"): the structure panel and the PDF preview, rebased onto the 1.6.3
 hotfix. Verified by behaviour, not by the version string — `structure-panel`,
 `file-preview-frame`, `structure-ext` and `structure-from` all appear in the
