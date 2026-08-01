@@ -855,6 +855,23 @@ function FilterSortControls({
 }) {
   const [open, setOpen] = useState<'filter' | 'sort' | 'group' | null>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
+  // Titles for every relation in this schema, so a filter on one can offer
+  // rows to pick instead of demanding an id. Keyed by property id; the
+  // underlying fetch is cached per collection.
+  const [relOptions, setRelOptions] = useState<Record<string, RelOption[]>>({});
+  useEffect(() => {
+    let alive = true;
+    for (const p of schema) {
+      const target = p.type === 'relation' ? p.relationCollection : p.type === 'backrelation' ? p.backrelationCollection : '';
+      if (!target) continue;
+      void loadRelationOptions(target).then((o) => {
+        if (alive) setRelOptions((prev) => (prev[p.id] ? prev : { ...prev, [p.id]: o }));
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [schema]);
   // Popover position, computed against the viewport. Portaled to <body> so no
   // transformed/overflow-clipping ancestor (the scrollable mobile toolbar, the
   // page-body) can trap or hide it — the bug where the field vanished behind a
@@ -891,6 +908,15 @@ function FilterSortControls({
         { value: 'true', label: 'Checked' },
         { value: 'false', label: 'Unchecked' },
       ];
+    }
+    // A relation stores page ids. Offering a free-text box here meant filtering
+    // "System is Salt.md" required typing a 32-character id nobody can see —
+    // the property was filterable in theory and unusable in practice.
+    if (prop.type === 'relation' || prop.type === 'backrelation') {
+      return (relOptions[propId] ?? []).map((o) => ({
+        value: o.id,
+        label: o.title || t('Untitled'),
+      }));
     }
     return [];
   };
