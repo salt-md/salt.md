@@ -463,7 +463,7 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production runs `1.6.6` and is no longer Docker** (2026-08-01 00:17). On his
+**Production runs `1.6.8` and is no longer Docker** (2026-08-01 00:17). On his
 word ("mach das") it was moved from the container to an `install.sh`-style
 systemd service: binary at `/opt/salt/salt`, data at `/opt/salt/data`, still
 port 8420. The reason was the memory reading below — a container in an LXC
