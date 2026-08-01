@@ -626,10 +626,13 @@ function PersonValue({ value, onChange, readOnly, compact }: Props) {
 // Rows of the target collection are fetched once per collection and shared
 // across every relation cell via a module-level cache, so a table with many
 // relation cells doesn't issue one request per cell.
-type RelOption = { id: string; title: string; icon: string };
+export type RelOption = { id: string; title: string; icon: string };
 const relCache = new Map<string, Promise<RelOption[]>>();
 
-function loadRelationOptions(colId: string, force = false): Promise<RelOption[]> {
+// Exported because the board groups by relation too, and it must show the same
+// titles the cells show — loaded once through the same cache rather than
+// fetched a second time per view.
+export function loadRelationOptions(colId: string, force = false): Promise<RelOption[]> {
   if (force || !relCache.has(colId)) {
     const p = api
       .collectionRows(colId, { limit: 500 })
@@ -742,6 +745,19 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
   switch (def.type) {
     case 'relation':
       return <RelationValue def={def} value={value} onChange={onChange} readOnly={readOnly} compact={compact} />;
+    // A backrelation IS a relation to read — same ids, same titles, same
+    // chips. It is only computed rather than typed in, so it never takes an
+    // onChange: editing happens on the side that owns the relation. Without
+    // this case it fell through to the text renderer and showed raw ids.
+    case 'backrelation':
+      return (
+        <RelationValue
+          def={{ ...def, relationCollection: def.backrelationCollection ?? '' }}
+          value={value}
+          readOnly
+          compact={compact}
+        />
+      );
     case 'rollup':
     case 'formula': {
       // Computed server-side; always read-only. Renders the number or an

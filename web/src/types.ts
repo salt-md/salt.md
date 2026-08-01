@@ -158,6 +158,7 @@ export type PropType =
   | 'url'
   | 'person'
   | 'relation'
+  | 'backrelation'
   | 'rollup'
   | 'formula';
 
@@ -186,6 +187,15 @@ export interface PropDef {
   rollupRelation?: string;
   rollupTarget?: string;
   rollupAgg?: 'sum' | 'count' | 'avg' | 'min' | 'max';
+  // rollup: count/sum only the related rows meeting this condition — the
+  // difference between "how many tasks" and "how many are done".
+  rollupWhereProp?: string;
+  rollupWhereOp?: 'is' | 'is_not' | 'is_empty' | 'is_not_empty' | 'contains';
+  rollupWhereValue?: string;
+  // backrelation: the other side of a relation someone else declared. Computed
+  // at read time, never stored — see backrelationIDs in derived.go.
+  backrelationCollection?: string;
+  backrelationProp?: string;
   // formula: expression over other props, {propId} references
   formula?: string;
   // number/rollup/formula: render a numeric value as a plain number (default),

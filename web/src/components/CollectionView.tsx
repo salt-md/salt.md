@@ -17,7 +17,7 @@ import type {
   Sort,
   ViewDef,
 } from '../types';
-import PropertyValue, { PersonStack } from './PropertyValue';
+import PropertyValue, { PersonStack, loadRelationOptions, type RelOption } from './PropertyValue';
 import { planCard, isBlank, zoneOf, contactKind, needsLabel } from '../cardLayout';
 import SchemaEditor from './SchemaEditor';
 import GalleryView from './GalleryView';
@@ -104,9 +104,11 @@ interface Row {
 const UNSET = '__unset__';
 
 // The value to store for a group option, respecting the property's type.
+// A relation holds an array of ids, same shape as a multiselect — dragging a
+// card into the "Salt.md" column therefore means "this task belongs to Salt.md".
 function groupValueFor(schema: PropDef[], propId: string, optId: string): unknown {
   const prop = schema.find((p) => p.id === propId);
-  return prop?.type === 'multiselect' ? [optId] : optId;
+  return prop?.type === 'multiselect' || prop?.type === 'relation' ? [optId] : optId;
 }
 
 function isEmptyVal(v: unknown): boolean {
@@ -319,7 +321,7 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
   // a multi-select stores an array, a select stores a scalar.
   const setGroupValue = async (rowId: string, propId: string, optId: string) => {
     const prop = schema.find((p) => p.id === propId);
-    if (prop?.type === 'multiselect') {
+    if (prop?.type === 'multiselect' || prop?.type === 'relation') {
       await setRowProp(rowId, propId, optId === UNSET ? [] : [optId]);
     } else {
       await setRowProp(rowId, propId, optId === UNSET ? '' : optId);
@@ -851,7 +853,7 @@ function FilterSortControls({
   view: ViewDef;
   onChange: (patch: Partial<ViewDef>) => void;
 }) {
-  const [open, setOpen] = useState<'filter' | 'sort' | null>(null);
+  const [open, setOpen] = useState<'filter' | 'sort' | 'group' | null>(null);
   const controlsRef = useRef<HTMLDivElement>(null);
   // Popover position, computed against the viewport. Portaled to <body> so no
   // transformed/overflow-clipping ancestor (the scrollable mobile toolbar, the
@@ -928,6 +930,18 @@ function FilterSortControls({
       >
         <ArrowUpDown size={14} /> {t('Sort')}
       </button>
+      {/* Only a board has columns to group into. The setting existed before
+          this button did — it just took whatever select property came first,
+          which is why nobody could put their tasks into one column per
+          project. */}
+      {view.type === 'board' && (
+        <button
+          className={'btn-sm' + (view.groupBy ? ' active' : '')}
+          onClick={() => setOpen(open === 'group' ? null : 'group')}
+        >
+          <Columns3 size={14} /> {t('Group')}
+        </button>
+      )}
 
       {open && pos && (
         <Portal>
@@ -1037,6 +1051,29 @@ function FilterSortControls({
             )}
           </div>
               </>
+            )}
+            {open === 'group' && (
+              <div className="fs-row">
+                <select
+                  className="prop-select"
+                  value={view.groupBy ?? ''}
+                  onChange={(e) => onChange({ groupBy: e.target.value })}
+                >
+                  {/* A relation belongs here as much as a select does: "one
+                      column per system" is the same question as "one column per
+                      status", just answered by another database. */}
+                  {schema
+                    .filter(
+                      (p) =>
+                        p.type === 'select' || p.type === 'multiselect' || p.type === 'relation',
+                    )
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                </select>
+              </div>
             )}
           </div>
         </Portal>
@@ -1196,6 +1233,25 @@ function BoardView({
   const { drag, armedRow, startDrag, consumeClick } = useBoardDrag((rowId, toCol) =>
     onDrop(rowId, groupBy, toCol),
   );
+  // When grouping by a relation, the columns are the rows of the target
+  // collection. Loaded through the same cache the relation cells use, so the
+  // column heading and the cell always say the same thing.
+  const [relColumns, setRelColumns] = useState<RelOption[]>([]);
+  const groupTarget =
+    schema.find((p) => p.id === groupBy)?.type === 'relation'
+      ? (schema.find((p) => p.id === groupBy)?.relationCollection ?? '')
+      : '';
+  useEffect(() => {
+    if (!groupTarget) {
+      setRelColumns([]);
+      return;
+    }
+    let alive = true;
+    void loadRelationOptions(groupTarget).then((o) => alive && setRelColumns(o));
+    return () => {
+      alive = false;
+    };
+  }, [groupTarget]);
   useEffect(() => {
     if (!moveMenu) return;
     const onDown = (e: MouseEvent) => {
@@ -1205,16 +1261,25 @@ function BoardView({
     return () => document.removeEventListener('pointerdown', onDown);
   }, [moveMenu]);
   const prop = schema.find((p) => p.id === groupBy);
-  if (!prop || (prop.type !== 'select' && prop.type !== 'multiselect')) {
+  if (!prop || (prop.type !== 'select' && prop.type !== 'multiselect' && prop.type !== 'relation')) {
     return (
       <div className="board-empty">
         {t('This board needs a {type} property to group by. Open ⚙ Properties to add one.', { type: t('Select') })}
       </div>
     );
   }
-  const options: PropOption[] = prop.options ?? [];
+  // Grouping by a relation turns the related rows into the columns: one column
+  // per system, per customer, per whatever the rows point at. The rest of the
+  // board does not need to know the difference — the ids are ids, and a
+  // relation value is an array exactly like a multiselect's.
+  const options: PropOption[] =
+    prop.type === 'relation'
+      ? relColumns.map((o) => ({ id: o.id, name: o.title || t('Untitled'), color: '#999' }))
+      : (prop.options ?? []);
   const optionIds = new Set(options.map((o) => o.id));
-  const columns = [...options, { id: UNSET, name: 'No ' + prop.name, color: '#999' }];
+  // The catch-all column was built by gluing "No " onto the property name, so
+  // it stayed English in every language. It shows on every board.
+  const columns = [...options, { id: UNSET, name: t('No {name}', { name: prop.name }), color: '#999' }];
 
   // A row whose value references a removed option would otherwise vanish from
   // every column; the UNSET column catches those so no card is lost.

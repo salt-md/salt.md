@@ -22,6 +22,7 @@ const TYPES: { value: PropType; label: string }[] = [
   { value: 'url', label: 'URL' },
   { value: 'person', label: 'Person' },
   { value: 'relation', label: 'Relation' },
+  { value: 'backrelation', label: 'Backrelation' },
   { value: 'rollup', label: 'Rollup' },
   { value: 'formula', label: 'Formula' },
 ];
@@ -84,8 +85,16 @@ export default function SchemaEditor({
   const targets = collections ?? [];
 
   useEffect(() => {
+    // Both directions need the other side's schema: a relation to offer its
+    // properties to a rollup, a backrelation to offer the relations that point
+    // back here. Without the second half its property picker stayed empty.
     const wanted = new Set(
-      schema.filter((p) => p.type === 'relation' && p.relationCollection).map((p) => p.relationCollection!),
+      schema
+        .flatMap((p) => [
+          p.type === 'relation' ? p.relationCollection : '',
+          p.type === 'backrelation' ? p.backrelationCollection : '',
+        ])
+        .filter(Boolean) as string[],
     );
     for (const cid of wanted) {
       if (targetSchemas[cid]) continue;
@@ -163,7 +172,11 @@ export default function SchemaEditor({
     // Keep board views pointing at a valid select property, and drop any
     // filters/sort that reference a property the user just deleted.
     const propIds = new Set(colored.map((p) => p.id));
-    const selectProps = colored.filter((p) => p.type === 'select' || p.type === 'multiselect');
+    // A board may group by a relation as well; leaving relations out here reset
+    // "group by System" to the first select property on every save.
+    const selectProps = colored.filter(
+      (p) => p.type === 'select' || p.type === 'multiselect' || p.type === 'relation',
+    );
     const dateProps = colored.filter((p) => p.type === 'date');
     const fixedViews = views.map((v) => {
       const next = { ...v };
@@ -262,9 +275,58 @@ export default function SchemaEditor({
         </div>
       );
     }
+    // A backrelation asks the other database "which of your rows point at me?".
+    // It needs the database AND which of its properties does the pointing —
+    // a collection can hold several relations back to us, and picking the
+    // wrong one silently lists the wrong rows.
+    if (p.type === 'backrelation') {
+      const sourceSchema = p.backrelationCollection
+        ? targetSchemas[p.backrelationCollection] ?? []
+        : [];
+      const pointingHere = sourceSchema.filter((s) => s.type === 'relation');
+      return (
+        <div className="schema-config">
+          <label>{t('Rows from')}</label>
+          <select
+            className="prop-select"
+            value={p.backrelationCollection ?? ''}
+            onChange={(e) =>
+              updateProp(p.id, { backrelationCollection: e.target.value, backrelationProp: '' })
+            }
+          >
+            <option value="">{t('Select a collection…')}</option>
+            {targets.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.title || t('Untitled')}
+              </option>
+            ))}
+          </select>
+          <label>{t('That point here via')}</label>
+          <select
+            className="prop-select"
+            value={p.backrelationProp ?? ''}
+            onChange={(e) => updateProp(p.id, { backrelationProp: e.target.value })}
+            disabled={!p.backrelationCollection}
+          >
+            <option value="">
+              {p.backrelationCollection ? t('Select a relation…') : t('(pick collection first)')}
+            </option>
+            {pointingHere.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
     if (p.type === 'rollup') {
-      const rel = relationProps.find((r) => r.id === p.rollupRelation);
-      const targetSchema = rel?.relationCollection ? targetSchemas[rel.relationCollection] ?? [] : [];
+      // A rollup may aggregate over a backrelation too — that is what turns
+      // "the tasks pointing at this system" into "how many of them are done".
+      const rollupSources = [...relationProps, ...schema.filter((s) => s.type === 'backrelation')];
+      const rel = rollupSources.find((r) => r.id === p.rollupRelation);
+      const relTarget = rel?.relationCollection || rel?.backrelationCollection || '';
+      const targetSchema = relTarget ? targetSchemas[relTarget] ?? [] : [];
       return (
         <div className="schema-config">
           <label>{t('Via relation')}</label>
@@ -274,7 +336,7 @@ export default function SchemaEditor({
             onChange={(e) => updateProp(p.id, { rollupRelation: e.target.value, rollupTarget: '' })}
           >
             <option value="">{t('Select a relation…')}</option>
-            {relationProps.map((r) => (
+            {rollupSources.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.name}
               </option>
@@ -308,6 +370,57 @@ export default function SchemaEditor({
               </option>
             ))}
           </select>
+          {/* The condition is what makes progress expressible: one rollup counts
+              everything, a second counts only the done ones, and a formula
+              divides them. Leaving it empty keeps the old behaviour. */}
+          <label>{t('Only rows where')}</label>
+          <select
+            className="prop-select"
+            value={p.rollupWhereProp ?? ''}
+            onChange={(e) =>
+              updateProp(p.id, {
+                rollupWhereProp: e.target.value,
+                rollupWhereOp: p.rollupWhereOp ?? 'is',
+              })
+            }
+            disabled={!rel}
+          >
+            <option value="">{t('All rows')}</option>
+            {targetSchema
+              .filter((t) => t.type !== 'rollup' && t.type !== 'formula')
+              .map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+          </select>
+          {p.rollupWhereProp && (
+            <div className="schema-where">
+              <select
+                className="prop-select"
+                value={p.rollupWhereOp ?? 'is'}
+                onChange={(e) =>
+                  updateProp(p.id, {
+                    rollupWhereOp: e.target.value as PropDef['rollupWhereOp'],
+                  })
+                }
+              >
+                <option value="is">{t('is')}</option>
+                <option value="is_not">{t('is not')}</option>
+                <option value="contains">{t('contains')}</option>
+                <option value="is_empty">{t('is empty')}</option>
+                <option value="is_not_empty">{t('is not empty')}</option>
+              </select>
+              {p.rollupWhereOp !== 'is_empty' && p.rollupWhereOp !== 'is_not_empty' && (
+                <WhereValue
+                  schema={targetSchema}
+                  propId={p.rollupWhereProp}
+                  value={p.rollupWhereValue ?? ''}
+                  onChange={(v) => updateProp(p.id, { rollupWhereValue: v })}
+                />
+              )}
+            </div>
+          )}
           {numberDisplayFields(p)}
         </div>
       );
@@ -482,5 +595,51 @@ export default function SchemaEditor({
       </div>
     </div>
     </Portal>
+  );
+}
+
+// The comparison value for a rollup condition. A select property is offered as
+// its options rather than a free-text field: the server compares against the
+// stored option ID, which is not what the reader sees on screen — typing
+// "Erledigt" where "erledigt" is stored yields a silent zero.
+function WhereValue({
+  schema,
+  propId,
+  value,
+  onChange,
+}: {
+  schema: PropDef[];
+  propId: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const def = schema.find((p) => p.id === propId);
+  if (def && (def.type === 'select' || def.type === 'multiselect')) {
+    return (
+      <select className="prop-select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t('Select a value…')}</option>
+        {(def.options ?? []).map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+    );
+  }
+  if (def && def.type === 'checkbox') {
+    return (
+      <select className="prop-select" value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="true">{t('Checked')}</option>
+        <option value="false">{t('Unchecked')}</option>
+      </select>
+    );
+  }
+  return (
+    <input
+      className="prop-input"
+      value={value}
+      placeholder={t('Value')}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
