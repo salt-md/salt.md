@@ -278,6 +278,27 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [collectionId, fsKey]);
 
+  // Somebody else — a person in another browser, or an agent — moved a row in
+  // THIS database. Reload it, so a card that gets pushed to "next" moves while
+  // you are looking at it instead of on your next refresh.
+  //
+  // Only for this database, and debounced: an agent writing a batch of rows
+  // sends one event per row, and each full reload walks every page of results.
+  useEffect(() => {
+    let timer: number | undefined;
+    const onRows = (e: Event) => {
+      if ((e as CustomEvent<string>).detail !== collectionId) return;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => void loadRows(), 400);
+    };
+    window.addEventListener('salt:rows', onRows);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('salt:rows', onRows);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionId, fsKey]);
+
   useEffect(loadConfig, [loadConfig]);
 
   const view = view0;

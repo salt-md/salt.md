@@ -106,6 +106,9 @@ func (s *Server) mcpSetProperties(pageID string, properties json.RawMessage) (st
 	}
 	s.reindexPage(pageID)
 	s.pagesChanged()
+	// An open board must show the move without a reload — that is the whole
+	// point of an agent working while somebody watches.
+	s.rowChanged(pageID)
 	return fmt.Sprintf("Set %d propert%s on row %s", len(changed), plural(len(changed), "y", "ies"), pageID), nil
 }
 

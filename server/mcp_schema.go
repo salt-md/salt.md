@@ -633,6 +633,7 @@ func (s *Server) mcpCreateRows(userID, pageID string, rows json.RawMessage) (str
 		ids = append(ids, id)
 	}
 	s.pagesChanged()
+	s.rowsChanged(pageID)
 	b, _ := json.Marshal(map[string]any{"created": len(ids), "ids": ids})
 	return string(b), nil
 }

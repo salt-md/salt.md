@@ -397,7 +397,7 @@ export default function App() {
     let warnedVersion = false;
     es.onmessage = (e) => {
       try {
-        const msg = JSON.parse(e.data) as { type: string; version?: string };
+        const msg = JSON.parse(e.data) as { type: string; version?: string; collection?: string };
         if (msg.type === 'hello' && msg.version && msg.version !== BUILD_VERSION && !warnedVersion) {
           warnedVersion = true;
           toast(t('A new version is available — reload the page'));
@@ -405,6 +405,14 @@ export default function App() {
         if (msg.type === 'pages') {
           window.clearTimeout(reloadTimer.current);
           reloadTimer.current = window.setTimeout(() => void loadPages(), 250);
+        }
+        // A database's rows moved. Passed on as a DOM event rather than through
+        // props: only the open CollectionView cares, and only when it is the
+        // database named here. Reloading every open view on every event is what
+        // this used to do, and a database with 50k rows re-crawled itself
+        // whenever anybody renamed anything.
+        if (msg.type === 'rows' && msg.collection) {
+          window.dispatchEvent(new CustomEvent('salt:rows', { detail: msg.collection }));
         }
       } catch {
         /* ignore malformed events */

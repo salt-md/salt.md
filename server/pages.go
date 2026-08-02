@@ -229,6 +229,7 @@ func (s *Server) handleCreatePage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit("human", userID, requestUser(r).Name, "create_page", id, workspaceID, body.Title)
 	s.pagesChanged()
+	s.rowChanged(id)
 	s.fireWebhook("page.created", id)
 	writeJSON(w, p)
 }
@@ -577,6 +578,10 @@ func (s *Server) handleUpdatePage(w http.ResponseWriter, r *http.Request) {
 	}
 	if metaChanged {
 		s.pagesChanged()
+		// If this page is a database row, the boards showing it have to move the
+		// card themselves — a person editing a property should not have to tell
+		// the other browsers to reload.
+		s.rowChanged(id)
 	}
 	// One event for a save, whether the body changed, the metadata did, or both
 	// — a receiver wants "this page changed", not our internal split.
