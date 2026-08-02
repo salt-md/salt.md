@@ -8051,3 +8051,17 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
 }
 
 .agent-dot.fresh { opacity: 1; }
+
+/* The logo inside a badge or a dot. object-fit so a non-square mark (the PNG)
+   is not stretched, and a white ring behind it on the card dot, where the
+   coloured circle would otherwise swallow a dark logo. */
+.agent-mark {
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.agent-dot .agent-mark {
+  background: #fff;
+  padding: 1px;
+}

@@ -75,15 +75,37 @@ export function minutesSince(iso: string): number {
   return Math.max(0, Math.round((Date.now() - t) / 60_000));
 }
 
-// A colour per agent so two of them are told apart at a glance. Deliberately
-// NOT brand logos: shipping somebody else's mark is a decision for its owner,
-// not a detail of this feature. Swapping these for real marks later is this one
-// map and nothing else.
+// The logo files this instance already ships and already shows while somebody
+// connects an agent (web/public/agents/, see AgentConnect). Reused rather than
+// duplicated on purpose: the mark you saw when you set the agent up is the mark
+// you see when it works, and that recognition IS the feature.
+//
+// mono = a black logo that has to be inverted in dark mode; the class for that
+// exists already. Cursor and anything unknown fall back to the neutral robot —
+// an approximated logo reads as the brand while visibly not being it, which is
+// worse than none.
+const AGENT_LOGOS: Record<string, { file: string; mono?: boolean }> = {
+  claude: { file: 'claude.svg' },
+  chatgpt: { file: 'chatgpt.svg' },
+  codex: { file: 'openai.svg', mono: true },
+  openclaw: { file: 'openclaw.svg' },
+  hermes: { file: 'hermes-agent.png' },
+  gemini: { file: 'google-gemini.svg' },
+};
+
+export function agentLogo(agent: string): { file: string; mono?: boolean } | null {
+  return AGENT_LOGOS[agent] ?? null;
+}
+
+// A colour per agent, for the badge outline and the dot on a card — it still
+// tells two agents apart where the logo is only 11 pixels wide.
 const AGENT_COLORS: Record<string, string> = {
   claude: '#c96442',
   chatgpt: '#10a37f',
-  copilot: '#6e7681',
+  codex: '#6e7681',
   cursor: '#7c6cf5',
+  openclaw: '#b45309',
+  hermes: '#0ea5e9',
   gemini: '#4285f4',
   generic: '#787774',
 };

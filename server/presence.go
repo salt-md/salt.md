@@ -37,11 +37,17 @@ const (
 	presenceMaxSilence = 12 * time.Hour
 )
 
-// knownAgents are the ones with an icon of their own. An unknown name is NOT
-// refused: a client that cannot announce itself simply would not, and then the
-// feature is worth nothing on exactly the day a new one appears. Adding an icon
-// later is one line here and no change at all on the client.
-var knownAgents = []string{"claude", "chatgpt", "copilot", "cursor", "gemini", "generic"}
+// knownAgents are the ones with a logo of their own — deliberately the same
+// list the "connect an agent" dialog offers, because those are the clients this
+// instance actually advertises. Keeping the two in step is what makes a badge
+// recognisable: the icon somebody saw while connecting is the icon they see
+// working.
+//
+// An unknown name is NOT refused. A client that cannot announce itself simply
+// would not, and then the feature is worth nothing on exactly the day a new one
+// appears. Unknown becomes "generic", and what it called itself survives in the
+// label.
+var knownAgents = []string{"claude", "chatgpt", "codex", "cursor", "openclaw", "hermes", "gemini", "generic"}
 
 func knownAgentList() string { return strings.Join(knownAgents, ", ") }
 

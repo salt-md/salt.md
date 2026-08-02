@@ -1,7 +1,23 @@
 import { Bot } from 'lucide-react';
-import { agentColor, agentName, isFresh, minutesSince, useAgentPresence } from '../agentPresence';
+import { agentColor, agentLogo, agentName, isFresh, minutesSince, useAgentPresence } from '../agentPresence';
 import type { AgentWork } from '../agentPresence';
 import { t, plural } from '../i18n';
+
+// The agent's own logo, from the same files the connect dialog shows — the mark
+// you saw while setting it up is the mark you see while it works. Anything
+// without one gets the neutral robot rather than a lookalike.
+function AgentMark({ agent, size }: { agent: string; size: number }) {
+  const logo = agentLogo(agent);
+  if (!logo) return <Bot size={size} />;
+  return (
+    <img
+      className={'agent-mark' + (logo.mono ? ' agent-img--mono' : '')}
+      src={'/agents/' + logo.file}
+      style={{ width: size, height: size }}
+      alt=""
+    />
+  );
+}
 
 // "Claude · via Jeremia · here for 2h 14m · last seen 47 min ago".
 //
@@ -45,7 +61,7 @@ export function AgentPresence({ pageId }: { pageId: string }) {
           style={{ borderColor: agentColor(w.agent), color: agentColor(w.agent) }}
           title={title(w)}
         >
-          <Bot size={13} />
+          <AgentMark agent={w.agent} size={14} />
           <span className="agent-work-name">{agentName(w)}</span>
           {/* The note only when one agent is here. With two, the pair pushed the
               breadcrumb off the topbar — and the note is in the tooltip anyway,
@@ -68,7 +84,7 @@ export function AgentDot({ pageId }: { pageId: string }) {
       style={{ background: agentColor(w.agent) }}
       title={title(w)}
     >
-      <Bot size={11} />
+      <AgentMark agent={w.agent} size={11} />
     </span>
   );
 }
