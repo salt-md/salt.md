@@ -715,6 +715,7 @@
   "a page is changed": "eine Seite geändert wird",
   "a page is created": "eine Seite angelegt wird",
   "a page is thrown away": "eine Seite weggeworfen wird",
+  "active just now": "gerade aktiv",
   "added to": "hat ergänzt",
   "admin": "Admin",
   "adopted the ownerless workspace:": "hat den herrenlosen Workspace übernommen:",
@@ -723,6 +724,7 @@
   "and it stays searchable Markdown, wherever it lives.": "und alles bleibt durchsuchbares Markdown, egal wo es liegt.",
   "at least 8 characters": "mindestens 8 Zeichen",
   "changed": "hat geändert",
+  "checked in for about {time}": "angemeldet für ca. {time}",
   "console.cloud.google.com → APIs & Services → Credentials → “OAuth client ID” (Web application) → enter the redirect URI above.": "console.cloud.google.com → APIs & Services → Credentials → „OAuth client ID“ (Web application) → obige Redirect-URI eintragen.",
   "contains": "enthält",
   "created": "hat erstellt",
@@ -743,6 +745,7 @@
   "eyJhIjoi… (tunnel token)": "eyJhIjoi… (Tunnel-Token)",
   "from cron.": "per Cron.",
   "handed the instance to:": "hat die Instanz übergeben an:",
+  "here for {time}": "seit {time} dabei",
   "human": "Mensch",
   "in the dashboard. Salt.md keeps the tunnel running, restarts included. No port forwarding needed.": "im Dashboard fest. Salt.md hält den Tunnel am Laufen — auch nach Neustarts. Keine Portfreigaben nötig.",
   "is": "ist",
@@ -750,6 +753,7 @@
   "is not": "nicht ist",
   "is not empty": "nicht leer ist",
   "last call": "letzter Anruf",
+  "last seen {time} ago": "zuletzt gesehen vor {time}",
   "last {name}": "zuletzt {name}",
   "less": "weniger",
   "moved to trash": "hat in den Papierkorb gelegt",
@@ -778,6 +782,7 @@
   "uploaded a file to": "hat eine Datei hochgeladen zu",
   "used {date}": "benutzt {date}",
   "value": "Wert",
+  "via {name}": "über {name}",
   "with": "mit",
   "your password right now": "dein jetziges Passwort",
   "{name} becomes owner: emergency access, instance backup, deleting accounts.": "{name} wird Owner: Notfallzugriff, Instanz-Sicherung, Konten löschen.",
@@ -797,6 +802,7 @@
     "one": "{n} Mitglied",
     "other": "{n} Mitglieder"
   },
+  "{n} min": "{n} Min.",
   "{n} pages": {
     "one": "{n} Seite",
     "other": "{n} Seiten"

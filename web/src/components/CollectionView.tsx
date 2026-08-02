@@ -18,6 +18,7 @@ import type {
   ViewDef,
 } from '../types';
 import PropertyValue, { PersonStack, idList, loadRelationOptions, type RelOption } from './PropertyValue';
+import { AgentDot } from './AgentBadge';
 import { planCard, isBlank, zoneOf, contactKind, needsLabel } from '../cardLayout';
 import SchemaEditor from './SchemaEditor';
 import GalleryView from './GalleryView';
@@ -1388,6 +1389,10 @@ function BoardView({
                   <div className="board-card-title">
                     {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
                     {r.title || 'Untitled'}
+                    {/* An agent working on this row. Next to the title rather
+                        than in the corner: the corner already carries the
+                        people, and two stacks there read as one. */}
+                    <AgentDot pageId={r.id} />
                   </div>
                   {/* Who is on this card — one stack of faces, deduped across
                       all person fields, in the corner where the eye looks for

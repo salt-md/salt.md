@@ -7977,3 +7977,77 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
 @media (min-width: 641px) {
   .menu-item.narrow-only, .menu-sep.narrow-only { display: none; }
 }
+
+/* An agent that says it is working here. Named .agent-work, not .agent-badge —
+   that one already exists for the audit trail, and two meanings on one class is
+   how a style starts leaking into a place nobody was looking at.
+
+   Two states, and the difference is the whole point: solid = it called in
+   within the last few minutes, faded = it has not been heard from, which for a
+   long job is normal rather than alarming. Both timestamps are in the tooltip,
+   so nobody has to guess from the shade. */
+.agent-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 4px;
+  /* Never at the breadcrumb's expense: the topbar is shared, and a page whose
+     name you cannot see is a worse trade than a badge you cannot read in full. */
+  min-width: 0;
+  max-width: 280px;
+  overflow: hidden;
+}
+
+.agent-work {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 200px;
+  flex-shrink: 1;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.6;
+  opacity: 0.55;
+}
+
+.agent-work.fresh { opacity: 1; }
+
+.agent-work-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-work-note {
+  color: var(--muted);
+  max-width: 130px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  /* On a phone the name alone: the note needs room the topbar does not have. */
+  .agent-work-note { display: none; }
+  .agent-presence { max-width: 120px; }
+}
+
+.agent-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  margin-left: 5px;
+  border-radius: 50%;
+  color: #fff;
+  vertical-align: -3px;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.agent-dot.fresh { opacity: 1; }

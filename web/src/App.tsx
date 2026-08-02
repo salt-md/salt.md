@@ -414,6 +414,11 @@ export default function App() {
         if (msg.type === 'rows' && msg.collection) {
           window.dispatchEvent(new CustomEvent('salt:rows', { detail: msg.collection }));
         }
+        // An agent checked in or out. Content-free on purpose: the list is
+        // fetched through a route that checks permissions per page.
+        if (msg.type === 'presence') {
+          window.dispatchEvent(new CustomEvent('salt:presence'));
+        }
       } catch {
         /* ignore malformed events */
       }

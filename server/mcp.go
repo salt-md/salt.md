@@ -355,6 +355,24 @@ var mcpTools = []map[string]any{
 			}},
 	},
 	{
+		"name": "working_on",
+		"description": "Say that you are working on a page, so a person watching sees it live — and say when you are done. " +
+			"Check in BEFORE you start on something that takes a while (a task from a board, a document you are rewriting), and call it again with done: true when you finish. " +
+			"You stay listed until you check out: nothing expires on you halfway through a long job, and every other call you make on that page counts as a sign of life. " +
+			"agent: one of " + knownAgentList() + " — if you are none of those, use \"generic\" and put what you actually are in label. " +
+			"The note is the valuable part: \"tidying the file index\" answers the question somebody actually has, \"working\" does not.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{
+				"page_id":          map[string]any{"type": "string", "description": "The page or database row you are working on."},
+				"agent":            map[string]any{"type": "string", "description": "Which agent you are. Unknown names are accepted and shown neutrally."},
+				"label":            map[string]any{"type": "string", "description": "What you call yourself, when that is not the key above (e.g. \"Claude Code\")."},
+				"note":             map[string]any{"type": "string", "description": "What you are doing, in a few words. Shown to people."},
+				"expected_minutes": map[string]any{"type": "integer", "description": "Roughly how long you expect to take. Optional, and it only makes a long silence look expected rather than suspicious."},
+				"done":             map[string]any{"type": "boolean", "description": "true checks you out again."},
+			},
+			"required": []string{"page_id"}},
+	},
+	{
 		"name":        "whoami",
 		"description": "Who am I and what am I allowed to do: user, token scope (read/write), which workspaces this token may reach, and which actions are deliberately NOT available over MCP. Call this first when a write fails, to tell a permission problem from a wrong id. Read-only.",
 		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
@@ -640,6 +658,12 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Rules string `json:"rules"`
 		// File index (W125).
 		Under string `json:"under"`
+		// working_on — the agent presence check-in.
+		Agent           string `json:"agent"`
+		Label           string `json:"label"`
+		Note            string `json:"note"`
+		ExpectedMinutes int    `json:"expected_minutes"`
+		Done            bool   `json:"done"`
 		// The merged tools: one action/mode word instead of a separate entry.
 		Mode    string `json:"mode"`
 		Action  string `json:"action"`
@@ -671,6 +695,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		name == "delete_comment" ||
 		name == "set_sharing" ||
 		name == "workspace" || name == "embed_database" || name == "import_url" ||
+		name == "working_on" ||
 		// Workspace rules (W123): a proposal is inert, but it IS a write.
 		name == "propose_workspace_rules"
 	switch name {
@@ -680,6 +705,20 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 	case "comments":
 		mutating = args.Action == "add" || args.Action == "resolve" || args.Action == "reopen"
 	}
+	// Any call naming a page is a sign of life for whatever THIS account has
+	// checked in there, so an agent working inside Salt.md stays fresh without
+	// spending a call on saying so.
+	//
+	// It runs even for calls that are then refused, and that is deliberate: an
+	// agent whose write bounces is still alive and still working. It cannot leak
+	// anything either — touchPresence only matches rows belonging to this
+	// account, and having one required passing canRead at check-in.
+	defer func() {
+		if args.PageID != "" && name != "working_on" {
+			s.touchPresence(userID, args.PageID)
+		}
+	}()
+
 	// A read-only API token may call only the read tools (Q12).
 	if mutating && u.TokenScope == "read" {
 		return "", fmt.Errorf("this API token is read-only; %q requires a write token", name)
@@ -696,7 +735,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 	// the UI does — the MCP surface is not a side door.
 	if args.PageID != "" {
 		switch name {
-		case "get_page", "query_rows", "get_collection", "get_permissions":
+		case "get_page", "query_rows", "get_collection", "get_permissions", "working_on":
 			if !s.canRead(userID, args.PageID) {
 				return "", fmt.Errorf("page %q not found", args.PageID)
 			}
@@ -1069,6 +1108,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			return s.mcpSetTrashed(args.PageID, args.Trashed)
 		case "get_links":
 			return s.mcpGetLinks(u, args.PageID, args.WorkspaceID, args.Kinds, args.IncludeNodes)
+		case "working_on":
+			return s.mcpWorkingOn(u, args.PageID, args.Agent, args.Label, args.Note, args.ExpectedMinutes, args.Done)
 		case "workspace":
 			return s.mcpWorkspace(u, args.WorkspaceID, args.Name, args.Icon)
 		default:

@@ -270,6 +270,7 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("DELETE /api/comments/{id}", s.auth(s.handleDeleteComment))
 
 	m.HandleFunc("GET /api/events", s.auth(s.handleEvents))
+	m.HandleFunc("GET /api/presence", s.auth(s.handlePresence))
 	m.HandleFunc("GET /collab/{id}", s.auth(s.handleCollab))
 	m.HandleFunc("/mcp", s.handleMCP)
 	// Token-in-URL variant: many MCP clients (claude.ai/Desktop connectors,

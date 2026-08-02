@@ -1,3 +1,4 @@
+import type { AgentWork } from './agentPresence';
 import type {
   ApiToken,
   Backlink,
@@ -345,6 +346,10 @@ export const api = {
   graph: () => req<{ edges: { source: string; target: string }[] }>('/api/graph'),
 
   getCollection: (pageId: string) => req<CollectionConfig>(`/api/collections/${pageId}`),
+  // Who says they are working on what. Filtered per page on the server — the
+  // live signal that triggers this carries no content for exactly that reason.
+  presence: () =>
+    req<{ working: AgentWork[]; freshSeconds: number }>('/api/presence'),
   collectionRows: (
     pageId: string,
     opts: {

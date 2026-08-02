@@ -115,6 +115,31 @@ CREATE TABLE IF NOT EXISTS files (
 );
 CREATE INDEX IF NOT EXISTS idx_files_page ON files(page_id);
 CREATE INDEX IF NOT EXISTS idx_files_ws ON files(workspace_id);
+-- Which agent says it is working on which page (W126).
+--
+-- Deliberately a CLAIM, not a fact: an agent names itself, because nothing in
+-- the token says which one it is — a token belongs to a human. account_id is
+-- the part that is verified, and both are shown together.
+--
+-- last_seen is refreshed by any call from that account, so an agent working
+-- inside Salt.md stays fresh without doing anything. It does NOT expire the
+-- entry: an agent has no clock and cannot wake itself to say "still here", so
+-- an entry that vanished after ten minutes would erase a three-hour job. It
+-- only fades in the interface, and a sweep removes what has been silent for
+-- half a day.
+CREATE TABLE IF NOT EXISTS agent_presence (
+	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+	account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	agent TEXT NOT NULL DEFAULT 'generic',
+	label TEXT NOT NULL DEFAULT '',
+	note TEXT NOT NULL DEFAULT '',
+	started_at TEXT NOT NULL DEFAULT '',
+	last_seen TEXT NOT NULL DEFAULT '',
+	expected_minutes INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (page_id, account_id, agent)
+);
+CREATE INDEX IF NOT EXISTS idx_presence_page ON agent_presence(page_id);
+CREATE INDEX IF NOT EXISTS idx_presence_seen ON agent_presence(last_seen);
 CREATE TABLE IF NOT EXISTS favorites (
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

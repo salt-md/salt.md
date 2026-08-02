@@ -27,6 +27,7 @@ import { HistoryModal } from './PageHistory';
 import CommentsSection, { initials, OPEN_COMMENTS_EVENT } from './CommentsSection';
 import { FilePreview, isPreviewable } from './FilePreview';
 import StructurePanel, { structurePanelOpen, setStructurePanelOpen } from './StructurePanel';
+import { AgentPresence } from './AgentBadge';
 import { usePeers, setPeers, clearPeers } from '../presence';
 import { tagColorClass, TAG_PALETTE } from '../tags';
 import { collectTags, suggestTags } from '../tagSuggest';
@@ -658,6 +659,9 @@ function PageHeader({
           ))}
         </nav>
         <div className="topbar-right">
+          {/* Which agent says it is working here. Beside the human presence,
+              because it answers the same question. */}
+          <AgentPresence pageId={pageId} />
           {/* Who else is on the page right now. Presence was already being SENT
               (awareness) but shown nowhere — two people worked in the same
               document without either of them noticing. */}
