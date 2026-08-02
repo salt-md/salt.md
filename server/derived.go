@@ -29,6 +29,16 @@ type propDef struct {
 	RollupWhereProp  string `json:"rollupWhereProp"`
 	RollupWhereOp    string `json:"rollupWhereOp"` // is|is_not|is_empty|is_not_empty|contains
 	RollupWhereValue string `json:"rollupWhereValue"`
+	// SEVERAL values, for is and is_not. "Open" is neither done NOR discarded,
+	// and one comparison cannot say that: an is_not against "done" counts every
+	// discarded row as open, silently and by exactly the amount nobody notices.
+	//
+	// A real list rather than a comma-separated string, deliberately. Splitting
+	// on commas would quietly change the meaning of any existing condition whose
+	// value contains one — and a rollup that changes its answer under an upgrade
+	// is the failure this whole field was careful about the first time round.
+	// Empty falls back to RollupWhereValue, so nothing existing moves.
+	RollupWhereValues []string `json:"rollupWhereValues"`
 	// backrelation — the other side of someone else's relation. Holds no data
 	// of its own: it asks "which rows over there point at me?" and answers at
 	// read time. See backrelationIDs.
@@ -61,13 +71,28 @@ func matchesRollupWhere(d propDef, props map[string]any) bool {
 	case "is_not_empty":
 		return strings.TrimSpace(text) != ""
 	case "is_not":
-		return text != d.RollupWhereValue
+		return !matchesAnyRollupValue(d, text)
 	case "contains":
 		return strings.Contains(strings.ToLower(text), strings.ToLower(d.RollupWhereValue))
 	default: // "is" and anything unrecognised — the safe reading of a typo is
 		// equality, not "match everything".
+		return matchesAnyRollupValue(d, text)
+	}
+}
+
+// matchesAnyRollupValue compares against the value list when there is one, and
+// against the single value otherwise. is_not inverts the whole thing, which is
+// what makes "neither done nor discarded" expressible at all.
+func matchesAnyRollupValue(d propDef, text string) bool {
+	if len(d.RollupWhereValues) == 0 {
 		return text == d.RollupWhereValue
 	}
+	for _, v := range d.RollupWhereValues {
+		if text == v {
+			return true
+		}
+	}
+	return false
 }
 
 func parseSchema(schemaJSON string) []propDef {

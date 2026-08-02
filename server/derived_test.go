@@ -98,3 +98,47 @@ func TestBackrelationNeedsBothHalves(t *testing.T) {
 		}
 	}
 }
+
+// "Open" means neither done NOR discarded, and one comparison cannot say that:
+// is_not "done" counts every discarded row as open — silently, and by exactly
+// the amount nobody notices until the first row is discarded.
+func TestRollupConditionAcceptsSeveralValues(t *testing.T) {
+	rows := []map[string]any{
+		{"status": "open"}, {"status": "in-progress"},
+		{"status": "done"}, {"status": "done"},
+		{"status": "discarded"},
+	}
+	count := func(d propDef) int {
+		n := 0
+		for _, r := range rows {
+			if matchesRollupWhere(d, r) {
+				n++
+			}
+		}
+		return n
+	}
+
+	open := propDef{RollupWhereProp: "status", RollupWhereOp: "is_not",
+		RollupWhereValues: []string{"done", "discarded"}}
+	if got := count(open); got != 2 {
+		t.Errorf("open counted %d, want 2 (open and in-progress)", got)
+	}
+	closed := propDef{RollupWhereProp: "status", RollupWhereOp: "is",
+		RollupWhereValues: []string{"done", "discarded"}}
+	if got := count(closed); got != 3 {
+		t.Errorf("closed counted %d, want 3", got)
+	}
+	// The single-value form must behave exactly as it always did — a condition
+	// written before this existed may not change its answer under an upgrade.
+	oldStyle := propDef{RollupWhereProp: "status", RollupWhereOp: "is_not", RollupWhereValue: "done"}
+	if got := count(oldStyle); got != 3 {
+		t.Errorf("the old single-value form counted %d, want 3 (it still counts the discarded row)", got)
+	}
+	// A list wins over the single value when both are set, rather than the two
+	// being combined into something nobody asked for.
+	both := propDef{RollupWhereProp: "status", RollupWhereOp: "is",
+		RollupWhereValue: "open", RollupWhereValues: []string{"done"}}
+	if got := count(both); got != 2 {
+		t.Errorf("with both set the list should win: counted %d, want 2", got)
+	}
+}

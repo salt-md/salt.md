@@ -192,6 +192,10 @@ export interface PropDef {
   rollupWhereProp?: string;
   rollupWhereOp?: 'is' | 'is_not' | 'is_empty' | 'is_not_empty' | 'contains';
   rollupWhereValue?: string;
+  // Several values, for is / is_not. "Open" means neither done NOR discarded,
+  // and one comparison cannot say that. Empty falls back to rollupWhereValue,
+  // so conditions written before this keep their meaning exactly.
+  rollupWhereValues?: string[];
   // backrelation: the other side of a relation someone else declared. Computed
   // at read time, never stored — see backrelationIDs in derived.go.
   backrelationCollection?: string;

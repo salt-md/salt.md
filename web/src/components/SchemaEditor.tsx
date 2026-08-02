@@ -415,8 +415,13 @@ export default function SchemaEditor({
                 <WhereValue
                   schema={targetSchema}
                   propId={p.rollupWhereProp}
+                  op={p.rollupWhereOp ?? 'is'}
                   value={p.rollupWhereValue ?? ''}
+                  values={p.rollupWhereValues}
                   onChange={(v) => updateProp(p.id, { rollupWhereValue: v })}
+                  onChangeValues={(vs) =>
+                    updateProp(p.id, { rollupWhereValues: vs.length ? vs : undefined })
+                  }
                 />
               )}
             </div>
@@ -605,15 +610,52 @@ export default function SchemaEditor({
 function WhereValue({
   schema,
   propId,
+  op,
   value,
+  values,
   onChange,
+  onChangeValues,
 }: {
   schema: PropDef[];
   propId: string;
+  op: string;
   value: string;
+  values?: string[];
   onChange: (v: string) => void;
+  onChangeValues: (vs: string[]) => void;
 }) {
   const def = schema.find((p) => p.id === propId);
+  // is / is_not may name SEVERAL options — "open" is neither done nor
+  // discarded. Ticking more than one writes the list; ticking exactly one keeps
+  // writing the single value, so a condition made here still reads the same to
+  // an older server.
+  if (def && (def.type === 'select' || def.type === 'multiselect') && (op === 'is' || op === 'is_not')) {
+    const picked = values?.length ? values : value ? [value] : [];
+    const toggle = (id: string) => {
+      const next = picked.includes(id) ? picked.filter((x) => x !== id) : [...picked, id];
+      if (next.length === 1) {
+        onChangeValues([]);
+        onChange(next[0]);
+      } else {
+        onChange('');
+        onChangeValues(next);
+      }
+    };
+    return (
+      <div className="form-chips where-values">
+        {(def.options ?? []).map((o) => (
+          <button
+            type="button"
+            key={o.id}
+            className={'form-chip' + (picked.includes(o.id) ? ' on' : '')}
+            onClick={() => toggle(o.id)}
+          >
+            {o.name}
+          </button>
+        ))}
+      </div>
+    );
+  }
   if (def && (def.type === 'select' || def.type === 'multiselect')) {
     return (
       <select className="prop-select" value={value} onChange={(e) => onChange(e.target.value)}>
