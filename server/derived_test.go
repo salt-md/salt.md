@@ -1,6 +1,9 @@
 package server
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 // A rollup without a condition must keep counting everything — existing
 // databases carry rollups defined before conditions existed, and they may not
@@ -140,5 +143,119 @@ func TestRollupConditionAcceptsSeveralValues(t *testing.T) {
 		RollupWhereValue: "open", RollupWhereValues: []string{"done"}}
 	if got := count(both); got != 2 {
 		t.Errorf("with both set the list should win: counted %d, want 2", got)
+	}
+}
+
+// A row opened as a PAGE has to show the same numbers its card shows.
+// computeDerived ran in exactly one place — the query that returns a
+// collection's rows — so the page route rendered an em dash where the board two
+// clicks away had a number. Nothing was missing; this route never asked.
+func TestDerivedValuesAppearOnThePageItself(t *testing.T) {
+	s := testServer(t)
+	uid, _ := signedIn(t, s, "page@example.test")
+	u := &user{ID: uid}
+	ws := s.firstWorkspaceOf(t, uid)
+
+	systems := s.makeCollection(t, ws, uid, "Systems", `[{"id":"name","name":"Name","type":"text"}]`)
+	tasks := s.makeCollection(t, ws, uid, "Tasks", `[
+		{"id":"system","name":"System","type":"relation","relationCollection":"`+systems+`"},
+		{"id":"status","name":"Status","type":"select","options":[{"id":"done","name":"Done"},{"id":"open","name":"Open"}]}]`)
+
+	if _, err := s.mcpUpdateSchema(systems, json.RawMessage(`[
+		{"name":"Tasks","type":"backrelation","backrelationCollection":"`+tasks+`","backrelationProp":"system"},
+		{"name":"Open","type":"rollup","rollupRelation":"tasks","rollupTarget":"status","rollupAgg":"count",
+		 "rollupWhereProp":"status","rollupWhereOp":"is_not","rollupWhereValue":"done"}]`), nil); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+
+	row := s.makeRow(t, ws, uid, systems, "Salt", `{}`)
+	s.makeRow(t, ws, uid, tasks, "A", `{"system":["`+row+`"],"status":"open"}`)
+	s.makeRow(t, ws, uid, tasks, "B", `{"system":["`+row+`"],"status":"open"}`)
+	s.makeRow(t, ws, uid, tasks, "C", `{"system":["`+row+`"],"status":"done"}`)
+
+	p, err := s.getPage(row)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	// Before the fix the props came back exactly as stored — empty.
+	s.fillDerivedForPage(u, p)
+
+	var props map[string]any
+	if err := json.Unmarshal(p.Props, &props); err != nil {
+		t.Fatalf("props: %v", err)
+	}
+	if got := relationIDs(props["tasks"]); len(got) != 3 {
+		t.Errorf("the page shows %d tasks, want 3", len(got))
+	}
+	// The value travels as JSON, so it arrives as a float — compare numerically
+	// rather than by Go type.
+	if got, ok := toNumber(props["open"]); !ok || got != 2 {
+		t.Errorf("the page shows %v open, want 2", props["open"])
+	}
+}
+
+// A page that is not a database row must come back untouched — no schema to
+// compute against, and no reason to pay for a query.
+func TestDerivedIsANoOpForAnOrdinaryPage(t *testing.T) {
+	s := testServer(t)
+	uid, _ := signedIn(t, s, "plain@example.test")
+	ws := s.firstWorkspaceOf(t, uid)
+	id := s.makePage(t, ws, uid, "", "Just a page", `{"note":"kept"}`)
+
+	p, err := s.getPage(id)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	before := string(p.Props)
+	s.fillDerivedForPage(&user{ID: uid}, p)
+	if string(p.Props) != before {
+		t.Errorf("props changed: %s → %s", before, p.Props)
+	}
+}
+
+// A progress bar without a formula. A formula would have to divide, and 0 of 0
+// related rows is a division by zero — which renders as "⚠ division by zero" in
+// the column of every newly created row, forever.
+func TestRollupPercent(t *testing.T) {
+	s := testServer(t)
+	uid, _ := signedIn(t, s, "pct@example.test")
+	u := &user{ID: uid}
+	ws := s.firstWorkspaceOf(t, uid)
+
+	systems := s.makeCollection(t, ws, uid, "Systems", `[{"id":"name","name":"Name","type":"text"}]`)
+	tasks := s.makeCollection(t, ws, uid, "Tasks", `[
+		{"id":"system","name":"System","type":"relation","relationCollection":"`+systems+`"},
+		{"id":"status","name":"Status","type":"select","options":[{"id":"done","name":"Done"}]}]`)
+	if _, err := s.mcpUpdateSchema(systems, json.RawMessage(`[
+		{"name":"Tasks","type":"backrelation","backrelationCollection":"`+tasks+`","backrelationProp":"system"},
+		{"name":"Progress","type":"rollup","rollupRelation":"tasks","rollupTarget":"status","rollupAgg":"percent",
+		 "rollupWhereProp":"status","rollupWhereOp":"is","rollupWhereValue":"done","numberDisplay":"bar"}]`), nil); err != nil {
+		t.Fatalf("schema: %v", err)
+	}
+
+	withTasks := s.makeRow(t, ws, uid, systems, "Busy", `{}`)
+	s.makeRow(t, ws, uid, tasks, "A", `{"system":["`+withTasks+`"],"status":"done"}`)
+	s.makeRow(t, ws, uid, tasks, "B", `{"system":["`+withTasks+`"],"status":"done"}`)
+	s.makeRow(t, ws, uid, tasks, "C", `{"system":["`+withTasks+`"],"status":"open"}`)
+	s.makeRow(t, ws, uid, tasks, "D", `{"system":["`+withTasks+`"],"status":"open"}`)
+	// A system with NO tasks at all: the case a formula cannot survive.
+	empty := s.makeRow(t, ws, uid, systems, "Fresh", `{}`)
+
+	schema, _, err := s.loadCollection(systems)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	rows := []map[string]any{
+		{"id": withTasks, "props": map[string]any{}},
+		{"id": empty, "props": map[string]any{}},
+	}
+	s.computeDerived(u, parseSchema(mustJSON(t, schema)), rows)
+
+	if got, _ := toNumber(rows[0]["props"].(map[string]any)["progress"]); got != 50 {
+		t.Errorf("two of four done is %v, want 50", got)
+	}
+	got := rows[1]["props"].(map[string]any)["progress"]
+	if n, ok := toNumber(got); !ok || n != 0 {
+		t.Errorf("a system with no tasks should be 0, got %#v — a formula would say \"division by zero\" here", got)
 	}
 }

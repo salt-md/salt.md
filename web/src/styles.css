@@ -2092,12 +2092,17 @@ button {
 }
 
 .card-chips,
+/* Facts wrap, so the eye needs to see where one ends. With a single 6px gap
+   the space between a label and its value (4px) was almost the space between
+   two whole facts, and "Next check 01.10.2026 Open 4" read as one run-on line
+   with "Done 3" adrift underneath. Wide between facts, tight within one. */
 .card-facts,
 .card-footline {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  column-gap: 14px;
+  row-gap: 3px;
 }
 
 /* A fact carries its field name, because "55" and a second date say nothing
@@ -7955,4 +7960,15 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
 .where-values .form-chip {
   padding: 3px 9px;
   font-size: 12.5px;
+}
+
+/* The page topbar on a phone. Six icons side by side made the head of the page
+   look busier than its content, so only the star, the panel toggle and the
+   overflow menu stay; the rest come back as items inside that menu. Nothing
+   becomes unreachable — it just stops competing for the same 40 pixels. */
+@media (max-width: 640px) {
+  .topbar-wide-only { display: none; }
+}
+@media (min-width: 641px) {
+  .menu-item.narrow-only, .menu-sep.narrow-only { display: none; }
 }

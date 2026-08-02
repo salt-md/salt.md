@@ -21,7 +21,7 @@ type propDef struct {
 	// rollup
 	RollupRelation string `json:"rollupRelation"`
 	RollupTarget   string `json:"rollupTarget"`
-	RollupAgg      string `json:"rollupAgg"` // sum|count|avg|min|max
+	RollupAgg      string `json:"rollupAgg"` // sum|count|avg|min|max|percent
 	// Optional condition on the related rows: count/sum only those where
 	// RollupWhereProp <op> RollupWhereValue. Without it a rollup can say how
 	// many tasks a project has, but not how many are done — which is the one
@@ -182,6 +182,19 @@ func (s *Server) computeDerived(u *user, schema []propDef, rows []map[string]any
 				}
 				vals = append(vals, target[ru.RollupTarget])
 			}
+			// "percent" is the share of the related rows that meet the condition,
+			// and it exists so a progress bar needs no formula. A formula would
+			// have to divide, and 0 of 0 related rows is a division by zero — which
+			// renders as an error message in the column of every newly created row.
+			// Here it is simply 0.
+			if ru.RollupAgg == "percent" {
+				if n := len(related[i]); n > 0 {
+					props[ru.ID] = math.Round(float64(len(vals))/float64(n)*1000) / 10
+				} else {
+					props[ru.ID] = 0
+				}
+				continue
+			}
 			props[ru.ID] = aggregate(ru.RollupAgg, vals)
 		}
 	}
@@ -204,6 +217,35 @@ func (s *Server) computeDerived(u *user, schema []propDef, rows []map[string]any
 				props[f.ID] = val
 			}
 		}
+	}
+}
+
+// fillDerivedForPage computes a single row's derived properties.
+//
+// computeDerived ran in exactly one place: the query that returns a
+// collection's ROWS. Open the same row as a PAGE and nobody computed anything,
+// so the backrelation and every rollup rendered as an em dash — while the board
+// two clicks away showed the numbers. The value was never missing; this route
+// simply never asked for it.
+//
+// A no-op for anything that is not a row: a page whose parent is not a database
+// has no schema to compute against.
+func (s *Server) fillDerivedForPage(u *user, p *page) {
+	if p.ParentID == nil || *p.ParentID == "" {
+		return
+	}
+	var schemaJSON string
+	if s.db.QueryRow(`SELECT schema FROM collections WHERE page_id = ?`, *p.ParentID).Scan(&schemaJSON) != nil {
+		return
+	}
+	var props map[string]any
+	if json.Unmarshal(p.Props, &props) != nil || props == nil {
+		props = map[string]any{}
+	}
+	rows := []map[string]any{{"id": p.ID, "props": props}}
+	s.computeDerived(u, parseSchema(schemaJSON), rows)
+	if b, err := json.Marshal(props); err == nil {
+		p.Props = b
 	}
 }
 

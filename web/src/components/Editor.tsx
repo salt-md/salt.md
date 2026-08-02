@@ -658,11 +658,11 @@ function PageHeader({
           ))}
         </nav>
         <div className="topbar-right">
-          {/* Who else is on the page right now. Presence used to be
-              gesendet (awareness), aber NIRGENDS angezeigt — man arbeitete zu
-              zweit im selben Dokument, ohne es zu merken. */}
+          {/* Who else is on the page right now. Presence was already being SENT
+              (awareness) but shown nowhere — two people worked in the same
+              document without either of them noticing. */}
           {peers.length > 0 && (
-            <div className="presence" title={peers.map((p) => p.name).join(', ') + ' auch hier'}>
+            <div className="presence" title={t('Also here: {names}').replace('{names}', peers.map((p) => p.name).join(', '))}>
               {peers.slice(0, 3).map((p, i) => (
                 <span key={i} className="presence-dot" style={{ background: p.avatar ? 'transparent' : p.color }}>
                   {p.avatar ? <img src={p.avatar} alt="" /> : initials(p.name)}
@@ -672,7 +672,7 @@ function PageHeader({
             </div>
           )}
           <button
-            className={'icon-btn' + (commentsHidden ? ' comments-off' : '')}
+            className={'icon-btn topbar-wide-only' + (commentsHidden ? ' comments-off' : '')}
             title={commentsHidden ? t('Show comments') : t('Hide comments')}
             onClick={() => {
               if (commentsHidden) {
@@ -695,20 +695,20 @@ function PageHeader({
           </button>
           <button
             className={'icon-btn' + (favorite ? ' active-star' : '')}
-            title={favorite ? 'Remove from favorites' : 'Add to favorites'}
+            title={favorite ? t('Remove from favorites') : t('Add to favorites')}
             onClick={() => onToggleFavorite(pageId)}
           >
             <Star size={17} fill={favorite ? 'currentColor' : 'none'} />
           </button>
           <button
-            className={'icon-btn' + (visibility === 'private' ? ' active-star' : '')}
-            title={visibility === 'private' ? 'Private (only you) — click to share with workspace' : 'Visible to workspace — click to make private'}
+            className={'icon-btn topbar-wide-only' + (visibility === 'private' ? ' active-star' : '')}
+            title={visibility === 'private' ? t('Private (only you) — click to share with the workspace') : t('Visible to the workspace — click to make it private')}
             onClick={togglePrivate}
           >
             {visibility === 'private' ? <Lock size={17} /> : <LockOpen size={17} />}
           </button>
           <div className="share-wrap" ref={shareWrapRef}>
-            <button className="icon-btn" title={t('Share to web (read-only link)')} onClick={openShare}>
+            <button className="icon-btn topbar-wide-only" title={t('Share to web (read-only link)')} onClick={openShare}>
               <Globe size={17} />
             </button>
             {shareOpen && (
@@ -809,6 +809,45 @@ function PageHeader({
                   }}
                 >
                   <History size={15} /> {t('Version history')}
+                </button>
+                {/* On a phone the topbar keeps only the star, the panel and this
+                    menu — six icons side by side made the head of the page look
+                    busier than its content. The three that step aside come back
+                    here, so nothing becomes unreachable. */}
+                <div className="menu-sep narrow-only" />
+                <button
+                  className="menu-item narrow-only"
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    if (commentsHidden) {
+                      showComments();
+                    } else {
+                      setCommentsHidden(true);
+                      localStorage.setItem('salt-comments-hidden', '1');
+                    }
+                  }}
+                >
+                  {commentsHidden ? <MessageSquareOff size={15} /> : <MessageSquare size={15} />}{' '}
+                  {commentsHidden ? t('Show comments') : t('Hide comments')}
+                </button>
+                <button
+                  className="menu-item narrow-only"
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    togglePrivate();
+                  }}
+                >
+                  {visibility === 'private' ? <Lock size={15} /> : <LockOpen size={15} />}{' '}
+                  {visibility === 'private' ? t('Make it visible to the workspace') : t('Make it private')}
+                </button>
+                <button
+                  className="menu-item narrow-only"
+                  onClick={() => {
+                    setOverflowOpen(false);
+                    openShare();
+                  }}
+                >
+                  <Globe size={15} /> {t('Share to web (read-only link)')}
                 </button>
                 {canEdit && (
                   <button

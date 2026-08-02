@@ -186,7 +186,7 @@ export interface PropDef {
   // rollup: aggregate a target property over a relation
   rollupRelation?: string;
   rollupTarget?: string;
-  rollupAgg?: 'sum' | 'count' | 'avg' | 'min' | 'max';
+  rollupAgg?: 'sum' | 'count' | 'avg' | 'min' | 'max' | 'percent';
   // rollup: count/sum only the related rows meeting this condition — the
   // difference between "how many tasks" and "how many are done".
   rollupWhereProp?: string;

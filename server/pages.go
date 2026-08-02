@@ -142,6 +142,8 @@ func (s *Server) handleGetPage(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 500, err.Error())
 		return
 	}
+	// A database row opened as a page must show the same numbers its card shows.
+	s.fillDerivedForPage(requestUser(r), p)
 	writeJSON(w, p)
 }
 

@@ -33,6 +33,11 @@ const AGGS: { value: NonNullable<PropDef['rollupAgg']>; label: string }[] = [
   { value: 'avg', label: 'Average' },
   { value: 'min', label: 'Min' },
   { value: 'max', label: 'Max' },
+  // Percent is the share of the related rows that meet the condition. It exists
+  // so a progress bar needs no formula: a formula would have to divide, and
+  // 0 of 0 related rows is a division by zero — an error message in the column
+  // of every newly created row.
+  { value: 'percent', label: 'Percent' },
 ];
 
 const OPTION_COLORS = OPTION_HEXES;
