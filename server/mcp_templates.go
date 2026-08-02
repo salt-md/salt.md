@@ -70,7 +70,7 @@ func (s *Server) mcpListTemplates(u *user) (string, error) {
 // read-only template can still be a starting point for everyone.
 func (s *Server) mcpCreateFromTemplate(u *user, templateID, title string) (string, error) {
 	if templateID == "" {
-		return "", fmt.Errorf("template_id is required — call list_templates for the ids")
+		return "", fmt.Errorf("template_id is required — call list with kind=\"templates\" for the ids")
 	}
 	if !s.canRead(u.ID, templateID) {
 		return "", fmt.Errorf("template %q not found", templateID)
@@ -82,7 +82,7 @@ func (s *Server) mcpCreateFromTemplate(u *user, templateID, title string) (strin
 		return "", err
 	}
 	if isTemplate == 0 {
-		return "", fmt.Errorf("page %q is not a template — call list_templates, or duplicate_page for an ordinary copy", templateID)
+		return "", fmt.Errorf("page %q is not a template — call list with kind=\"templates\", or duplicate_page for an ordinary copy", templateID)
 	}
 	nid, err := s.duplicatePage(templateID, u.ID, true, false)
 	if err == sql.ErrNoRows {

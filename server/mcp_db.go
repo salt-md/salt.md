@@ -177,6 +177,16 @@ func (s *Server) mcpCreateDatabase(u *user, title, parentID, wsID string, schema
 	return fmt.Sprintf("Created database %q with id %s", title, id), nil
 }
 
+// mcpMovePageOrWorkspace is the move half of update_page, which absorbed the
+// former move_page tool. A target workspace takes precedence: that is a move of
+// the whole subtree, not a re-parenting inside the same one.
+func (s *Server) mcpMovePageOrWorkspace(u *user, pageID, parentID, wsID string) (string, error) {
+	if wsID != "" {
+		return s.mcpMoveToWorkspace(u, pageID, wsID)
+	}
+	return s.mcpMovePage(u.ID, pageID, parentID)
+}
+
 // mcpMovePage reparents a page (empty parentID = top level) with a cycle guard.
 // IMPORTANT: with SetMaxOpenConns(1) an open tx holds the only connection, so
 // all access checks that query via s.db MUST happen BEFORE tx.Begin — calling

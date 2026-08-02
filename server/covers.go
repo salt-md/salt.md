@@ -44,4 +44,4 @@ const coverHint = `A page cover. Two forms only: ` +
 	`"gradient:linear-gradient(120deg,#a8edea,#5b86e5)" or an uploaded path ` +
 	`like "/files/abc123.jpg". An external image URL is refused, because every ` +
 	`viewer of the page would then fetch it from that host. ` +
-	`Call list_cover_presets for the gradients the interface itself offers.`
+	`Call list with kind="cover_presets" for the gradients the interface itself offers.`

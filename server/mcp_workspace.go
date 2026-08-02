@@ -38,7 +38,7 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 		"can_write":   scope != "read",
 		// What this access deliberately cannot do — so an agent does not even try
 		// and reads a failure correctly. This list used to say "user accounts"
-		// although list_users exists, and "backup/restore" although the same token
+		// although list with kind="users" exists, and "backup/restore" although the same token
 		// reached the backup through the REST interface. Both are accurate now:
 		// administration requires a sign-in in the browser.
 		"not_available_via_mcp": []string{
@@ -47,7 +47,7 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 			"workspace membership and roles",
 			"applying workspace rules (workspace admins may submit a draft via propose_workspace_rules; applying it stays in the browser)",
 		},
-		"note": "list_users names only the people you share a workspace with; " +
+		"note": "list with kind=\"users\" names only the people you share a workspace with; " +
 			"account administration needs a signed-in browser session.",
 	}
 	if u.TokenWorkspaces == nil {

@@ -458,7 +458,7 @@ func (s *Server) mcpCreateWorkspaceTarget(u *user, wsID string) (string, error) 
 			return "", fmt.Errorf("no workspace available")
 		}
 		if !u.tokenCanReach(wsID) {
-			return "", fmt.Errorf("this token cannot create top-level pages in the default workspace; pass workspace_id (see list_workspaces) or a parent_id inside an allowed workspace")
+			return "", fmt.Errorf("this token cannot create top-level pages in the default workspace; pass workspace_id (see list with kind=\"workspaces\") or a parent_id inside an allowed workspace")
 		}
 		return wsID, nil
 	}
