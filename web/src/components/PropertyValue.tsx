@@ -17,6 +17,17 @@ interface Props {
   compact?: boolean;
 }
 
+// idList reads a list-shaped value (relation, multiselect). A single id stored
+// WITHOUT its list counts as a one-element list: agents used to write
+// {"system": "abc"} and the server stored it verbatim, after which this cell
+// rendered nothing at all while the row still grouped and filtered correctly —
+// so the property looked switched off rather than misshapen. Writes are
+// normalised on the server now; this keeps older rows readable.
+export function idList(value: unknown): string[] {
+  if (Array.isArray(value)) return value as string[];
+  return typeof value === 'string' && value !== '' ? [value] : [];
+}
+
 function chip(opt: PropOption | undefined, fallback: string) {
   const color = opt?.color ?? '#999';
   return (
@@ -57,13 +68,7 @@ function SelectCell({
         : (o as PropOption),
     )
     .filter((o) => o && typeof o.name === 'string');
-  const vals = multi
-    ? Array.isArray(value)
-      ? (value as string[])
-      : []
-    : value
-      ? [String(value)]
-      : [];
+  const vals = multi ? idList(value) : value ? [String(value)] : [];
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [colorFor, setColorFor] = useState<string | null>(null); // option id being recoloured
@@ -645,7 +650,7 @@ export function loadRelationOptions(colId: string, force = false): Promise<RelOp
 
 function RelationValue({ def, value, onChange, readOnly, compact }: Props) {
   const targetId = def.relationCollection;
-  const ids = Array.isArray(value) ? (value as string[]) : [];
+  const ids = idList(value);
   const [options, setOptions] = useState<RelOption[]>([]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -784,7 +789,7 @@ export default function PropertyValue({ def, value, onChange, onOptionsChange, r
       );
     }
     case 'multiselect': {
-      const vals = Array.isArray(value) ? (value as string[]) : [];
+      const vals = idList(value);
       if (compact || ro) {
         return (
           <span className="prop-multi">

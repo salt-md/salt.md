@@ -528,17 +528,30 @@ func (s *Server) mcpBatchSetProperties(userID string, updates json.RawMessage) (
 	return fmt.Sprintf("Updated properties on %d row(s)", done), nil
 }
 
-// resolveOptionValues translates select values that were written as a NAME
-// into the matching option id.
+// normalizePropValues brings a property patch into the shape the rest of the
+// code reads, before any of it is stored. Two corrections, both of them from
+// watching agents write perfectly reasonable JSON that then went quiet.
 //
-// What prompted it: an agent naturally sets `{"status": "Planned"}` — the name
-// it handed out itself when creating the column. What has to be stored is the
-// id ("planned"). Left unresolved the values did land in the database, but no
-// board column and no filter found them again: 51 values were lying around as
-// quiet dead entries. The matching is case insensitive; if nothing matches the
-// value stays as it is (then it is not a select field, or it is a new value
-// that add_select_option is meant to add).
-func (s *Server) resolveOptionValues(pageID string, patch map[string]json.RawMessage) {
+// A select value written as a NAME becomes the matching option id. An agent
+// naturally sets `{"status": "Planned"}` — the name it handed out itself when
+// creating the column. What has to be stored is the id ("planned"). Left
+// unresolved the values did land in the database, but no board column and no
+// filter found them again: 51 values were lying around as quiet dead entries.
+// The matching is case insensitive; if nothing matches the value stays as it is
+// (then it is not a select field, or it is a new value that add_select_option
+// is meant to add).
+//
+// A LIST-SHAPED property (relation, multiselect) written as a single value
+// becomes a one-element list. `{"system": "abc"}` is the obvious way to link
+// one row to one other row, and it used to store exactly like that. Nothing
+// looked wrong afterwards — the row still grouped into its board column and
+// still matched its filter, because both compare loosely — while every
+// backrelation and every rollup passed straight over it and the chip stayed
+// blank on the card. Ten rows sat that way for weeks.
+//
+// The wrap runs AFTER the name resolution above, so `{"tags": "Bug"}` on a
+// multiselect ends up as ["bug"] and not ["Bug"].
+func (s *Server) normalizePropValues(pageID string, patch map[string]json.RawMessage) {
 	var parentID string
 	if err := s.db.QueryRow(`SELECT COALESCE(parent_id, '') FROM pages WHERE id = ?`, pageID).Scan(&parentID); err != nil || parentID == "" {
 		return
@@ -547,11 +560,19 @@ func (s *Server) resolveOptionValues(pageID string, patch map[string]json.RawMes
 	if err != nil {
 		return
 	}
-	byProp := map[string]map[string]string{} // propID -> kleingeschriebener Name/Id -> Id
+	byProp := map[string]map[string]string{} // propID -> lowercased name or id -> id
+	listShaped := map[string]bool{}
 	for _, p := range schema {
 		id, _ := p["id"].(string)
+		if id == "" {
+			continue
+		}
+		switch t, _ := p["type"].(string); t {
+		case "relation", "multiselect":
+			listShaped[id] = true
+		}
 		opts, _ := p["options"].([]any)
-		if id == "" || len(opts) == 0 {
+		if len(opts) == 0 {
 			continue
 		}
 		m := map[string]string{}
@@ -570,37 +591,44 @@ func (s *Server) resolveOptionValues(pageID string, patch map[string]json.RawMes
 		byProp[id] = m
 	}
 	for prop, raw := range patch {
-		m, ok := byProp[prop]
-		if !ok {
-			continue
-		}
-		// Einzelwert
-		var one string
-		if json.Unmarshal(raw, &one) == nil {
-			if id, hit := m[strings.ToLower(one)]; hit && id != one {
-				if b, err := json.Marshal(id); err == nil {
-					patch[prop] = b
+		if m, ok := byProp[prop]; ok {
+			// Single value
+			var one string
+			if json.Unmarshal(raw, &one) == nil {
+				if id, hit := m[strings.ToLower(one)]; hit && id != one {
+					if b, err := json.Marshal(id); err == nil {
+						raw = b
+					}
 				}
-			}
-			continue
-		}
-		// Mehrfachauswahl
-		var many []string
-		if json.Unmarshal(raw, &many) == nil {
-			out, changed := make([]string, len(many)), false
-			for i, v := range many {
-				out[i] = v
-				if id, hit := m[strings.ToLower(v)]; hit && id != v {
-					out[i] = id
-					changed = true
-				}
-			}
-			if changed {
-				if b, err := json.Marshal(out); err == nil {
-					patch[prop] = b
+			} else {
+				// Multiple choice
+				var many []string
+				if json.Unmarshal(raw, &many) == nil {
+					out, changed := make([]string, len(many)), false
+					for i, v := range many {
+						out[i] = v
+						if id, hit := m[strings.ToLower(v)]; hit && id != v {
+							out[i] = id
+							changed = true
+						}
+					}
+					if changed {
+						if b, err := json.Marshal(out); err == nil {
+							raw = b
+						}
+					}
 				}
 			}
 		}
+		if listShaped[prop] {
+			var one string
+			if json.Unmarshal(raw, &one) == nil && one != "" {
+				if b, err := json.Marshal([]string{one}); err == nil {
+					raw = b
+				}
+			}
+		}
+		patch[prop] = raw
 	}
 }
 

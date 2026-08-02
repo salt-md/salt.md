@@ -320,18 +320,31 @@ func (s *Server) backrelationIDs(u *user, def propDef, rows []map[string]any) []
 	return out
 }
 
+// relationIDs reads a relation's stored value, which is a list of target ids.
+//
+// A single id stored WITHOUT its list counts too. Writes are normalised now
+// (normalizePropValues), but rows written before that are already sitting in
+// databases, and reading them strictly is what made them invisible in the first
+// place: the row kept its board column and its filter, so nothing looked
+// broken, while backrelations and rollups skipped it. Accepting the bare string
+// here heals those rows on the next read instead of needing a migration.
 func relationIDs(v any) []string {
-	arr, ok := v.([]any)
-	if !ok {
-		return nil
-	}
-	var ids []string
-	for _, x := range arr {
-		if s, ok := x.(string); ok {
-			ids = append(ids, s)
+	switch t := v.(type) {
+	case []any:
+		var ids []string
+		for _, x := range t {
+			if s, ok := x.(string); ok {
+				ids = append(ids, s)
+			}
 		}
+		return ids
+	case string:
+		if t == "" {
+			return nil
+		}
+		return []string{t}
 	}
-	return ids
+	return nil
 }
 
 func aggregate(agg string, vals []any) any {

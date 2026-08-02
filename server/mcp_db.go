@@ -63,10 +63,11 @@ func (s *Server) mcpSetProperties(pageID string, properties json.RawMessage) (st
 	if err := json.Unmarshal(properties, &patch); err != nil {
 		return "", fmt.Errorf("properties must be a JSON object")
 	}
-	// Map select values that arrive as a NAME instead of an id onto the id.
+	// Map select values that arrive as a NAME onto the id, and wrap a single
+	// value written to a list-shaped property into a list.
 	// MUST come before tx.Begin(): the pool holds exactly ONE connection, so a
 	// query inside the open transaction would block forever.
-	s.resolveOptionValues(pageID, patch)
+	s.normalizePropValues(pageID, patch)
 
 	tx, err := s.db.Begin()
 	if err != nil {

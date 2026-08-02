@@ -17,7 +17,7 @@ import type {
   Sort,
   ViewDef,
 } from '../types';
-import PropertyValue, { PersonStack, loadRelationOptions, type RelOption } from './PropertyValue';
+import PropertyValue, { PersonStack, idList, loadRelationOptions, type RelOption } from './PropertyValue';
 import { planCard, isBlank, zoneOf, contactKind, needsLabel } from '../cardLayout';
 import SchemaEditor from './SchemaEditor';
 import GalleryView from './GalleryView';
@@ -813,7 +813,7 @@ export function formField(def: PropDef, value: unknown, onChange: (v: unknown) =
         </select>
       );
     case 'multiselect': {
-      const vals = Array.isArray(value) ? (value as string[]) : [];
+      const vals = idList(value);
       if (!def.options?.length) return <span className="form-hint">{t('No options defined')}</span>;
       return (
         <div className="form-chips">
