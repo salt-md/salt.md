@@ -545,7 +545,26 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production runs `1.6.9`** (2026-08-02 19:35), the first release deployed the
+**Production runs `1.6.10`** (2026-08-02 22:45). The big one for agents: the MCP
+catalogue went **55 → 31 tools** (the seven `list_*` became `list(kind:)`, seven
+duplicates folded into the tools they belonged to, and pairs like
+share/unshare, trash/restore, create_view/update_view merged), views became
+configurable over MCP at all, `get_graph` learned edge kinds and orphans, and
+agents can announce what they are working on (`working_on`, shown live with the
+agent's own logo). Verified by behaviour: `agent-presence` and `agent-work` in
+the served bundle, `/api/presence` answering `401` where an unknown path falls
+through to the SPA with `200`, and — the neat one — `batch_set_properties`
+reporting "unknown tool" through the connector, which is the consolidation
+proving itself from the outside. Backup:
+`/root/salt-backups/salt-data-20260802-224517-vor-1.6.10.tar.gz` (376M, gzip
+verified); rollback binary `/opt/salt/salt.bak-1.6.9`.
+
+**A note for the next agent session:** a connected MCP client keeps the tool
+list it fetched at connect time. After a release that renames tools, the old
+names linger in a running session until it reconnects — that is not a failed
+deploy, and calling the old name to "check" only proves the client is stale.
+
+**Production ran `1.6.9`** (2026-08-02 19:35), the first release deployed the
 systemd way rather than by image swap: `wget` the release asset, `sha256sum -c`
 against `SHA256SUMS.txt`, then stop + volume backup + `install -m 755` + start
 in one command. Verified by behaviour — `relation-icon` and `page-icon-lucide`
