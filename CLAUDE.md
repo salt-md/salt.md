@@ -537,7 +537,23 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production runs `1.6.8` and is no longer Docker** (2026-08-01 00:17). On his
+**Production runs `1.6.9`** (2026-08-02 19:35), the first release deployed the
+systemd way rather than by image swap: `wget` the release asset, `sha256sum -c`
+against `SHA256SUMS.txt`, then stop + volume backup + `install -m 755` + start
+in one command. Verified by behaviour — `relation-icon` and `page-icon-lucide`
+in the served bundle, and an `update_schema` carrying a `backrelation`, which
+the previous build refused. Startup is four lines, `16000 MB available`, no
+index rebuild. Backup:
+`/root/salt-backups/salt-data-20260802-193532-vor-1.6.9.tar.gz` (376M, gzip
+verified); rollback binary `/opt/salt/salt.bak-1.6.8` sits beside it.
+
+Two things worth keeping from that deploy: the running binary's sha256 matched
+the published `v1.6.8` asset exactly, which is how you PROVE production runs
+the artefact and not something hand-built — do that check before every swap.
+And disk is no longer tight: **25G free of 32G** after the owner grew it, so the
+"two more deploys and it is tight" warning that used to stand here is gone.
+
+**Production ran `1.6.8` and stopped being Docker** (2026-08-01 00:17). On his
 word ("mach das") it was moved from the container to an `install.sh`-style
 systemd service: binary at `/opt/salt/salt`, data at `/opt/salt/data`, still
 port 8420. The reason was the memory reading below — a container in an LXC
