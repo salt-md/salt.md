@@ -32,7 +32,21 @@ var validPropTypes = map[string]bool{
 	// checklist holds sub-tasks: [{"id","text","done"}]. Its progress is
 	// DERIVED (done/total), so there is no percentage to keep in sync.
 	"checklist": true,
+	// backrelation — the reverse of a relation someone else declared. It was
+	// missing here for two releases after the type shipped: the browser could
+	// build the column and an agent could not, so the one database this feature
+	// was written for never got it, while the task saying so read "done".
+	"backrelation": true,
 }
+
+// propTypeNames is the same set in reading order, for the error an agent gets
+// and for the tool descriptions. It was spelled out by hand in four places, and
+// "backrelation" reached none of them — a test keeps it level with the map now.
+var propTypeNames = []string{"text", "number", "select", "multiselect", "date",
+	"checkbox", "checklist", "url", "person", "relation", "backrelation",
+	"rollup", "formula"}
+
+func propTypeList() string { return strings.Join(propTypeNames, ", ") }
 
 var validViewTypes = map[string]bool{
 	"table": true, "board": true, "list": true, "gallery": true,
@@ -59,10 +73,17 @@ func normalizeSchema(props []map[string]any) ([]map[string]any, error) {
 	for _, p := range props {
 		typ := str(p, "type")
 		if typ != "" && !validPropTypes[typ] {
-			return nil, fmt.Errorf("unknown property type %q on %q — use one of: text, number, select, multiselect, date, checkbox, checklist, url, person, relation, rollup, formula", typ, str(p, "name"))
+			return nil, fmt.Errorf("unknown property type %q on %q — use one of: %s", typ, str(p, "name"), propTypeList())
 		}
 		if str(p, "name") == "" && str(p, "id") == "" {
 			return nil, fmt.Errorf("each property needs a name")
+		}
+		// A backrelation without its two coordinates is not a broken column, it
+		// is an EMPTY one: backrelationIDs returns nothing and the property reads
+		// as "no tasks point here", which is indistinguishable from the truth.
+		// Say so now rather than let someone trust a zero.
+		if typ == "backrelation" && (str(p, "backrelationCollection") == "" || str(p, "backrelationProp") == "") {
+			return nil, fmt.Errorf("backrelation %q needs backrelationCollection (the database pointing at this one) and backrelationProp (the relation property over there)", str(p, "name"))
 		}
 		if str(p, "id") == "" {
 			id := slugID(str(p, "name"), taken)
@@ -84,7 +105,7 @@ func normalizeSchema(props []map[string]any) ([]map[string]any, error) {
 		out := make([]any, 0, len(list))
 		for _, o := range list {
 			switch v := o.(type) {
-			case string: // bequeme Kurzform: ["Ideen", "Geplant"]
+			case string: // the convenient short form: ["Ideas", "Planned"]
 				if v == "" {
 					continue
 				}
@@ -235,7 +256,7 @@ func (s *Server) mcpUpdateSchema(pageID string, props json.RawMessage, remove []
 			return "", fmt.Errorf("each property needs at least a name")
 		}
 		if typ != "" && !validPropTypes[typ] {
-			return "", fmt.Errorf("unknown property type %q — use one of: text, number, select, multiselect, date, checkbox, checklist, url, person, relation, rollup, formula", typ)
+			return "", fmt.Errorf("unknown property type %q — use one of: %s", typ, propTypeList())
 		}
 		// An existing property? Then merge field by field — whatever the agent
 		// does not name stays untouched.

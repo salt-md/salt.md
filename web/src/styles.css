@@ -2701,6 +2701,19 @@ button {
   white-space: nowrap;
 }
 
+/* A row icon may be an emoji (text) or an SVG. Centring the box rather than the
+   glyph keeps both sitting on the same line as the title. */
+.relation-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.relation-chip .relation-icon {
+  vertical-align: -2px;
+}
+
 .relation-menu {
   position: absolute;
   z-index: 40;

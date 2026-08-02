@@ -1283,7 +1283,9 @@ export default function Sidebar({
 // initial in a colour derived from the name — replaces the old 🧂 placeholder.
 function WorkspaceAvatar({ ws }: { ws?: Workspace }) {
   if (ws?.image) return <img className="ws-img" src={ws.image} alt="" />;
-  if (ws?.icon) return <span className="ws-emoji">{ws.icon}</span>;
+  // Not only an emoji: a workspace icon takes the same four forms a page icon
+  // does, and printing it raw showed "lucide:Rocket" as text.
+  if (ws?.icon) return <span className="ws-emoji"><PageIcon icon={ws.icon} size={16} /></span>;
   const name = ws?.name ?? 'Salt.md';
   return <span className={'ws-letter ' + tagColorClass(name)}>{name.charAt(0).toUpperCase()}</span>;
 }

@@ -6,6 +6,7 @@ import { OPTION_HEXES, optionPalette, optionSlug } from '../selectOptions';
 import { daysUntil, formatDay, formatNumber } from '../format';
 import { initials, nameColor } from './CommentsSection';
 import { Check, Link2 as LinkIcon, Plus, Trash2 } from 'lucide-react';
+import { PageIcon } from '../pageIcon';
 import { t } from '../i18n';
 
 interface Props {
@@ -680,11 +681,19 @@ function RelationValue({ def, value, onChange, readOnly, compact }: Props) {
 
   if (!targetId) return <span className="prop-empty">{t('No target')}</span>;
 
+  // A row's icon is any of the four kinds a page icon can be, so it goes
+  // through PageIcon like everywhere else. Printed raw, a Lucide or MDI icon
+  // arrived as the literal text "lucide:PhoneCall" — visible in the picker on
+  // every row whose icon was not an emoji.
   const chips = (
     <span className="prop-multi">
       {ids.map((id) => (
         <span key={id} className="prop-chip relation-chip" style={{ background: '#3b6fb52e', color: '#3b6fb5' }}>
-          {iconOf(id) && <span>{iconOf(id)} </span>}
+          {iconOf(id) && (
+            <span className="relation-icon">
+              <PageIcon icon={iconOf(id)} size={14} />
+            </span>
+          )}
           {titleOf(id)}
         </span>
       ))}
@@ -732,7 +741,11 @@ function RelationValue({ def, value, onChange, readOnly, compact }: Props) {
                 onClick={() => toggle(o.id)}
               >
                 <span className="relation-check">{ids.includes(o.id) ? '✓' : ''}</span>
-                {o.icon && <span>{o.icon} </span>}
+                {o.icon && (
+                  <span className="relation-icon">
+                    <PageIcon icon={o.icon} size={16} />
+                  </span>
+                )}
                 {o.title || 'Untitled'}
               </button>
             ))}
