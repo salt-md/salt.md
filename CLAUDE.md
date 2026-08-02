@@ -9,7 +9,12 @@ Self-hosted Notion alternative. One Go binary serves the API, the MCP endpoint,
 the Yjs collab relay, an SSE change feed and the embedded React frontend.
 
 Go 1.25 · `modernc.org/sqlite` + FTS5 · **CGO_ENABLED=0** · React 18 / Vite /
-BlockNote / Yjs. ~18k lines Go, ~21k lines TypeScript.
+BlockNote / Yjs.
+
+(Line and file counts used to stand here and were wrong within weeks — 51 files
+when there were 70, 701 catalog entries when there were 814. Same failure as the
+version column that was removed from the server table below: a number nobody
+updates is worse than no number. Count it when you need it.)
 
 ## Build and run
 
@@ -22,13 +27,25 @@ make build      # frontend (npm) + backend, embeds web/dist via go:embed
 gate is load-bearing (see i18n below), so do not bypass it with a bare
 `vite build`.
 
-Env: `SALT_DATA` (data dir), `SALT_ADDR` (listen address).
+Env: `SALT_DATA` (data dir), `SALT_ADDR` (listen address), `SALT_MEMORY_MB`
+(how much memory to assume — see below).
+
+**Expensive work is sized to the machine** (`server/memlimit.go`). The PDF
+extraction limit and how many extractions run at once come from the memory the
+process believes it has: the cgroup cap first, then `/proc/meminfo`. A
+container with **no** cap is treated as a small machine (2 GB) rather than as
+large as its host — the host figure is not a promise, and assuming it is how a
+512 MB container talks itself into work that gets it killed. `SALT_MEMORY_MB`
+overrides everything and is the only answer for nested setups (Docker inside
+LXC), where neither source knows the truth. Getting this wrong only ever
+changes how much text reaches the search index, never whether an upload
+succeeds.
 
 ## Layout
 
 ```
 main.go              go:embed all:web/dist
-server/*.go          51 files, one concern each
+server/*.go          one concern per file
   db.go              schema, migrations, now()
   roles.go           permission model, sessionOnly/ownerOnly, break-glass
   lifecycle_account.go  deactivate / delete / hand over, stranded workspaces
@@ -50,8 +67,9 @@ web/src/
   serverErrors.ts    server error code → translated message
   components/LanguageTime.tsx  the settings dialog (language, region, zone,
                      clock, week start)
-  locales/de.json    German catalog (701 entries)
-  scripts/           check-i18n.mjs, check-format.mjs, translate.mjs
+  locales/de.json    German catalog
+  cardLayout.ts      which zone a property gets on a board card (W126)
+  scripts/           check-i18n.mjs, check-format.mjs, check-cardlayout.mjs
 docs/search-and-ai.md  design paper: local semantic search, stages 0-2
 ```
 
@@ -139,6 +157,32 @@ which nobody can translate, so it travels beside the sentence.
 translate from the code via `serverErrors.ts`. Use `httpErrorData` when a value
 (a count) has to travel too, so plural rules can run on the other side.
 
+**Derived properties are computed on read, never stored** (`server/derived.go`).
+Rollups, formulas and — since 1.6.6 — backrelations are filled into each row's
+props by `computeDerived`, in that order: a backrelation produces an id array
+shaped exactly like a relation's, so a rollup can aggregate over it. That order
+is what makes "how many of the tasks pointing at this system are done"
+expressible at all.
+
+A **backrelation** is the reverse of a relation somebody else declared
+("`backrelationCollection` + `backrelationProp`"). Storing the reverse side
+would mean keeping two lists in step on every write from both directions, and
+the first missed update leaves them disagreeing with no way to tell which is
+right. It costs one query plus a scan instead. **Permission checks are per row,
+same as a forward relation** — without them the column reveals that rows exist
+in collections the caller may not read.
+
+A **rollup may carry a condition** (`rollupWhereProp/Op/Value`). No condition
+means every related row counts, so rollups written before this existed keep
+their meaning. An unrecognised operator compares for equality rather than
+matching everything: the convenient reading would turn a typo into 100 % done.
+
+**A board card is zones, not a field list** (`web/src/cardLayout.ts`, W126), and
+`check-cardlayout.mjs` holds the mapping. A relation is a chip there; its
+reverse is `hidden`, because on a system row that would be every task pointing
+at it. The property a board groups by is dropped from its own cards, so showing
+a relation never repeats its column heading.
+
 **`db.SetMaxOpenConns(1)`.** A query issued inside an open cursor or
 transaction blocks the entire server. Drain rows (`rows.Close()`) before doing
 per-row work.
@@ -155,8 +199,30 @@ workspace. Administrative endpoints are wrapped in `sessionOnly`.
 
 ```bash
 go test ./...
-cd web && npm run check          # tsc + i18n check + timezone check
+go test ./server/ -run TestExtractPDFText -v   # one test, or a prefix
+go test ./server/ -run 'TestRollup|TestBackrelation' -v
+
+cd web && npm run check          # tsc + i18n + timezone + card layout
+node scripts/check-i18n.mjs --missing de       # what still needs translating
+node scripts/check-i18n.mjs --german           # German that slipped into code
+node scripts/check-cardlayout.mjs              # just the card zones
 ```
+
+`npm run check` is what `npm run build` runs first, so a failing check fails the
+build — that is deliberate, do not reach for a bare `vite build` to get around
+it.
+
+**Running the thing while developing**: the backend on its own port and Vite in
+front of it, which proxies `/api`, `/files` and `/collab`:
+
+```bash
+SALT_DATA=/tmp/salt-dev SALT_ADDR=:8420 go run .
+cd web && npx vite                             # SALT_PROXY if the port differs
+```
+
+The env names carry a `SALT_` prefix (`server.Env` prepends it). A bare
+`DATA=…` is silently ignored and the server writes into `./data` — which is how
+a stray `data/` directory once appeared inside the repo.
 
 Shell suites live in the session scratchpad, not the repo: `token.sh` (18),
 `suche.sh` (17), `login.sh` (12), `w105.sh` (67). They run a real binary on a
