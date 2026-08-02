@@ -70,8 +70,8 @@ var pageHrefRe = regexp.MustCompile(`(?:^|/)p/([0-9a-f]{32})/?$`)
 // the feature was invisible: agents kept writing plain links and wondering why
 // get_backlinks came back empty on pages they had just wired together.
 const pageLinkHint = `A Markdown link whose target is a page of this instance ` +
-	`(` + "`[Handbook](/p/<32-hex-id>)`" + `, or the absolute URL share_page ` +
-	`returns) becomes a REAL page link: it shows up in get_backlinks and in the ` +
+	`(` + "`[Handbook](/p/<32-hex-id>)`" + `, or the absolute URL set_sharing ` +
+	`returns) becomes a REAL page link: it shows up in get_links and in the ` +
 	`graph. Use it whenever you mention another page — a plain link navigates ` +
 	`but leaves the page an island.`
 

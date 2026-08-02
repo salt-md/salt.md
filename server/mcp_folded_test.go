@@ -135,10 +135,18 @@ func TestCreateFromTemplateFoldedIntoCreatePage(t *testing.T) {
 // get_graph promising to find orphans.
 func TestCatalogueNamesNoVanishedTool(t *testing.T) {
 	gone := []string{
+		// steps 1 and 2
 		"export_markdown", "get_schema", "add_select_option", "move_page",
 		"set_favorite", "create_from_template", "set_tag_color",
 		"list_pages", "list_templates", "list_tags", "list_workspaces",
 		"list_files", "list_users", "list_cover_presets",
+		// steps 3 to 10
+		"append_markdown", "prepend_markdown", "replace_content",
+		"get_page_history", "get_revision", "restore_revision",
+		"get_comments", "add_comment", "resolve_comment",
+		"share_page", "unshare_page", "trash_page", "restore_page",
+		"get_backlinks", "get_graph", "batch_set_properties",
+		"create_view", "update_view", "create_workspace",
 	}
 	b, err := json.Marshal(mcpTools)
 	if err != nil {

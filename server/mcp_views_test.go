@@ -191,12 +191,12 @@ func TestUpdateViewRefusesATypeChange(t *testing.T) {
 func TestUpdateViewIsOfferedToAgents(t *testing.T) {
 	var found map[string]any
 	for _, tool := range mcpTools {
-		if tool["name"] == "update_view" {
+		if tool["name"] == "set_view" {
 			found = tool
 		}
 	}
 	if found == nil {
-		t.Fatal("update_view is not in the tool list — an agent cannot call it")
+		t.Fatal("set_view is not in the tool list — an agent cannot call it")
 	}
 	b, _ := json.Marshal(found)
 	for _, want := range []string{"filters", "sort", "hidden", "view_id"} {
@@ -204,17 +204,10 @@ func TestUpdateViewIsOfferedToAgents(t *testing.T) {
 			t.Errorf("update_view does not offer %q", want)
 		}
 	}
-	// create_view must offer the same three, or the configuration would only be
-	// reachable in a second call.
-	for _, tool := range mcpTools {
-		if tool["name"] == "create_view" {
-			b, _ := json.Marshal(tool)
-			for _, want := range []string{"filters", "sort", "hidden"} {
-				if !strings.Contains(string(b), want) {
-					t.Errorf("create_view does not offer %q", want)
-				}
-			}
-		}
+	// It has to offer creating too — set_view without a view_id — or the two
+	// halves of the merge did not both survive.
+	if !strings.Contains(string(b), "type") {
+		t.Error("set_view does not offer type, so it cannot create a view")
 	}
 }
 
@@ -232,7 +225,7 @@ func TestUpdateViewRefusesAReadOnlyToken(t *testing.T) {
 
 	reader := &user{ID: uid, TokenScope: "read"}
 	args := json.RawMessage(`{"page_id":"` + tasks + `","view_id":"t","name":"Renamed"}`)
-	_, err := s.mcpCall(reader, "update_view", args, "")
+	_, err := s.mcpCall(reader, "set_view", args, "")
 	if err == nil {
 		t.Fatal("a read-only token must not be able to change a view")
 	}
