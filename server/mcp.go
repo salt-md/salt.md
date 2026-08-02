@@ -460,9 +460,13 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "get_graph",
-		"description": "Return the links between pages as edges {from, to, from_title, to_title}. Spans ALL workspaces you can reach unless you pass workspace_id. Use it to see clusters and how topics connect. LIMITS, so you do not read absence as evidence: only Markdown links count — page hierarchy, database rows and embeds produce no edge — and a page with no link at all does not appear, so this canNOT find orphans. Read-only.",
+		"description": "How the pages hang together. Edges are {from, to, from_title, to_title, kind}, where kind is \"link\" (a Markdown link), \"child\" (a sub-page), \"row\" (a row of a database) or \"embed\" (a database embedded in a page); pass kinds to keep only some. Also returns orphans — the pages with no connection at all — and counts. Spans ALL workspaces you can reach unless you pass workspace_id. The full node list is opt-in via include_nodes, because on a real instance it is thousands of entries. Read-only.",
 		"inputSchema": map[string]any{"type": "object",
-			"properties": map[string]any{"workspace_id": map[string]any{"type": "string", "description": "Limit to one workspace. Omit for all."}}},
+			"properties": map[string]any{
+				"workspace_id":  map[string]any{"type": "string", "description": "Limit to one workspace. Omit for all."},
+				"kinds":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Keep only these edge kinds: link | child | row | embed. Omit for all four."},
+				"include_nodes": map[string]any{"type": "boolean", "description": "Also return every page as a node. Off by default: it is large, and orphans already answer \"what is unconnected\"."},
+			}},
 	},
 	{
 		"name":        "whoami",
@@ -819,6 +823,9 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Rules string `json:"rules"`
 		// File index (W125).
 		Under string `json:"under"`
+		// Graph.
+		Kinds        []string `json:"kinds"`
+		IncludeNodes bool     `json:"include_nodes"`
 	}
 	if len(rawArgs) > 0 {
 		if err := json.Unmarshal(rawArgs, &args); err != nil {
@@ -1104,7 +1111,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "set_tag_color":
 			return s.mcpSetTagColor(u, args.WorkspaceID, args.Tag, args.Color)
 		case "get_graph":
-			out, err := s.mcpGraph(u, args.WorkspaceID)
+			out, err := s.mcpGraph(u, args.WorkspaceID, args.Kinds, args.IncludeNodes)
 			if err != nil {
 				return "", err
 			}

@@ -161,6 +161,11 @@ func (s *Server) firstWorkspaceOf(t *testing.T, userID string) string {
 func (s *Server) makeCollection(t *testing.T, ws, userID, title, schemaJSON string) string {
 	t.Helper()
 	id := s.makePage(t, ws, userID, "", title, `{}`)
+	// pages.type is what the sidebar, the graph and canRead branch on; the
+	// collections row alone makes a database only half of one.
+	if _, err := s.db.Exec(`UPDATE pages SET type = 'collection' WHERE id = ?`, id); err != nil {
+		t.Fatalf("mark as collection: %v", err)
+	}
 	if _, err := s.db.Exec(`INSERT INTO collections (page_id, schema, views) VALUES (?, ?, '[]')`,
 		id, schemaJSON); err != nil {
 		t.Fatalf("insert collection: %v", err)
@@ -200,4 +205,16 @@ func (s *Server) propsOf(t *testing.T, pageID string) map[string]any {
 		t.Fatalf("props of %s are not JSON: %v", pageID, err)
 	}
 	return m
+}
+
+// addMember puts an account into a workspace with a given role. Needed because
+// the FIRST account is an admin everywhere, and an admin bypasses the private
+// ancestor rule — so a permission test written with it proves nothing.
+func (s *Server) addMember(t *testing.T, ws, userID, role string) {
+	t.Helper()
+	if _, err := s.db.Exec(
+		`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, ?)`,
+		ws, userID, role); err != nil {
+		t.Fatalf("add member: %v", err)
+	}
 }

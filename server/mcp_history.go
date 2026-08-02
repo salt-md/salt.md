@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // Agent parity, part 3: history, comments, graph.
@@ -173,10 +174,55 @@ func (s *Server) commentPage(commentID string) (string, bool) {
 
 // --- Graph -----------------------------------------------------------------
 
-// mcpGraph returns every link between the pages of a workspace. With it an
-// agent can see connections, find orphaned pages or spot clusters of a topic —
-// the view the index gives a human.
-func (s *Server) mcpGraph(u *user, wsID string) (string, error) {
+// graphNode is one page in the graph. kind separates the three things that
+// look alike from outside: a document, a database, and a row inside one.
+type graphNode struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	Kind  string `json:"kind"` // page | database | row
+}
+
+// graphEdge carries WHY two pages are connected. Without that an agent cannot
+// tell "someone wrote about this" from "this lives inside that", and the three
+// relationships that are not Markdown links were simply absent.
+type graphEdge struct {
+	From      string `json:"from"`
+	To        string `json:"to"`
+	FromTitle string `json:"from_title"`
+	ToTitle   string `json:"to_title"`
+	Kind      string `json:"kind"` // link | child | row | embed
+}
+
+var graphEdgeKinds = map[string]bool{"link": true, "child": true, "row": true, "embed": true}
+
+// mcpGraph returns how the pages of a workspace hang together.
+//
+// It used to return Markdown links and nothing else, while claiming in its own
+// description to find orphans. It could not: the answer was a list of EDGES, so
+// a page with no link was not in it — and an agent reads that empty answer as
+// "there are no orphans". Measured once against a real workspace: 9 edges
+// returned, 9 real relationships missing, 6 of 13 pages absent entirely.
+//
+// Now every edge says what kind it is, hierarchy and database rows and embeds
+// produce edges of their own, and orphans are computed here rather than being
+// something the caller is invited to infer from an absence.
+//
+// The permission check is done IN MEMORY, deliberately. canRead costs a query
+// plus an ancestor walk, and per page over a real instance that is thousands of
+// queries on the single connection this server has. The rule it applies is the
+// same one: readable unless some ancestor is private and owned by somebody
+// else, with workspace admins exempt.
+func (s *Server) mcpGraph(u *user, wsID string, kinds []string, includeNodes bool) (string, error) {
+	want := map[string]bool{}
+	for _, k := range kinds {
+		if !graphEdgeKinds[k] {
+			return "", fmt.Errorf("unknown edge kind %q — use link, child, row or embed", k)
+		}
+		want[k] = true
+	}
+	if len(want) == 0 {
+		want = graphEdgeKinds
+	}
 	// Like list_tags: by default ALL reachable workspaces (see mcpWorkspaceScope)
 	// — otherwise the graph ends at the workspace boundary.
 	ws, err := s.mcpWorkspaceScope(u, wsID)
@@ -187,42 +233,216 @@ func (s *Server) mcpGraph(u *user, wsID string) (string, error) {
 	for i, v := range ws {
 		wargs[i] = v
 	}
+
+	// Every page in scope, once. Drain the cursor before any other query: with
+	// SetMaxOpenConns(1) a query inside an open cursor blocks the whole server.
+	type pageRow struct {
+		id, parent, title, typ, visibility, owner, ws string
+	}
+	pages := map[string]*pageRow{}
+	var order []string
 	rows, err := s.db.Query(`
-		SELECT l.source_id, l.target_id, s.title, t.title
-		FROM links l
-		JOIN pages s ON s.id = l.source_id
-		JOIN pages t ON t.id = l.target_id
-		WHERE s.workspace_id IN (`+placeholders(len(ws))+`) AND s.trashed_at IS NULL AND t.trashed_at IS NULL`, wargs...)
+		SELECT id, COALESCE(parent_id, ''), title, type, visibility, owner_id, workspace_id
+		FROM pages
+		WHERE workspace_id IN (`+placeholders(len(ws))+`) AND trashed_at IS NULL`, wargs...)
 	if err != nil {
 		return "", err
 	}
-	type edge struct {
-		From      string `json:"from"`
-		To        string `json:"to"`
-		FromTitle string `json:"from_title"`
-		ToTitle   string `json:"to_title"`
-	}
-	var cand []edge
 	for rows.Next() {
-		var e edge
-		if err := rows.Scan(&e.From, &e.To, &e.FromTitle, &e.ToTitle); err != nil {
+		var p pageRow
+		if err := rows.Scan(&p.id, &p.parent, &p.title, &p.typ, &p.visibility, &p.owner, &p.ws); err != nil {
 			rows.Close()
 			return "", err
 		}
-		cand = append(cand, e)
+		pages[p.id] = &p
+		order = append(order, p.id)
 	}
 	rows.Close()
-	out := []edge{}
-	for _, e := range cand {
-		// Both ends have to be visible — otherwise the edge would give away the
-		// existence of a private page.
-		if s.canRead(u.ID, e.From) && s.canRead(u.ID, e.To) {
-			out = append(out, e)
+
+	admin := map[string]bool{}
+	for _, w := range ws {
+		admin[w] = s.isWorkspaceAdmin(u.ID, w)
+	}
+	// Same rule as forbiddenPrivateAncestor, walked over the map we already have.
+	readable := map[string]bool{}
+	visible := func(id string) bool {
+		if v, done := readable[id]; done {
+			return v
+		}
+		p, exists := pages[id]
+		if !exists {
+			return false
+		}
+		ok := true
+		if !admin[p.ws] {
+			// A parent chain should be a tree, but nothing in the schema enforces
+			// it. Walk it with a seen-set: a cycle must end the walk, not the
+			// server. (An id repeating means we already judged that ancestor.)
+			seen := map[string]bool{}
+			for cur := p; cur != nil && !seen[cur.id]; cur = pages[cur.parent] {
+				seen[cur.id] = true
+				if cur.visibility == "private" && cur.owner != u.ID {
+					ok = false
+					break
+				}
+				if cur.parent == "" {
+					break
+				}
+			}
+		}
+		readable[id] = ok
+		return ok
+	}
+
+	edges := []graphEdge{}
+	add := func(from, to, kind string) {
+		if !want[kind] || from == to {
+			return
+		}
+		f, okF := pages[from]
+		t, okT := pages[to]
+		// Both ends have to be visible — otherwise the edge gives away that a
+		// private page exists.
+		if !okF || !okT || !visible(from) || !visible(to) {
+			return
+		}
+		edges = append(edges, graphEdge{From: from, To: to, FromTitle: f.title, ToTitle: t.title, Kind: kind})
+	}
+
+	// Hierarchy: a parent that is a database makes its children ROWS, anything
+	// else makes them child pages. That distinction is the one the sidebar makes
+	// too, and it is why "row" is not just "child".
+	for _, id := range order {
+		p := pages[id]
+		if p.parent == "" {
+			continue
+		}
+		kind := "child"
+		if parent, ok := pages[p.parent]; ok && parent.typ == "collection" {
+			kind = "row"
+		}
+		add(p.parent, id, kind)
+	}
+
+	// Markdown links.
+	if want["link"] {
+		rows, err := s.db.Query(`
+			SELECT l.source_id, l.target_id
+			FROM links l
+			JOIN pages s ON s.id = l.source_id
+			JOIN pages t ON t.id = l.target_id
+			WHERE s.workspace_id IN (`+placeholders(len(ws))+`) AND s.trashed_at IS NULL AND t.trashed_at IS NULL`, wargs...)
+		if err != nil {
+			return "", err
+		}
+		var pairs [][2]string
+		for rows.Next() {
+			var from, to string
+			if err := rows.Scan(&from, &to); err != nil {
+				rows.Close()
+				return "", err
+			}
+			pairs = append(pairs, [2]string{from, to})
+		}
+		rows.Close()
+		for _, p := range pairs {
+			add(p[0], p[1], "link")
 		}
 	}
-	b, err := json.Marshal(map[string]any{"edges": out, "count": len(out)})
+
+	// Embedded databases live as a block in the page body, so they are found by
+	// reading it. The LIKE keeps that to the few pages that carry one.
+	if want["embed"] {
+		rows, err := s.db.Query(`
+			SELECT id, content FROM pages
+			WHERE workspace_id IN (`+placeholders(len(ws))+`) AND trashed_at IS NULL
+			  AND content LIKE '%"collectionId"%'`, wargs...)
+		if err != nil {
+			return "", err
+		}
+		var bodies [][2]string
+		for rows.Next() {
+			var id, content string
+			if err := rows.Scan(&id, &content); err != nil {
+				rows.Close()
+				return "", err
+			}
+			bodies = append(bodies, [2]string{id, content})
+		}
+		rows.Close()
+		for _, b := range bodies {
+			for _, target := range embeddedCollectionIDs(b[1]) {
+				add(b[0], target, "embed")
+			}
+		}
+	}
+
+	kindOf := func(p *pageRow) string {
+		if p.typ == "collection" {
+			return "database"
+		}
+		if parent, ok := pages[p.parent]; ok && parent.typ == "collection" {
+			return "row"
+		}
+		return "page"
+	}
+	connected := map[string]bool{}
+	for _, e := range edges {
+		connected[e.From], connected[e.To] = true, true
+	}
+	nodes, orphans := []graphNode{}, []graphNode{}
+	for _, id := range order {
+		p := pages[id]
+		if !visible(id) {
+			continue
+		}
+		n := graphNode{ID: id, Title: p.title, Kind: kindOf(p)}
+		nodes = append(nodes, n)
+		if !connected[id] {
+			orphans = append(orphans, n)
+		}
+	}
+
+	out := map[string]any{
+		"edges":   edges,
+		"count":   len(edges),
+		"orphans": orphans,
+		"counts": map[string]int{
+			"nodes": len(nodes), "edges": len(edges), "orphans": len(orphans),
+		},
+	}
+	// The full node list is opt-in: on a real instance it is thousands of
+	// entries, and the question people actually ask ("what is unconnected?") is
+	// answered by orphans.
+	if includeNodes {
+		out["nodes"] = nodes
+	}
+	b, err := json.Marshal(out)
 	if err != nil {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// embeddedCollectionIDs pulls the collectionId out of every database block in a
+// page body. Deliberately a scan rather than a full BlockNote parse: the block
+// shape has changed before, and a missed embed is a missing edge, not a crash.
+func embeddedCollectionIDs(content string) []string {
+	const key = `"collectionId":"`
+	var out []string
+	for {
+		i := strings.Index(content, key)
+		if i < 0 {
+			return out
+		}
+		content = content[i+len(key):]
+		j := strings.IndexByte(content, '"')
+		if j < 0 {
+			return out
+		}
+		if id := content[:j]; id != "" {
+			out = append(out, id)
+		}
+		content = content[j:]
+	}
 }
