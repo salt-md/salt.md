@@ -296,6 +296,14 @@ in `docker.yml`, `install.sh`'s download URL and the README links all move
 together: grep for `salt-md/` and treat it as one public-facing change, on his
 word like the rest.
 
+**And the history will not survive the launch.** At the real public launch the
+repo is reset and started again from a single initial commit, with the company
+behind it changing at the same time (his words, 2026-08-02; the details are for
+later). Two consequences worth knowing now: German commit messages in an
+English-first repo are not a defect to fix — they do not outlive the reset — and
+no work that only tidies the history (rebasing, rewriting messages, unifying
+authors) is worth doing.
+
 ## The two servers — do not mix them up
 
 | Address | What it is | Reached via |
