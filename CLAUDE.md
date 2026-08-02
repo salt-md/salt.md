@@ -272,6 +272,14 @@ The repo is public and marketing is coming. This sequence is the whole of it;
    (1.6.0 → 1.6.1), even for a feature — a minor bump is for something
    genuinely big, and he says when that is (said so on 1.6.1, after a 1.7.0
    was almost stamped for three workspace-rules commits).
+
+   **And they move rarely.** Several pieces of work go into ONE release; a
+   finished fix is not a reason to tag. Said on 1.6.8: "wenn ich das erste mal
+   marketing für salt mache sind wir bei version 10 — wir müssen kompakter
+   werden, mehr in eine version". The project goes public, and a high number
+   after a short time reads as thrashing. Commit locally and deploy to the test
+   box as `<next>-dev` as often as you like — that costs no number. Propose a
+   tag only when a release's worth is in it.
 5. **Production** (`10.10.20.20:8420`, Proxmox in the Hetzner cloud) **only
    after the tag's build is green**, only from the tagged artefact, never from
    hand-copied source (mechanics and the GHCR-visibility caveat below). The
