@@ -371,16 +371,33 @@ func (s *Server) mcpAddSelectOption(pageID, propID, name, color string) (string,
 
 // --- Ansichten -------------------------------------------------------------
 
-// mcpCreateView creates a view — board, calendar, timeline, gallery, list,
-// form or table. "Views are what makes a database different from a table."
-func (s *Server) mcpCreateView(pageID, name, viewType, groupBy, dateProp, endDateProp string) (string, error) {
-	if !validViewTypes[viewType] {
-		return "", fmt.Errorf("unknown view type %q — use table, board, gallery, calendar, timeline, list or form", viewType)
-	}
-	schema, views, err := s.loadCollection(pageID)
-	if err != nil {
-		return "", err
-	}
+// viewSpec is everything an agent may say about a view. Every field is
+// optional on update, which is why the collections are pointers: a nil Filters
+// means "leave the filters alone", an empty (but present) list means "clear
+// them". Without that distinction there is no way to remove a filter, and a
+// view whose filter cannot be removed is worse than one that has none.
+type viewSpec struct {
+	Name        string            `json:"name"`
+	Type        string            `json:"type"`
+	GroupBy     *string           `json:"group_by"`
+	DateProp    *string           `json:"date_prop"`
+	EndDateProp *string           `json:"end_date_prop"`
+	Filters     *[]map[string]any `json:"filters"`
+	// "propertyId:asc" — deliberately the same spelling query_rows uses, so an
+	// agent learns one form and not two. "" clears the sort.
+	Sort   *string   `json:"sort"`
+	Hidden *[]string `json:"hidden"`
+}
+
+var validFilterOps = map[string]bool{
+	"is": true, "is_not": true, "contains": true,
+	"gt": true, "lt": true, "is_empty": true, "is_not_empty": true,
+}
+
+// applyViewSpec validates a spec against the schema and writes it onto a view
+// map. Shared by create and update so the two cannot drift — the whole reason
+// an agent could not configure a view before was that only one of them existed.
+func applyViewSpec(view map[string]any, spec viewSpec, schema []map[string]any) error {
 	has := func(id string) bool {
 		for _, p := range schema {
 			if pid, _ := p["id"].(string); pid == id {
@@ -389,26 +406,105 @@ func (s *Server) mcpCreateView(pageID, name, viewType, groupBy, dateProp, endDat
 		}
 		return false
 	}
-	// Fail early and clearly: a board without a grouping, or a calendar without a
-	// date, otherwise renders empty and the agent hunts for the mistake elsewhere.
-	if viewType == "board" {
-		if groupBy == "" {
-			return "", fmt.Errorf("a board needs group_by (a select property id)")
+	set := func(key string, val *string) error {
+		if val == nil {
+			return nil
 		}
-		if !has(groupBy) {
-			return "", fmt.Errorf("group_by %q is not a property of this database", groupBy)
+		if *val == "" {
+			delete(view, key)
+			return nil
+		}
+		if !has(*val) {
+			return fmt.Errorf("%q is not a property of this database", *val)
+		}
+		view[key] = *val
+		return nil
+	}
+	if spec.Name != "" {
+		view["name"] = spec.Name
+	}
+	for key, val := range map[string]*string{
+		"groupBy": spec.GroupBy, "dateProp": spec.DateProp, "endDateProp": spec.EndDateProp,
+	} {
+		if err := set(key, val); err != nil {
+			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	// Fail early and clearly: a board without a grouping, or a calendar without
+	// a date, renders EMPTY — and an empty view sends the agent hunting for the
+	// mistake in the data instead of in the call.
+	viewType, _ := view["type"].(string)
+	if viewType == "board" {
+		if g, _ := view["groupBy"].(string); g == "" {
+			return fmt.Errorf("a board needs group_by (the property to make columns from)")
 		}
 	}
 	if viewType == "calendar" || viewType == "timeline" {
-		if dateProp == "" {
-			return "", fmt.Errorf("a %s needs date_prop (a date property id)", viewType)
-		}
-		if !has(dateProp) {
-			return "", fmt.Errorf("date_prop %q is not a property of this database", dateProp)
+		if d, _ := view["dateProp"].(string); d == "" {
+			return fmt.Errorf("a %s needs date_prop (a date property id)", viewType)
 		}
 	}
-	if endDateProp != "" && !has(endDateProp) {
-		return "", fmt.Errorf("end_date_prop %q is not a property of this database", endDateProp)
+	if spec.Filters != nil {
+		out := make([]any, 0, len(*spec.Filters))
+		for i, f := range *spec.Filters {
+			prop, _ := f["property"].(string)
+			if prop == "" {
+				return fmt.Errorf("filter %d needs a property", i+1)
+			}
+			if !has(prop) {
+				return fmt.Errorf("filter %d: %q is not a property of this database", i+1, prop)
+			}
+			op, _ := f["op"].(string)
+			if op == "" {
+				op = "is"
+			}
+			if !validFilterOps[op] {
+				return fmt.Errorf("filter %d: unknown op %q — use is, is_not, contains, gt, lt, is_empty or is_not_empty", i+1, op)
+			}
+			entry := map[string]any{"property": prop, "op": op}
+			if v, ok := f["value"]; ok {
+				entry["value"] = v
+			}
+			out = append(out, entry)
+		}
+		view["filters"] = out
+	}
+	if spec.Sort != nil {
+		if strings.TrimSpace(*spec.Sort) == "" {
+			delete(view, "sort")
+		} else {
+			prop, dir, _ := strings.Cut(*spec.Sort, ":")
+			if !has(prop) {
+				return fmt.Errorf("sort: %q is not a property of this database", prop)
+			}
+			if dir != "desc" {
+				dir = "asc"
+			}
+			view["sort"] = map[string]any{"property": prop, "dir": dir}
+		}
+	}
+	if spec.Hidden != nil {
+		out := make([]any, 0, len(*spec.Hidden))
+		for _, id := range *spec.Hidden {
+			if !has(id) {
+				return fmt.Errorf("hidden: %q is not a property of this database", id)
+			}
+			out = append(out, id)
+		}
+		view["hidden"] = out
+	}
+	return nil
+}
+
+// mcpCreateView creates a view — board, calendar, timeline, gallery, list,
+// form or table. "Views are what makes a database different from a table."
+func (s *Server) mcpCreateView(pageID string, spec viewSpec) (string, error) {
+	if !validViewTypes[spec.Type] {
+		return "", fmt.Errorf("unknown view type %q — use table, board, gallery, calendar, timeline, list or form", spec.Type)
+	}
+	schema, views, err := s.loadCollection(pageID)
+	if err != nil {
+		return "", err
 	}
 	taken := map[string]bool{}
 	for _, v := range views {
@@ -416,24 +512,49 @@ func (s *Server) mcpCreateView(pageID, name, viewType, groupBy, dateProp, endDat
 			taken[id] = true
 		}
 	}
+	name := spec.Name
 	if strings.TrimSpace(name) == "" {
-		name = strings.ToUpper(viewType[:1]) + viewType[1:]
+		name = strings.ToUpper(spec.Type[:1]) + spec.Type[1:]
+		spec.Name = name
 	}
-	view := map[string]any{"id": slugID(name, taken), "name": name, "type": viewType}
-	if groupBy != "" {
-		view["groupBy"] = groupBy
-	}
-	if dateProp != "" {
-		view["dateProp"] = dateProp
-	}
-	if endDateProp != "" {
-		view["endDateProp"] = endDateProp
+	view := map[string]any{"id": slugID(name, taken), "type": spec.Type}
+	if err := applyViewSpec(view, spec, schema); err != nil {
+		return "", err
 	}
 	views = append(views, view)
 	if err := s.saveCollection(pageID, schema, views); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("Created %s view %q (id %s)", viewType, name, view["id"]), nil
+	return fmt.Sprintf("Created %s view %q (id %s)", spec.Type, name, view["id"]), nil
+}
+
+// mcpUpdateView changes an existing view. MERGES, like update_schema: what you
+// do not mention stays as it is. This did not exist at all, so a view created
+// over MCP could never be given a filter, a sort or a hidden column — the
+// interface could do all three, which made "create a working board" an
+// instruction to a human rather than something an agent could finish.
+func (s *Server) mcpUpdateView(pageID, viewID string, spec viewSpec) (string, error) {
+	if spec.Type != "" {
+		return "", fmt.Errorf("a view's type cannot be changed — delete it and create the new one")
+	}
+	schema, views, err := s.loadCollection(pageID)
+	if err != nil {
+		return "", err
+	}
+	for _, v := range views {
+		if id, _ := v["id"].(string); id != viewID {
+			continue
+		}
+		if err := applyViewSpec(v, spec, schema); err != nil {
+			return "", err
+		}
+		if err := s.saveCollection(pageID, schema, views); err != nil {
+			return "", err
+		}
+		name, _ := v["name"].(string)
+		return fmt.Sprintf("Updated view %q (id %s)", name, viewID), nil
+	}
+	return "", fmt.Errorf("view %q not found — call get_collection for the ids", viewID)
 }
 
 // mcpDeleteView removes a view; the last one stays, or the database would have

@@ -350,7 +350,7 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "create_view",
-		"description": "Create a view on a database. A board needs group_by (a select property); a calendar and a timeline need date_prop (a date property); a timeline may also take end_date_prop for real date ranges.",
+		"description": "Create a view on a database. A board needs group_by (a select OR relation property); a calendar and a timeline need date_prop; a timeline may also take end_date_prop for real date ranges. Filters, sort and hidden columns are what make two views of the same database differ — set them here or later with update_view.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
 				"page_id":       map[string]any{"type": "string"},
@@ -359,8 +359,28 @@ var mcpTools = []map[string]any{
 				"group_by":      map[string]any{"type": "string", "description": "board: the select property to group columns by"},
 				"date_prop":     map[string]any{"type": "string", "description": "calendar/timeline: the date property"},
 				"end_date_prop": map[string]any{"type": "string", "description": "timeline: optional end date, otherwise one-day bars"},
+				"filters":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Each {property, op?, value?}, ANDed together. op: is (default) | is_not | contains | gt | lt | is_empty | is_not_empty. A board people actually work in usually needs one — without \"status is_not done\" the finished column grows forever and pushes the work aside. Pass [] to clear."},
+				"sort":          map[string]any{"type": "string", "description": "\"propertyId:asc\" or \"propertyId:desc\", the same spelling query_rows uses. Pass \"\" to clear."},
+				"hidden":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Property ids to hide in this view. Pass [] to show all."},
 			},
 			"required": []string{"page_id", "type"}},
+	},
+	{
+		"name":        "update_view",
+		"description": "Change an existing view: rename it, regroup it, or set its filters, sort and hidden columns. MERGES — what you do not pass stays as it is. A view's type cannot be changed; delete it and create the new one. Call get_collection for the view ids.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{
+				"page_id":       map[string]any{"type": "string"},
+				"view_id":       map[string]any{"type": "string"},
+				"name":          map[string]any{"type": "string"},
+				"group_by":      map[string]any{"type": "string", "description": "board: the property to group columns by. Pass \"\" to clear."},
+				"date_prop":     map[string]any{"type": "string", "description": "calendar/timeline: the date property"},
+				"end_date_prop": map[string]any{"type": "string", "description": "timeline: optional end date"},
+				"filters":       map[string]any{"type": "array", "items": map[string]any{"type": "object"}, "description": "Each {property, op?, value?}, ANDed together. op: is (default) | is_not | contains | gt | lt | is_empty | is_not_empty. A board people actually work in usually needs one — without \"status is_not done\" the finished column grows forever and pushes the work aside. Pass [] to clear."},
+				"sort":          map[string]any{"type": "string", "description": "\"propertyId:asc\" or \"propertyId:desc\", the same spelling query_rows uses. Pass \"\" to clear."},
+				"hidden":        map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Property ids to hide in this view. Pass [] to show all."},
+			},
+			"required": []string{"page_id", "view_id"}},
 	},
 	{
 		"name":        "delete_view",
@@ -440,7 +460,7 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "get_graph",
-		"description": "Return every link between pages as edges {from, to, from_title, to_title}. Spans ALL workspaces you can reach unless you pass workspace_id. Use it to find orphan pages, clusters or how topics connect. Read-only.",
+		"description": "Return the links between pages as edges {from, to, from_title, to_title}. Spans ALL workspaces you can reach unless you pass workspace_id. Use it to see clusters and how topics connect. LIMITS, so you do not read absence as evidence: only Markdown links count — page hierarchy, database rows and embeds produce no edge — and a page with no link at all does not appear, so this canNOT find orphans. Read-only.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{"workspace_id": map[string]any{"type": "string", "description": "Limit to one workspace. Omit for all."}}},
 	},
@@ -751,7 +771,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		IdempotencyKey string `json:"idempotency_key"`
 		// Database tools (Welle 9).
 		Filter     []struct{ Property, Op, Value string } `json:"filter"`
-		Sort       string                                 `json:"sort"`
+		Sort       *string                                `json:"sort"`
 		Limit      int                                    `json:"limit"`
 		Offset     int                                    `json:"offset"`
 		Properties json.RawMessage                        `json:"properties"`
@@ -766,17 +786,22 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Recursive   bool      `json:"recursive"`
 		Favorite    *bool     `json:"favorite"`
 		// Agent parity A2.
-		RemoveProperties []string        `json:"remove_properties"`
-		PropertyID       string          `json:"property_id"`
-		Name             string          `json:"name"`
-		Color            string          `json:"color"`
-		Type             string          `json:"type"`
-		GroupBy          string          `json:"group_by"`
-		DateProp         string          `json:"date_prop"`
-		EndDateProp      string          `json:"end_date_prop"`
-		ViewID           string          `json:"view_id"`
-		Rows             json.RawMessage `json:"rows"`
-		Updates          json.RawMessage `json:"updates"`
+		RemoveProperties []string `json:"remove_properties"`
+		PropertyID       string   `json:"property_id"`
+		Name             string   `json:"name"`
+		Color            string   `json:"color"`
+		Type             string   `json:"type"`
+		GroupBy          *string  `json:"group_by"`
+		DateProp         *string  `json:"date_prop"`
+		EndDateProp      *string  `json:"end_date_prop"`
+		ViewID           string   `json:"view_id"`
+		// A view's filters and hidden columns. Pointers because an empty list
+		// must be able to mean "clear these", not "was not mentioned". The view's
+		// sort shares the `sort` field above and its "propertyId:asc" spelling.
+		Filters *[]map[string]any `json:"filters"`
+		Hidden  *[]string         `json:"hidden"`
+		Rows    json.RawMessage   `json:"rows"`
+		Updates json.RawMessage   `json:"updates"`
 		// Agent parity A3.
 		RevisionID string `json:"revision_id"`
 		CommentID  string `json:"comment_id"`
@@ -813,7 +838,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		name == "restore_page" || name == "set_favorite" ||
 		// A2
 		name == "update_schema" || name == "add_select_option" ||
-		name == "create_view" || name == "delete_view" ||
+		name == "create_view" || name == "update_view" || name == "delete_view" ||
 		name == "create_rows" || name == "batch_set_properties" ||
 		// A3
 		name == "restore_revision" || name == "resolve_comment" || name == "delete_comment" ||
@@ -847,7 +872,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			}
 		case "append_markdown", "update_page", "trash_page", "upload_file", "set_properties", "move_page", "add_comment", "duplicate_page",
 			"replace_content", "prepend_markdown", "set_favorite", "restore_page", "embed_database",
-			"update_schema", "add_select_option", "create_view", "delete_view", "create_rows",
+			"update_schema", "add_select_option", "create_view", "update_view", "delete_view", "create_rows",
 			"restore_revision", "share_page", "unshare_page":
 			// restore_page comes along here: canWrite checks only workspace and
 			// role, not the trash — so a trashed page stays checkable, or nobody
@@ -1095,7 +1120,15 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "add_select_option":
 			return s.mcpAddSelectOption(args.PageID, args.PropertyID, args.Name, args.Color)
 		case "create_view":
-			return s.mcpCreateView(args.PageID, args.Name, args.Type, args.GroupBy, args.DateProp, args.EndDateProp)
+			return s.mcpCreateView(args.PageID, viewSpec{
+				Name: args.Name, Type: args.Type, GroupBy: args.GroupBy,
+				DateProp: args.DateProp, EndDateProp: args.EndDateProp,
+				Filters: args.Filters, Sort: args.Sort, Hidden: args.Hidden})
+		case "update_view":
+			return s.mcpUpdateView(args.PageID, args.ViewID, viewSpec{
+				Name: args.Name, Type: args.Type, GroupBy: args.GroupBy,
+				DateProp: args.DateProp, EndDateProp: args.EndDateProp,
+				Filters: args.Filters, Sort: args.Sort, Hidden: args.Hidden})
 		case "delete_view":
 			return s.mcpDeleteView(args.PageID, args.ViewID)
 		case "create_rows":
@@ -1194,7 +1227,11 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			for _, f := range args.Filter {
 				filters = append(filters, rowFilter{Prop: f.Property, Op: f.Op, Value: f.Value})
 			}
-			return s.mcpQueryRows(u, args.PageID, filters, args.Sort, args.Limit, args.Offset)
+			sort := ""
+			if args.Sort != nil {
+				sort = *args.Sort
+			}
+			return s.mcpQueryRows(u, args.PageID, filters, sort, args.Limit, args.Offset)
 		case "set_properties":
 			return s.mcpSetProperties(args.PageID, args.Properties)
 		case "create_database":
