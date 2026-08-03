@@ -1390,23 +1390,25 @@ function BoardView({
                     {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
                     {r.title || 'Untitled'}
                   </div>
-                  {/* OUTSIDE the title. The title clamps to four lines, and an
-                      element inside a clamped box is part of the text flow — the
-                      mark landed in the middle of the words, wherever they
-                      happened to end. Here it sits in the corner, beside the
-                      people, where a card's marks belong. */}
-                  <AgentDot pageId={r.id} />
-                  {/* Who is on this card — one stack of faces, deduped across
-                      all person fields, in the corner where the eye looks for
-                      it (W126). */}
-                  <PersonStack
-                    values={schema
-                      .filter((p) => p.type === 'person' && p.id !== groupBy)
-                      .flatMap((p) => {
-                        const v = r.props[p.id];
-                        return Array.isArray(v) ? v.map(String) : [String(v ?? '')];
-                      })}
-                  />
+                  {/* OUTSIDE the title: it clamps to four lines, and anything
+                      inside a clamped box is part of the text flow — the mark
+                      landed between the words, wherever they happened to end.
+                      One stack in the corner instead, agent at the FRONT: the
+                      people are who it belongs to, the agent is who is touching
+                      it right now, and right-now belongs on top. */}
+                  <div className="card-marks">
+                    <AgentDot pageId={r.id} />
+                    {/* Who is on this card — one stack of faces, deduped
+                        across all person fields (W126). */}
+                    <PersonStack
+                      values={schema
+                        .filter((p) => p.type === 'person' && p.id !== groupBy)
+                        .flatMap((p) => {
+                          const v = r.props[p.id];
+                          return Array.isArray(v) ? v.map(String) : [String(v ?? '')];
+                        })}
+                    />
+                  </div>
                   {/* Touch devices can't HTML5-drag: a move menu is the
                       accessible way to change a card's column. */}
                   <div className="card-move" onClick={(e) => e.stopPropagation()}>

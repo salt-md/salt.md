@@ -8043,20 +8043,62 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   .agent-presence { max-width: 130px; }
 }
 
+/* One fan in the card corner: the agent at the FRONT, the people tucked under
+   it. Who a card belongs to is the people; who is touching it right now is the
+   agent, and right-now goes on top. Five people still fan the way they always
+   did — the agent is simply the first face in the row. */
+.card-marks {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .agent-dot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin-top: 1px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   color: #fff;
-  opacity: 0.5;
+  opacity: 0.55;
   flex-shrink: 0;
+  /* The same 2px card-coloured ring the faces wear, and a negative margin so
+     the first face slides underneath rather than beside. */
+  border: 2px solid var(--card);
+  margin-right: -7px;
+  position: relative;
+  z-index: 2;
 }
 
-.agent-dot.fresh { opacity: 1; }
+/* Fresh means it called in minutes ago. A slow breath says that better than a
+   colour does — and it is slow on purpose: a board is something people look at
+   while thinking, not a dashboard that needs to win attention. */
+.agent-dot.fresh {
+  opacity: 1;
+  animation: agent-breathe 2.6s ease-in-out infinite;
+}
+
+@keyframes agent-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 22%, transparent); }
+}
+
+/* The badge in the topbar gets the same signal, without the ring: there it sits
+   in a row of static icons, and a halo would be the loudest thing on screen. */
+.agent-work.fresh .agent-mark {
+  animation: agent-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes agent-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* Somebody who asked for less movement gets none. */
+@media (prefers-reduced-motion: reduce) {
+  .agent-dot.fresh, .agent-work.fresh .agent-mark { animation: none; }
+}
 
 /* The logo inside a badge or a dot. object-fit so a non-square mark (the PNG)
    is not stretched, and a white ring behind it on the card dot, where the
