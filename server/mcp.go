@@ -346,12 +346,13 @@ var mcpTools = []map[string]any{
 	},
 	{
 		"name":        "workspace",
-		"description": "Create a workspace, or rename one. Without workspace_id it creates and you become its admin; with one it renames it or sets its icon — workspace admins only. Use update_page with workspace_id afterwards to move existing pages into it.",
+		"description": "Create a workspace, or rename one. Without workspace_id it creates and you become its admin; with one it renames it or sets its icon — workspace admins only. Pass from_workspace to start from an existing one's STRUCTURE instead of from nothing: its rules, its databases, their property schemas with the option ids, and their views — but no rows and no documents. There is no separate template object on purpose; the workspace you point at is the blueprint, so it cannot drift out of step with how you actually work. Use update_page with workspace_id afterwards to move existing pages into it.",
 		"inputSchema": map[string]any{"type": "object",
 			"properties": map[string]any{
-				"workspace_id": map[string]any{"type": "string", "description": "Omit to create a new workspace, pass it to change an existing one."},
-				"name":         map[string]any{"type": "string", "description": "The name. Required when creating."},
-				"icon":         map[string]any{"type": "string", "description": "Changing only: an emoji for the sidebar."},
+				"workspace_id":   map[string]any{"type": "string", "description": "Omit to create a new workspace, pass it to change an existing one."},
+				"from_workspace": map[string]any{"type": "string", "description": "Creating only: copy this workspace's structure (rules, databases, schemas, views) into the new one. No rows, no documents."},
+				"name":           map[string]any{"type": "string", "description": "The name. Required when creating."},
+				"icon":           map[string]any{"type": "string", "description": "Changing only: an emoji for the sidebar."},
 			}},
 	},
 	{
@@ -658,6 +659,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Rules string `json:"rules"`
 		// File index (W125).
 		Under string `json:"under"`
+		// workspace(from_workspace:) — copy a workspace's structure.
+		FromWorkspace string `json:"from_workspace"`
 		// working_on — the agent presence check-in.
 		Agent           string `json:"agent"`
 		Label           string `json:"label"`
@@ -1111,7 +1114,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		case "working_on":
 			return s.mcpWorkingOn(u, args.PageID, args.Agent, args.Label, args.Note, args.ExpectedMinutes, args.Done)
 		case "workspace":
-			return s.mcpWorkspace(u, args.WorkspaceID, args.Name, args.Icon)
+			return s.mcpWorkspace(u, args.WorkspaceID, args.Name, args.Icon, args.FromWorkspace)
 		default:
 			return "", fmt.Errorf("unknown tool %q", name)
 		}

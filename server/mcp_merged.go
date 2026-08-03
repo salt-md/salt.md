@@ -193,10 +193,15 @@ func (s *Server) mcpGetLinks(u *user, pageID, wsID string, kinds []string, inclu
 // than referenced: workspace admins only, a name that is not blank, and an icon
 // of at most a couple of characters — the field is for an emoji, not for text
 // somebody smuggles into the sidebar.
-func (s *Server) mcpWorkspace(u *user, wsID, name, icon string) (string, error) {
+func (s *Server) mcpWorkspace(u *user, wsID, name, icon, from string) (string, error) {
 	if wsID == "" {
 		if icon != "" {
 			return "", fmt.Errorf("pass workspace_id to set an icon — a new workspace is created with a name only")
+		}
+		// from = "make one like that one". The source workspace IS the blueprint;
+		// there is no stored template to drift away from it.
+		if from != "" {
+			return s.blueprintWorkspace(u, name, from)
 		}
 		return s.mcpCreateWorkspace(u.ID, name)
 	}
