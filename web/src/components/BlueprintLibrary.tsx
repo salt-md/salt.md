@@ -4,7 +4,7 @@ import type { BlueprintEntry, Workspace } from '../types';
 import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { plural, t } from '../i18n';
-import { ArrowLeft, Copy, FileText, Library, Plus, Sparkles } from 'lucide-react';
+import { ArrowLeft, Copy, FileText, Library, Plus } from 'lucide-react';
 
 // The blueprint library — the shelf you land on when you make a workspace.
 //
@@ -244,7 +244,7 @@ export default function BlueprintLibrary({
                   {t('Back')}
                 </button>
                 <button className="btn primary" disabled={!name.trim() || busy} onClick={() => void create()}>
-                  <Sparkles size={14} /> {t('Create workspace')}
+                  {t('Create workspace')}
                 </button>
               </div>
             </>
