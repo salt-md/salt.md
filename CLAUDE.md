@@ -792,3 +792,66 @@ result, not read about it. **Production and `git push` only on his word.**
 Explain simply, in German, with concrete numbers; when something might break,
 say first what *cannot* break. He asks for a plan before anything structural,
 and for mechanical work he wants it carried through to the end.
+
+<!-- salt-entwicklung:start -->
+## Arbeit in salt.md dokumentieren
+
+Workspace **Entwicklung** (`70bbc4e36728b79862e92aa14979f037`), Stand 2026-08-03.
+Neu holen mit `/salt-entwicklung`, wenn sich die Regeln geändert haben.
+
+### Melde deine Arbeit an
+
+Bevor du länger als einen Moment an einer Seite oder einem Vorgang arbeitest:
+
+```
+working_on(page_id: "<id>", agent: "claude", label: "Claude Code",
+           note: "was du tust, in wenigen Worten")
+```
+
+Am Ende dasselbe mit `done: true`. Die Notiz ist der wertvolle Teil — „räumt den
+Datei-Index auf" beantwortet die Frage, die ein Mensch hat, „arbeitet" nicht.
+
+Dazwischen musst du nichts tun: Jeder weitere Aufruf auf derselben Seite gilt als
+Lebenszeichen, und die Anmeldung läuft nicht ab, während du woanders sitzt.
+
+**Den Status trotzdem setzen.** Die Anmeldung sagt „ich bin gerade dran", der
+Status sagt „so weit ist es". Auf *In Arbeit*, BEVOR du anfängst — nicht danach.
+
+### Die zwei Datenbanken
+
+| Datenbank | Id | Beantwortet |
+| --- | --- | --- |
+| Systeme | `85f32056708b3b4d4f769aadfd8f5751` | „was gibt es?" |
+| Vorgänge | `50bc601cbae16834bbc3fcbe4d45c542` | „was ist zu tun?" |
+
+Salt.md selbst ist die System-Zeile `36c00d134d506320e6b21af7806d44ec`.
+
+**Eigenschaften von Vorgänge**, damit niemand rät — es sind die IDs, nicht die
+Namen, die geschrieben werden:
+
+- `status`: `eingang` · `als-naechstes` · `in-arbeit` · `wartet-auf-andere` ·
+  `erledigt` · `verworfen`
+- `art`: `feature` · `fehler` · `update--sicherheit` · `wartung` · `recherche`
+- `prio`: `dringend` · `normal` · `irgendwann`
+- `aufwand`: `s--unter-1-tag` · `m--wenige-tage` · `l--wochen`
+- `system` — Relation auf Systeme, **immer als Liste**: `["<id>"]`, nie `"<id>"`
+- `meilenstein` (Text), `faellig` (Datum)
+
+### Die Regeln des Workspace
+
+Sie stehen im Wortlaut im Workspace selbst (`get_workspace`) und gelten dort.
+Das Wesentliche für die Arbeit an diesem Repo:
+
+- **Jeder Vorgang hängt an einem System.** Ohne Verknüpfung sieht das System
+  seine Arbeit nicht und der Fortschritt zählt sie nicht.
+- **Der Titel benennt das Symptom, nicht die Lösung** — „Ein 24-MB-PDF legte die
+  Instanz lahm", nicht „PDF-Limit einbauen".
+- **Entscheidungen mit Begründung** in den Seitenkörper, auch die verworfenen.
+  Warum etwas NICHT gebaut wurde, fragt später niemand nach — und genau das wird
+  dann ein zweites Mal vorgeschlagen.
+- **Technische Doku bleibt im Repo.** Im Workspace steht, was man ohne Repo
+  wissen will: Status, Version, wo es läuft, Entscheidungen, offene Vorgänge.
+  Nichts doppelt pflegen.
+- **Große Vorhaben** bündeln sich über denselben Meilenstein-Text auf mehreren
+  Vorgängen, nie über Ordner oder Unterseitenketten.
+<!-- salt-entwicklung:end -->
