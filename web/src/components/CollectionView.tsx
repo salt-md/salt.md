@@ -1389,11 +1389,13 @@ function BoardView({
                   <div className="board-card-title">
                     {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
                     {r.title || 'Untitled'}
-                    {/* An agent working on this row. Next to the title rather
-                        than in the corner: the corner already carries the
-                        people, and two stacks there read as one. */}
-                    <AgentDot pageId={r.id} />
                   </div>
+                  {/* OUTSIDE the title. The title clamps to four lines, and an
+                      element inside a clamped box is part of the text flow — the
+                      mark landed in the middle of the words, wherever they
+                      happened to end. Here it sits in the corner, beside the
+                      people, where a card's marks belong. */}
+                  <AgentDot pageId={r.id} />
                   {/* Who is on this card — one stack of faces, deduped across
                       all person fields, in the corner where the eye looks for
                       it (W126). */}

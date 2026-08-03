@@ -363,6 +363,10 @@ function ActivityModal({ onClose }: { onClose: () => void }) {
     transfer_owner: t('handed the instance to:'),
     break_glass: t('took emergency access:'),
     break_glass_revoked: t('ended the emergency access:'),
+    // An agent announcing itself. Without these two the log shows the raw
+    // action name, which reads like a bug rather than an entry.
+    working_on: t('started working on:'),
+    working_on_end: t('finished working on:'),
   };
   return (
     <Portal>

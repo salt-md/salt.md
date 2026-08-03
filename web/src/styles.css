@@ -7991,10 +7991,12 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   align-items: center;
   gap: 6px;
   margin-right: 4px;
-  /* Never at the breadcrumb's expense: the topbar is shared, and a page whose
-     name you cannot see is a worse trade than a badge you cannot read in full. */
+  /* Never at the breadcrumb's expense — the topbar is shared. But 280px cut a
+     normal note off mid-word, which reads as broken rather than abbreviated, so
+     the note now gets real room and disappears entirely when there is none.
+     Nothing is lost either way: it is in the tooltip. */
   min-width: 0;
-  max-width: 280px;
+  max-width: 420px;
   overflow: hidden;
 }
 
@@ -8003,7 +8005,7 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   align-items: center;
   gap: 5px;
   min-width: 0;
-  max-width: 200px;
+  max-width: 340px;
   flex-shrink: 1;
   padding: 2px 8px 2px 6px;
   border: 1px solid currentColor;
@@ -8024,28 +8026,32 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
 
 .agent-work-note {
   color: var(--muted);
-  max-width: 130px;
+  max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
-  /* On a phone the name alone: the note needs room the topbar does not have. */
+/* Below this the note has no honest room, so it goes rather than being cut to
+   three words. A truncated half-sentence looks like a fault; an absent one does
+   not, and the tooltip has it either way. */
+@media (max-width: 1200px) {
   .agent-work-note { display: none; }
-  .agent-presence { max-width: 120px; }
+}
+
+@media (max-width: 900px) {
+  .agent-presence { max-width: 130px; }
 }
 
 .agent-dot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 17px;
-  height: 17px;
-  margin-left: 5px;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
   border-radius: 50%;
   color: #fff;
-  vertical-align: -3px;
   opacity: 0.5;
   flex-shrink: 0;
 }
