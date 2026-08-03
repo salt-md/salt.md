@@ -2,6 +2,7 @@ import type { AgentWork } from './agentPresence';
 import type {
   ApiToken,
   Backlink,
+  BlueprintEntry,
   CollectionConfig,
   Me,
   Page,
@@ -430,6 +431,14 @@ export const api = {
     req<Workspace>('/api/workspaces', {
       method: 'POST',
       body: JSON.stringify(fromWorkspace ? { name, fromWorkspace } : { name }),
+    }),
+  // The blueprint library. The shelf ships in the binary, so this never fails
+  // for want of a network.
+  library: () => req<BlueprintEntry[]>('/api/library'),
+  useBlueprint: (id: string, name: string) =>
+    req<{ workspaceId: string; name: string }>(`/api/library/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
     }),
   // Irreversible: the caller must echo the workspace name back as `confirm`.
   deleteWorkspace: (id: string, confirm: string) =>

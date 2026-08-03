@@ -227,6 +227,10 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	// is not parsed as a workspace id).
 	m.HandleFunc("POST /api/workspaces/import", s.auth(s.handleImportWorkspace))
 	m.HandleFunc("GET /api/workspaces/{id}/export", s.auth(s.handleExportWorkspace))
+	// The blueprint library. Reading the shelf needs a session and nothing else —
+	// it holds no instance data, only what ships in the binary.
+	m.HandleFunc("GET /api/library", s.auth(s.handleLibrary))
+	m.HandleFunc("POST /api/library/{id}", s.auth(s.handleUseBlueprint))
 	// Break-glass: only the owner may request it; the people responsible for
 	// the workspace concerned may view and end it too.
 	m.HandleFunc("POST /api/workspaces/{id}/break-glass", s.ownerOnly(s.handleBreakGlass))

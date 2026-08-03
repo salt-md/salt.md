@@ -259,3 +259,34 @@ export interface PublicFormConfig {
   formSubmit?: string;
   schema: PropDef[];
 }
+
+// One item on the blueprint shelf (see server/library.go). Everything from
+// `databases` down is READ OUT OF THE BLUEPRINT by the server, never written
+// beside it — the preview built from this cannot promise something the
+// blueprint does not contain.
+export interface BlueprintEntry {
+  id: string;
+  title: string;
+  tagline: string;
+  icon: string;
+  accent: string;
+  tags: string[];
+  price: string; // empty = free
+  source: string; // 'built-in'
+  databases: BlueprintDatabase[];
+  rules: string;
+}
+
+export interface BlueprintDatabase {
+  title: string;
+  icon: string;
+  description: string;
+  props: BlueprintProp[];
+  views: { name: string; type: string }[];
+}
+
+export interface BlueprintProp {
+  name: string;
+  type: string;
+  options?: { name: string; color?: string }[];
+}

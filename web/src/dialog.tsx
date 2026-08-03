@@ -20,13 +20,7 @@ type PromptReq = {
   placeholder?: string;
   defaultValue?: string;
   confirmText?: string;
-  // An optional second question below the text field, for the cases where a
-  // name alone is not the whole decision — "call it X" and "shaped like Y".
-  // Splitting that into two dialogs one after the other reads as an
-  // interrogation; one dialog with two fields reads as one decision.
-  choice?: { label: string; options: { value: string; label: string }[] };
   resolve: (v: string | null) => void;
-  resolveChoice?: (v: string) => void;
 };
 type Req = ConfirmReq | PromptReq;
 
@@ -48,34 +42,6 @@ export function promptText(
   return new Promise((resolve) => {
     window.dispatchEvent(
       new CustomEvent('salt:dialog', { detail: { kind: 'prompt', message, ...opts, resolve } }),
-    );
-  });
-}
-
-/** A name AND a pick, in one dialog. Resolves null when cancelled. */
-export function promptTextWithChoice(
-  message: string,
-  opts: {
-    placeholder?: string;
-    defaultValue?: string;
-    confirmText?: string;
-    choice: { label: string; options: { value: string; label: string }[] };
-  },
-): Promise<{ text: string; choice: string } | null> {
-  return new Promise((resolve) => {
-    let picked = opts.choice.options[0]?.value ?? '';
-    window.dispatchEvent(
-      new CustomEvent('salt:dialog', {
-        detail: {
-          kind: 'prompt',
-          message,
-          ...opts,
-          resolveChoice: (v: string) => {
-            picked = v;
-          },
-          resolve: (text: string | null) => resolve(text ? { text, choice: picked } : null),
-        },
-      }),
     );
   });
 }
@@ -135,22 +101,6 @@ export function DialogHost() {
                 if (e.key === 'Enter') ok();
               }}
             />
-          )}
-          {req.kind === 'prompt' && req.choice && (
-            <label className="confirm-choice">
-              {req.choice.label}
-              <select
-                className="prop-select"
-                defaultValue={req.choice.options[0]?.value}
-                onChange={(e) => req.resolveChoice?.(e.target.value)}
-              >
-                {req.choice.options.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </label>
           )}
           <div className="dialog-buttons">
             <button className="btn" onClick={cancel}>{t('Cancel')}</button>

@@ -120,6 +120,7 @@
   "Conventions for working in this workspace. Agents receive them over MCP before they write here; members can read them too.": "Konventionen für die Arbeit in diesem Workspace. Agents erhalten sie über MCP, bevor sie hier schreiben; Mitglieder können sie ebenfalls lesen.",
   "Copied": "Kopiert",
   "Copied ✓": "Kopiert ✓",
+  "Copies the databases with their columns, options and views, plus the workspace rules. Rows and documents stay where they are.": "Kopiert die Datenbanken mit ihren Spalten, Optionen und Ansichten sowie die Regeln des Workspace. Zeilen und Dokumente bleiben, wo sie sind.",
   "Copy": "Kopieren",
   "Copy MCP command": "MCP-Befehl kopieren",
   "Copy Markdown link": "Markdown-Link kopieren",
@@ -147,7 +148,6 @@
   "Create workspace": "Workspace anlegen",
   "Create your first page — or import from Notion (.zip) / Markdown (.md).": "Leg deine erste Seite an — oder importiere aus Notion (.zip) / Markdown (.md).",
   "Created by": "Erstellt von",
-  "Created from the structure of the other workspace — rules, databases and views, no rows.": "Aus der Struktur des anderen Workspace erzeugt — Regeln, Datenbanken und Ansichten, keine Zeilen.",
   "Creates the account straight away — no email is sent.": "Legt sofort ein Konto an — kein E-Mail-Versand.",
   "Current password (needed to change the email)": "Aktuelles Passwort (nötig zum Ändern der E-Mail)",
   "Current password (to confirm)": "Aktuelles Passwort (zur Bestätigung)",
@@ -181,6 +181,7 @@
   "Done": "Fertig",
   "Download": "Herunterladen",
   "Download backup (.tar.gz)": "Backup herunterladen (.tar.gz)",
+  "Each one brings its databases, views and house rules — and no data. You fill it.": "Jede bringt ihre Datenbanken, Ansichten und Hausregeln mit — und keine Daten. Die füllst du.",
   "Email": "E-Mail",
   "Email domain allowed": "E-Mail-Domain freigegeben",
   "Embed a collection": "Sammlung einbetten",
@@ -188,8 +189,8 @@
   "Emergency access log": "Notfallzugriffe",
   "Emergency access to “{name}” — why?": "Notfallzugriff auf „{name}“ — warum?",
   "Emoji": "Emoji",
-  "Empty": "Leer",
   "Empty the trash automatically after (days, 0 = never)": "Papierkorb automatisch leeren nach (Tagen, 0 = nie)",
+  "Empty workspace": "Leerer Workspace",
   "Enable": "Aktivieren",
   "End date for the bars (blank = one-day bars)": "Enddatum der Balken (leer = 1-Tag-Balken)",
   "End it now": "Jetzt beenden",
@@ -232,6 +233,7 @@
   "Hide comments": "Kommentare ausblenden",
   "Hide structure": "Struktur ausblenden",
   "Host": "Host",
+  "House rules": "Hausregeln",
   "I have it": "Hab ich",
   "Icons": "Icons",
   "Import (.md / .zip)": "Import (.md / .zip)",
@@ -266,6 +268,7 @@
   "Invite": "Einladen",
   "Invite by email (blank = link only)": "E-Mail einladen (leer = nur Link)",
   "Irrevocably delete “{name}” and EVERY page in it?": "„{name}“ und ALLE Seiten darin unwiderruflich löschen?",
+  "Its databases and rules, without the content.": "Seine Datenbanken und Regeln, ohne die Inhalte.",
   "Join": "Beitreten",
   "Join the workspace": "Workspace beitreten",
   "Just this workspace’s content, as Markdown files": "Nur die Inhalte dieses Workspace als Markdown-Dateien",
@@ -280,7 +283,6 @@
   "Library": "Bibliothek",
   "Library — every page": "Bibliothek — alle Seiten",
   "Light": "Hell",
-  "Like “{name}”": "Wie „{name}“",
   "Limit which workspaces this token can reach": "Begrenzen, welche Workspaces dieser Token erreicht",
   "Link copied": "Link kopiert",
   "Linked from": "Verlinkt von",
@@ -341,6 +343,7 @@
   "No collection found": "Keine Sammlung gefunden",
   "No collection yet": "Noch keine Sammlung",
   "No comments yet.": "Noch keine Kommentare.",
+  "No databases, no rules — a blank workspace.": "Keine Datenbanken, keine Regeln — ein leerer Workspace.",
   "No entries": "Keine Einträge",
   "No entries with a date yet. Set a start date so they appear on the timeline.": "Noch keine Einträge mit Datum. Setze ein Startdatum, damit sie auf der Timeline erscheinen.",
   "No files": "Keine Dateien",
@@ -411,6 +414,7 @@
   "Open to every new user": "Für alle neuen Nutzer öffnen",
   "Options not saved": "Optionen nicht gespeichert",
   "Or connect an agent in one step — paste this into your terminal:": "Oder in einem Schritt einen Agenten verbinden — das hier ins Terminal einfügen:",
+  "Or like one you already have": "Oder wie einer, den du schon hast",
   "Or the classic way: SMTP": "Oder klassisch: SMTP",
   "Orange": "Orange",
   "Orphaned personal space — clean up only, do not open.": "Verwaister persönlicher Bereich — nur aufräumen, nicht öffnen.",
@@ -559,8 +563,9 @@
   "Source": "Quelle",
   "Specific workspaces…": "Bestimmte Workspaces…",
   "Start date for the bars": "Startdatum der Balken",
-  "Start from": "Womit anfangen",
+  "Start from nothing and build it yourself.": "Bei null anfangen und selbst aufbauen.",
   "Start quick tunnel": "Quick-Tunnel starten",
+  "Start with a ready-made workspace": "Mit einem fertigen Workspace anfangen",
   "Start:": "Start:",
   "Start: —": "Start: —",
   "Still has members: make one of them an admin.": "Hat noch Mitglieder: ernenne einen von ihnen zum Admin.",
@@ -605,7 +610,6 @@
   "The template could not be used": "Vorlage konnte nicht verwendet werden",
   "The token could not be created": "Token konnte nicht erstellt werden",
   "The two new passwords do not match": "Die beiden neuen Passwörter stimmen nicht überein",
-  "The workspace could not be created": "Workspace konnte nicht erstellt werden",
   "There has been no emergency access to this workspace so far.": "Bisher gab es keinen Notfallzugriff auf diesen Workspace.",
   "These are workspaces nobody can look after any more. With no members left at all you can adopt or delete them. Where members remain, only someone in charge is missing — appoint one of them in user management.": "Hier stehen Workspaces, um die sich niemand mehr kümmern kann. Ist gar niemand mehr Mitglied, kannst du sie übernehmen oder löschen. Sind noch Mitglieder da, fehlt dort nur ein Verantwortlicher — dann ernenne einen von ihnen in der Nutzerverwaltung.",
   "This Google address is not verified.": "Diese Google-Adresse ist nicht verifiziert.",
@@ -751,6 +755,7 @@
   "from cron.": "per Cron.",
   "handed the instance to:": "hat die Instanz übergeben an:",
   "here for {time}": "seit {time} dabei",
+  "house rules": "Hausregeln",
   "human": "Mensch",
   "in the dashboard. Salt.md keeps the tunnel running, restarts included. No port forwarding needed.": "im Dashboard fest. Salt.md hält den Tunnel am Laufen — auch nach Neustarts. Keine Portfreigaben nötig.",
   "is": "ist",
@@ -799,6 +804,14 @@
     "one": "{n} Admin",
     "other": "{n} Admins"
   },
+  "{n} columns": {
+    "one": "{n} Spalte",
+    "other": "{n} Spalten"
+  },
+  "{n} databases": {
+    "one": "{n} Datenbank",
+    "other": "{n} Datenbanken"
+  },
   "{n} files": {
     "one": "{n} Datei",
     "other": "{n} Dateien"
@@ -821,6 +834,10 @@
   "{n} templates": {
     "one": "{n} Vorlage",
     "other": "{n} Vorlagen"
+  },
+  "{n} views": {
+    "one": "{n} Ansicht",
+    "other": "{n} Ansichten"
   },
   "{n} without links": "{n} ohne Links",
   "{pages} in shared workspaces stay where they are.": "{pages} in geteilten Workspaces bleiben bestehen.",

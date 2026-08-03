@@ -8134,12 +8134,260 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   padding: 1px;
 }
 
-/* The second question in a prompt dialog, under the name field. */
-.confirm-choice {
+
+/* --- The blueprint library -------------------------------------------------
+   The shelf you land on when you make a workspace. Cards rather than a list,
+   because the point of the screen is to be looked at: somebody arriving here
+   does not yet know the vocabulary, and a row of names would tell them nothing.
+
+   Each card's colour band comes from the blueprint's own accent, passed in as
+   --accent on the element. Nothing here hard-codes a per-blueprint colour, so
+   adding one to library.json needs no CSS. */
+
+/* Two classes, so this beats `.dialog.wide`'s 680px rather than losing to it on
+   specificity — a shelf needs three cards abreast to read as a shelf. */
+.dialog.lib-dialog {
+  width: min(960px, 96vw);
+}
+
+.lib-dialog h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lib-back {
+  margin-right: 2px;
+}
+
+.lib-body {
+  max-height: 62vh;
+  overflow-y: auto;
+  /* Room at the bottom, or the last row is clipped by the fold and reads as a
+     rendering fault rather than as something to scroll to. */
+  padding: 2px 2px 10px;
+}
+
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(205px, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+
+.lib-section {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 22px 0 10px;
+  text-transform: none;
+}
+
+.lib-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 0 0 13px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: left;
+  overflow: hidden;
+  transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+}
+
+.lib-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07);
+}
+
+/* The band. A flat tint plus one soft highlight — enough to make the shelf read
+   as a shelf without pretending to be a photograph of a workspace. */
+.lib-card-art {
+  width: 100%;
+  height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 9px;
+  color: var(--accent);
+  background:
+    radial-gradient(120% 90% at 30% 15%, color-mix(in srgb, var(--accent) 26%, transparent), transparent 70%),
+    color-mix(in srgb, var(--accent) 11%, var(--card));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, var(--border));
+}
+
+.lib-card-emoji {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.lib-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 0 13px;
+}
+
+.lib-card-tagline {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.45;
+  padding: 0 13px;
+}
+
+.lib-card-facts {
+  font-size: 11.5px;
+  color: var(--muted);
+  opacity: 0.85;
+  padding: 4px 13px 0;
+}
+
+/* --- the preview, built from the blueprint --- */
+
+.lib-preview-lead {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+
+.lib-db {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 13px;
+  margin-bottom: 10px;
+  background: var(--card);
+}
+
+.lib-db-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.lib-db-icon {
+  font-size: 15px;
+}
+
+.lib-db-views {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.lib-view-chip {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--muted);
+}
+
+.lib-db-desc {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+
+.lib-props {
   display: flex;
   flex-direction: column;
   gap: 5px;
   margin-top: 10px;
+}
+
+.lib-prop {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+
+.lib-prop-name {
+  min-width: 108px;
+  color: var(--muted);
+}
+
+.lib-prop-opts {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+/* The real option colour out of the blueprint, so the preview shows the board
+   you will get rather than an illustration of one. */
+.lib-opt {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: var(--opt);
+  background: color-mix(in srgb, var(--opt) 15%, transparent);
+}
+
+.lib-rules {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-top: 14px;
+  background: var(--hover);
+}
+
+.lib-rules-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+.lib-rules p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  /* Clamped, so a long opening paragraph ends in an ellipsis instead of being
+     sliced by the fold — one reads as "there is more", the other as broken. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.lib-name {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 14px;
   font-size: 12.5px;
   color: var(--muted);
+}
+
+/* The preview shrinks when the name field sits below it, so the field is
+   reachable without scrolling however long the blueprint is. */
+.lib-dialog .lib-body:has(+ .lib-name) {
+  max-height: 52vh;
+}
+
+.dialog-error {
+  margin-top: 10px;
+  font-size: 12.5px;
+  color: #d44c47;
+}
+
+@media (max-width: 640px) {
+  .lib-grid {
+    grid-template-columns: 1fr;
+  }
+  .lib-body {
+    max-height: 66vh;
+  }
+  .lib-prop-name {
+    min-width: 0;
+  }
 }

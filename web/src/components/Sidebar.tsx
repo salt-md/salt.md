@@ -6,7 +6,7 @@ import UserMenu from './UserMenu';
 import WorkspaceMembers from './WorkspaceMembers';
 import WorkspaceRules from './WorkspaceRules';
 import FileList from './FileList';
-import { promptText, promptTextWithChoice } from '../dialog';
+import { promptText } from '../dialog';
 import { toast } from '../toast';
 import Portal from './Portal';
 import IconPicker from './IconPicker';
@@ -16,6 +16,7 @@ import { plural, t } from '../i18n';
 import AgentConnectModal from './AgentConnect';
 import BreakGlassLog from './BreakGlassLog';
 import TemplateGallery from './TemplateGallery';
+import BlueprintLibrary from './BlueprintLibrary';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
 import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip } from 'lucide-react';
@@ -783,38 +784,16 @@ export default function Sidebar({
     }
   };
 
-  const newWorkspace = async () => {
-    // A new workspace is two decisions, not one: what it is called, and whether
-    // it starts from nothing. Everything that makes a workspace usable is
-    // invisible — the rules, the option ids, the derived columns, the view
-    // filters — so "empty" is rarely what somebody actually wants, and the
-    // second question has to be asked where the first one is.
-    const blueprints = workspaces.filter((w) => !w.personal);
-    const answer = await promptTextWithChoice(t('Name for the new workspace?'), {
-      placeholder: t('e.g. Team'),
-      choice: {
-        label: t('Start from'),
-        options: [
-          { value: '', label: t('Empty') },
-          ...blueprints.map((w) => ({
-            value: w.id,
-            label: t('Like “{name}”').replace('{name}', w.name),
-          })),
-        ],
-      },
-    });
-    if (!answer?.text.trim()) return;
-    try {
-      const ws = await api.createWorkspace(answer.text.trim(), answer.choice || undefined);
-      onWorkspacesChanged();
-      onSwitchWorkspace(ws.id);
-      setWsMenuOpen(false);
-      if (answer.choice) {
-        toast(t('Created from the structure of the other workspace — rules, databases and views, no rows.'));
-      }
-    } catch {
-      toast(t('The workspace could not be created'));
-    }
+  // A new workspace is two decisions, not one: what it is called, and what it
+  // starts from. Everything that makes a workspace usable is invisible — the
+  // rules, the option ids, the derived columns, the view filters — so "empty" is
+  // rarely what somebody actually wants. The shelf asks both questions at once
+  // and shows what each answer gets you; a name prompt could only ask the easy
+  // one.
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const newWorkspace = () => {
+    setWsMenuOpen(false);
+    setLibraryOpen(true);
   };
 
   const [bgLogOpen, setBgLogOpen] = useState(false);
@@ -1268,6 +1247,16 @@ export default function Sidebar({
         )}
         {strandedOpen && (
           <StrandedWorkspaces onClose={() => setStrandedOpen(false)} onChanged={onWorkspacesChanged} />
+        )}
+        {libraryOpen && (
+          <BlueprintLibrary
+            workspaces={workspaces}
+            onCreated={(id) => {
+              onWorkspacesChanged();
+              onSwitchWorkspace(id);
+            }}
+            onClose={() => setLibraryOpen(false)}
+          />
         )}
         {bgLogOpen && currentWs && (
           <BreakGlassLog

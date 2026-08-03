@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
@@ -44,6 +46,11 @@ type transferManifest struct {
 		Name  string `json:"name"`
 		Icon  string `json:"icon"`
 		Image string `json:"image"`
+		// The rules were missing from this format until the library needed them,
+		// and they are the most valuable thing a workspace carries — the answer to
+		// "how do we work here". An older archive simply has no rules field, so
+		// this needs no format bump: absent reads as empty.
+		Rules string `json:"rules,omitempty"`
 	} `json:"workspace"`
 	Pages int `json:"pages"`
 	Files int `json:"files"`
@@ -84,9 +91,9 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 404, "workspace not found")
 		return
 	}
-	var wsName, wsIcon, wsImage string
-	if err := s.db.QueryRow(`SELECT name, icon, image FROM workspaces WHERE id = ?`, wsID).
-		Scan(&wsName, &wsIcon, &wsImage); err != nil {
+	var wsName, wsIcon, wsImage, wsRules string
+	if err := s.db.QueryRow(`SELECT name, icon, image, COALESCE(rules, '') FROM workspaces WHERE id = ?`, wsID).
+		Scan(&wsName, &wsIcon, &wsImage, &wsRules); err != nil {
 		httpError(w, 404, "workspace not found")
 		return
 	}
@@ -136,7 +143,7 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Referenzierte Uploads einsammeln (Inhalt, Props, Cover, Workspace-Bild).
+	// Collect the referenced uploads: content, props, covers, workspace image.
 	fileSet := map[string]bool{}
 	collect := func(b []byte) {
 		for _, m := range fileRefPattern.FindAllSubmatch(b, -1) {
@@ -165,6 +172,7 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 	manifest.Workspace.Name = wsName
 	manifest.Workspace.Icon = wsIcon
 	manifest.Workspace.Image = wsImage
+	manifest.Workspace.Rules = wsRules
 	manifest.Pages = len(pages)
 	manifest.Files = len(fileSet)
 
@@ -205,11 +213,6 @@ func (s *Server) handleExportWorkspace(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 	u := requestUser(r)
-	// The same rule as when creating a workspace.
-	if !u.IsAdmin && !s.loadSettings().AllowUserWorkspaces {
-		httpError(w, 403, "creating workspaces is disabled on this instance — ask an admin")
-		return
-	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxImportZip)
 	if err := r.ParseMultipartForm(maxImportZip); err != nil {
 		httpError(w, 400, "upload too large or invalid")
@@ -226,61 +229,111 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 400, err.Error())
 		return
 	}
-	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	res, err := s.importWorkspaceArchive(u, data, importOptions{})
 	if err != nil {
-		httpError(w, 400, "not a valid zip archive")
+		httpErrorFrom(w, importStatus(err), err)
 		return
 	}
+	writeJSON(w, res)
+}
 
-	readEntry := func(name string) []byte {
-		for _, f := range zr.File {
-			if f.Name == name {
-				rc, err := f.Open()
-				if err != nil {
-					return nil
-				}
-				b, _ := io.ReadAll(rc)
-				rc.Close()
-				return b
-			}
+// importOptions vary what an archive turns into, not how it is read.
+type importOptions struct {
+	// StructureOnly keeps the databases with their schemas and views and leaves
+	// out rows and documents — a blueprint rather than a copy. Every reference to
+	// something left behind is then dangling, so this mode also has to clean the
+	// schemas and views up; see structureOnly() below.
+	StructureOnly bool
+	// Name overrides the name in the archive. Empty keeps the archive's.
+	Name string
+}
+
+type importResult struct {
+	WorkspaceID string `json:"workspaceId"`
+	Name        string `json:"name"`
+	Pages       int    `json:"pages"`
+	Files       int    `json:"files"`
+}
+
+// importStatus maps the coded errors below onto HTTP. A bad archive is the
+// caller's fault, a failed write is ours, and the two must not read alike.
+func importStatus(err error) int {
+	var ce *codedError
+	if errors.As(err, &ce) {
+		switch ce.code {
+		case "workspaces_disabled":
+			return 403
+		case "bad_archive", "archive_too_new":
+			return 400
 		}
-		return nil
+	}
+	return 500
+}
+
+// importWorkspaceArchive turns an uploaded ZIP into a new workspace.
+func (s *Server) importWorkspaceArchive(u *user, data []byte, opt importOptions) (*importResult, error) {
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		return nil, coded("bad_archive", "not a valid zip archive")
+	}
+	return s.importWorkspaceFS(u, zr, opt)
+}
+
+// importWorkspaceFS turns a workspace archive into a new workspace owned by u.
+//
+// It takes an fs.FS rather than ZIP bytes because a *zip.Reader IS one — and so
+// is a directory embedded in the binary. That is what lets an uploaded archive
+// and a shipped blueprint take the same path; two readers would be two answers
+// to what an archive contains, and they would drift.
+func (s *Server) importWorkspaceFS(u *user, fsys fs.FS, opt importOptions) (*importResult, error) {
+	// The same rule as when creating a workspace.
+	if !u.IsAdmin && !s.loadSettings().AllowUserWorkspaces {
+		return nil, coded("workspaces_disabled", "creating workspaces is disabled on this instance — ask an admin")
+	}
+	readEntry := func(name string) []byte {
+		b, err := fs.ReadFile(fsys, name)
+		if err != nil {
+			return nil
+		}
+		return b
 	}
 
 	var manifest transferManifest
 	if b := readEntry("salt-workspace.json"); b == nil || json.Unmarshal(b, &manifest) != nil {
-		httpError(w, 400, "not a Salt.md workspace archive (salt-workspace.json missing)")
-		return
+		return nil, coded("bad_archive", "not a Salt.md workspace archive (salt-workspace.json missing)")
 	}
 	if manifest.Format > transferFormat {
-		httpError(w, 400, fmt.Sprintf("archive format %d is newer than this instance supports (%d) — update Salt.md", manifest.Format, transferFormat))
-		return
+		return nil, coded("archive_too_new",
+			fmt.Sprintf("archive format %d is newer than this instance supports (%d) — update Salt.md", manifest.Format, transferFormat))
 	}
 	var pages []transferPage
 	if b := readEntry("pages.json"); b == nil || json.Unmarshal(b, &pages) != nil {
-		httpError(w, 400, "pages.json missing or invalid")
-		return
+		return nil, coded("bad_archive", "pages.json missing or invalid")
 	}
 	tagColors := map[string]string{}
 	if b := readEntry("tags.json"); b != nil {
 		json.Unmarshal(b, &tagColors)
+	}
+	if opt.StructureOnly {
+		pages = keepDatabasesOnly(pages)
 	}
 
 	// Files first: old → new names, so the id replacement in the content can do
 	// both in a single pass.
 	fileMap := map[string]string{}
 	filesWritten := 0
-	for _, f := range zr.File {
-		name, ok := strings.CutPrefix(f.Name, "files/")
-		if !ok || name == "" || strings.Contains(name, "/") {
+	entries, _ := fs.ReadDir(fsys, "files") // absent is normal — most archives carry none
+	for _, e := range entries {
+		if e.IsDir() {
 			continue
 		}
+		name := e.Name()
 		ext := ""
 		if i := strings.IndexByte(name, '.'); i >= 0 {
 			ext = name[i:]
 		}
 		newName := newID() + ext
-		rc, err := f.Open()
+		rc, err := fsys.Open("files/" + name)
 		if err != nil {
 			continue
 		}
@@ -314,9 +367,20 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	remap := strings.NewReplacer(replacer...)
 
-	wsName := strings.TrimSpace(manifest.Workspace.Name)
+	// StructureOnly leaves every row behind, so anything still pointing at one is
+	// dangling. Cleaning that up is the same job the live blueprint does, and it
+	// uses the same two functions on purpose: what survives a structure copy must
+	// have exactly one answer, whether the source is a workspace or a file.
+	if opt.StructureOnly {
+		structureOnly(pages, idMap)
+	}
+
+	wsName := strings.TrimSpace(opt.Name)
 	if wsName == "" {
-		wsName = "Importierter Workspace"
+		wsName = strings.TrimSpace(manifest.Workspace.Name)
+	}
+	if wsName == "" {
+		wsName = "Imported workspace"
 	}
 	var exists int
 	s.db.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE name = ?`, wsName).Scan(&exists)
@@ -327,18 +391,16 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 	wsID := newID()
 	tx, err := s.db.Begin()
 	if err != nil {
-		httpError(w, 500, err.Error())
-		return
+		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err := tx.Exec(`INSERT INTO workspaces (id, name, created_at, icon, image, owner_id) VALUES (?, ?, ?, ?, ?, ?)`,
-		wsID, wsName, now(), manifest.Workspace.Icon, remap.Replace(manifest.Workspace.Image), u.ID); err != nil {
-		httpError(w, 500, err.Error())
-		return
+	if _, err := tx.Exec(`INSERT INTO workspaces (id, name, created_at, icon, image, rules, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		wsID, wsName, now(), manifest.Workspace.Icon, remap.Replace(manifest.Workspace.Image),
+		manifest.Workspace.Rules, u.ID); err != nil {
+		return nil, err
 	}
 	if _, err := tx.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')`, wsID, u.ID); err != nil {
-		httpError(w, 500, err.Error())
-		return
+		return nil, err
 	}
 	for tag, color := range tagColors {
 		// Tag colours are palette names (see handleSetTagColor), not hex values.
@@ -394,14 +456,12 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 				idMap[p.ID], parent, p.Title, p.Icon, defaultJSON(p.Content, "[]"), p.Position,
 				created, updated, typ, defaultJSON(p.Props, "{}"), remap.Replace(p.Cover),
 				wsID, u.ID, vis, boolToInt(p.IsTemplate), defaultJSON(p.Tags, "[]"), p.Description); err != nil {
-				httpError(w, 500, err.Error())
-				return
+				return nil, err
 			}
 			if typ == "collection" {
 				if _, err := tx.Exec(`INSERT INTO collections (page_id, schema, views) VALUES (?, ?, ?)`,
 					idMap[p.ID], defaultJSON(p.Schema, "[]"), defaultJSON(p.Views, "[]")); err != nil {
-					httpError(w, 500, err.Error())
-					return
+					return nil, err
 				}
 			}
 			inserted[p.ID] = true
@@ -417,8 +477,7 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		remaining = next
 	}
 	if err := tx.Commit(); err != nil {
-		httpError(w, 500, err.Error())
-		return
+		return nil, err
 	}
 
 	// Build the search index and the backlink graph for the new pages.
@@ -427,10 +486,66 @@ func (s *Server) handleImportWorkspace(w http.ResponseWriter, r *http.Request) {
 		s.reindexPage(id)
 		s.updateLinks(id, remap.Replace(string(p.Content)), false)
 	}
+	s.pagesChanged()
 
-	s.audit("human", u.ID, u.Name, "import_workspace", "", wsID,
+	action := "import_workspace"
+	if opt.StructureOnly {
+		action = "blueprint_workspace"
+	}
+	s.audit("human", u.ID, u.Name, action, "", wsID,
 		fmt.Sprintf("%s (%d pages, %d files)", wsName, len(pages), filesWritten))
-	writeJSON(w, map[string]any{"workspaceId": wsID, "name": wsName, "pages": len(pages), "files": filesWritten})
+	return &importResult{WorkspaceID: wsID, Name: wsName, Pages: len(pages), Files: filesWritten}, nil
+}
+
+// keepDatabasesOnly drops rows and documents. A blueprint carrying somebody's
+// tasks is not a blueprint, and a workspace full of somebody else's notes is not
+// an empty start.
+//
+// A database nested under a dropped document keeps its now-unknown parent, which
+// the insert loop already handles by hanging it at the top level — better than
+// losing it because its folder did not come along.
+func keepDatabasesOnly(pages []transferPage) []transferPage {
+	kept := make([]transferPage, 0, len(pages))
+	for _, p := range pages {
+		if p.Type == "collection" {
+			kept = append(kept, p)
+		}
+	}
+	return kept
+}
+
+// structureOnly repairs what dropping the rows broke. It works on the ORIGINAL
+// ids — idMap holds exactly the pages that survived, so "not in idMap" is the
+// test for a reference that has nothing left to point at.
+func structureOnly(pages []transferPage, idMap map[string]string) {
+	// remapSchema rewrites to the NEW id; here the text replacement further down
+	// does that, so this pass hands it an identity map and uses it only to decide
+	// what still exists.
+	keep := make(map[string]string, len(idMap))
+	for old := range idMap {
+		keep[old] = old
+	}
+	for i := range pages {
+		if pages[i].Type != "collection" {
+			continue
+		}
+		var schema []map[string]any
+		var views []map[string]any
+		if len(pages[i].Schema) > 0 {
+			json.Unmarshal(pages[i].Schema, &schema)
+		}
+		if len(pages[i].Views) > 0 {
+			json.Unmarshal(pages[i].Views, &views)
+		}
+		remapSchema(schema, keep)
+		views = blueprintViews(views, schema)
+		if b, err := json.Marshal(schema); err == nil {
+			pages[i].Schema = b
+		}
+		if b, err := json.Marshal(views); err == nil {
+			pages[i].Views = b
+		}
+	}
 }
 
 func boolToInt(b bool) int {
