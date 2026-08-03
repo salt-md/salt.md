@@ -1119,7 +1119,12 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 
 	result, err := run()
 	// Record who did what (agent vs human) and cache for idempotent retries.
-	if err == nil && mutating {
+	//
+	// working_on is excluded: it writes its own entry, with the NOTE as the
+	// detail. The generic one here would use the tool's reply instead, so the
+	// log read "started working on: Checked out of page b534…" — two lines per
+	// call, and the second one saying the opposite of what happened.
+	if err == nil && mutating && name != "working_on" {
 		ws := s.pageWorkspace(args.PageID)
 		if ws == "" { // create_page has no page_id arg — attribute to the actor's workspace
 			ws = s.userDefaultWorkspace(userID)

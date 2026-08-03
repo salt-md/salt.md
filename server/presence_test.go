@@ -201,3 +201,46 @@ func TestCheckInNeedsReadAccess(t *testing.T) {
 		t.Error("a stranger checked in on somebody else's page")
 	}
 }
+
+// A check-in must leave ONE log entry, and it must be the readable one.
+//
+// The generic MCP audit records every writing call under the tool's name with
+// the tool's REPLY as the detail. For this tool that produced a second line
+// reading "started working on: Checked out of page b534…" — the wrong verb and
+// an unreadable detail, right beside the correct entry.
+func TestCheckInLeavesOneReadableLogEntry(t *testing.T) {
+	s := testServer(t)
+	uid, _ := signedIn(t, s, "log@example.test")
+	u := &user{ID: uid, Name: "Jeremia"}
+	ws := s.firstWorkspaceOf(t, uid)
+	page := s.makePage(t, ws, uid, "", "Doc", `{}`)
+
+	if _, err := s.mcpCall(u, "working_on", json.RawMessage(
+		`{"page_id":"`+page+`","agent":"claude","note":"tidying the file index"}`), ""); err != nil {
+		t.Fatalf("check in: %v", err)
+	}
+	rows, err := s.db.Query(`SELECT action, detail FROM audit_log WHERE page_id = ?`, page)
+	if err != nil {
+		t.Fatalf("audit: %v", err)
+	}
+	type entry struct{ action, detail string }
+	var got []entry
+	for rows.Next() {
+		var e entry
+		if rows.Scan(&e.action, &e.detail) == nil {
+			got = append(got, e)
+		}
+	}
+	rows.Close()
+
+	if len(got) != 1 {
+		t.Fatalf("expected one entry, got %d: %+v", len(got), got)
+	}
+	if got[0].action != "working_on" {
+		t.Errorf("action is %q", got[0].action)
+	}
+	// The note, not the tool's reply — that is what makes the line worth reading.
+	if got[0].detail != "tidying the file index" {
+		t.Errorf("detail is %q, want the note", got[0].detail)
+	}
+}
