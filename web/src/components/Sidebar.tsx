@@ -6,7 +6,7 @@ import UserMenu from './UserMenu';
 import WorkspaceMembers from './WorkspaceMembers';
 import WorkspaceRules from './WorkspaceRules';
 import FileList from './FileList';
-import { promptText } from '../dialog';
+import { promptText, promptTextWithChoice } from '../dialog';
 import { toast } from '../toast';
 import Portal from './Portal';
 import IconPicker from './IconPicker';
@@ -784,13 +784,34 @@ export default function Sidebar({
   };
 
   const newWorkspace = async () => {
-    const name = await promptText(t('Name for the new workspace?'), { placeholder: t('e.g. Team') });
-    if (!name?.trim()) return;
+    // A new workspace is two decisions, not one: what it is called, and whether
+    // it starts from nothing. Everything that makes a workspace usable is
+    // invisible — the rules, the option ids, the derived columns, the view
+    // filters — so "empty" is rarely what somebody actually wants, and the
+    // second question has to be asked where the first one is.
+    const blueprints = workspaces.filter((w) => !w.personal);
+    const answer = await promptTextWithChoice(t('Name for the new workspace?'), {
+      placeholder: t('e.g. Team'),
+      choice: {
+        label: t('Start from'),
+        options: [
+          { value: '', label: t('Empty') },
+          ...blueprints.map((w) => ({
+            value: w.id,
+            label: t('Like “{name}”').replace('{name}', w.name),
+          })),
+        ],
+      },
+    });
+    if (!answer?.text.trim()) return;
     try {
-      const ws = await api.createWorkspace(name.trim());
+      const ws = await api.createWorkspace(answer.text.trim(), answer.choice || undefined);
       onWorkspacesChanged();
       onSwitchWorkspace(ws.id);
       setWsMenuOpen(false);
+      if (answer.choice) {
+        toast(t('Created from the structure of the other workspace — rules, databases and views, no rows.'));
+      }
     } catch {
       toast(t('The workspace could not be created'));
     }

@@ -424,8 +424,13 @@ export const api = {
     }),
 
   listWorkspaces: () => req<Workspace[]>('/api/workspaces'),
-  createWorkspace: (name: string) =>
-    req<Workspace>('/api/workspaces', { method: 'POST', body: JSON.stringify({ name }) }),
+  // fromWorkspace copies an existing workspace's STRUCTURE into the new one:
+  // its rules, databases, schemas and views, but no rows and no documents.
+  createWorkspace: (name: string, fromWorkspace?: string) =>
+    req<Workspace>('/api/workspaces', {
+      method: 'POST',
+      body: JSON.stringify(fromWorkspace ? { name, fromWorkspace } : { name }),
+    }),
   // Irreversible: the caller must echo the workspace name back as `confirm`.
   deleteWorkspace: (id: string, confirm: string) =>
     req<{ ok: boolean }>(`/api/workspaces/${id}`, {

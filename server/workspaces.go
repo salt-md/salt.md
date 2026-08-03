@@ -573,6 +573,10 @@ func (s *Server) handleDeleteWorkspace(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`
+		// Start from an existing workspace's structure instead of from nothing.
+		// The workspace itself is the template — see workspace_blueprint.go for
+		// why there is no separate template object.
+		FromWorkspace string `json:"fromWorkspace"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		httpError(w, 400, "invalid JSON")
@@ -585,6 +589,24 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	// W97: non-admins only when the instance permits it.
 	if !requestUser(r).IsAdmin && !s.loadSettings().AllowUserWorkspaces {
 		httpError(w, 403, "creating workspaces is disabled on this instance — ask an admin")
+		return
+	}
+	if body.FromWorkspace != "" {
+		u := requestUser(r)
+		if _, err := s.blueprintWorkspace(u, body.Name, body.FromWorkspace); err != nil {
+			httpErrorCode(w, 400, "blueprint_failed", err.Error())
+			return
+		}
+		// The blueprint path creates the workspace itself; hand back the new one so
+		// the browser can switch straight into it.
+		var id, name string
+		if err := s.db.QueryRow(`SELECT id, name FROM workspaces
+			WHERE owner_id = ? AND name = ? ORDER BY created_at DESC LIMIT 1`,
+			u.ID, strings.TrimSpace(body.Name)).Scan(&id, &name); err != nil {
+			httpError(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, workspaceJSON{ID: id, Name: name, Role: "admin"})
 		return
 	}
 	id := newID()
