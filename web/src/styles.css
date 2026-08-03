@@ -1903,7 +1903,7 @@ button {
    rather than squeezing the columns into a few pixels. */
 .board {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   padding: 16px 48px 20px;
   align-items: stretch;
   overflow-x: auto;
@@ -1922,8 +1922,13 @@ button {
   min-height: 240px;
 }
 
+/* Widened from 272px. At that width a normal task title broke after three or
+   four words and a card with five faces plus an agent had almost no line left —
+   the board read as cramped before anyone had put much in it. The columns are
+   what buys room; enlarging the cards inside a narrow column only moves the
+   squeeze. */
 .board-col {
-  width: 272px;
+  width: 320px;
   flex-shrink: 0;
   background: var(--sidebar-bg);
   border-radius: 10px;
@@ -1998,7 +2003,7 @@ button {
 .board-cards {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 9px;
   overflow-y: auto;
   overscroll-behavior-y: contain;
   min-height: 0;
@@ -2006,11 +2011,12 @@ button {
 }
 
 .board-card {
+  position: relative; /* the move button hangs off this corner */
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 11px 13px;
-  cursor: grab; /* Karte ist ziehbar (W95) */
+  padding: 14px 15px;
+  cursor: grab; /* the card is draggable (W95) */
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
@@ -2022,14 +2028,14 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .board-card-title {
   font-size: 14px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 1.45;
   flex: 1;
   /* Long row titles clamp instead of dominating the card (Notion-style). */
   display: -webkit-box;
@@ -2039,8 +2045,15 @@ button {
   overflow: hidden;
 }
 
+/* The move button is invisible until hover, but it was still IN the layout —
+   a permanently reserved 24px that pushed the marks away from the card edge and
+   made them look inset for no reason anybody could see. Out of the flow now:
+   the corner belongs to the marks, and the button lands on top of it only while
+   the pointer is there. The marks step aside for exactly that moment. */
 .card-move {
-  position: relative;
+  position: absolute;
+  top: 9px;
+  right: 9px;
   flex-shrink: 0;
 }
 
@@ -2107,7 +2120,7 @@ button {
   flex-wrap: wrap;
   align-items: center;
   column-gap: 14px;
-  row-gap: 3px;
+  row-gap: 5px;
 }
 
 /* A fact carries its field name, because "55" and a second date say nothing
@@ -7051,18 +7064,13 @@ a,
   text-decoration: underline;
 }
 
-/* Denser cards: more of them in view without looking cramped. */
-.board-card {
-  padding: 9px 11px;
-}
-.board-card-top {
-  margin-bottom: 5px;
-}
-.board-card-props {
-  gap: 4px;
-}
+/* The card spacing lives ONCE, up with .board-card. There used to be a second,
+   later block here tightening the same three values — it won by position, so
+   editing the first one silently did nothing. That is the whole reason the
+   board stayed cramped: the numbers being read were not the numbers being
+   changed. */
 
-/* Der "Neu"-Knopf sitzt fest am Spaltenende. */
+/* The "New" button stays pinned to the end of the column. */
 .board-add {
   flex: 0 0 auto;
   margin-top: 6px;
@@ -8051,6 +8059,12 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  transition: margin-right 120ms ease;
+}
+
+/* Room for the move button, and only while it is actually there. */
+.board-card:hover .card-marks {
+  margin-right: 22px;
 }
 
 .agent-dot {
