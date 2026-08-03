@@ -8077,12 +8077,18 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   color: #fff;
   opacity: 0.55;
   flex-shrink: 0;
-  /* The same 2px card-coloured ring the faces wear, and a negative margin so
-     the first face slides underneath rather than beside. */
+  /* The same 2px card-coloured ring the faces wear. */
   border: 2px solid var(--card);
-  margin-right: -7px;
   position: relative;
   z-index: 2;
+}
+
+/* The overlap exists so the first FACE slides underneath. With nobody
+   assigned there is nothing to slide under, and the negative margin just
+   dragged the lone mark 7px right — where it ended up touching the move
+   button. Only overlap when something follows. */
+.card-marks .agent-dot:not(:last-child) {
+  margin-right: -7px;
 }
 
 /* Fresh means it called in minutes ago. A slow breath says that better than a

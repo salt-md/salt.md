@@ -49,6 +49,14 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 		},
 		"note": "list with kind=\"users\" names only the people you share a workspace with; " +
 			"account administration needs a signed-in browser session.",
+		// A tool nobody thinks of is a tool nobody uses. This is the one place an
+		// agent reliably looks BEFORE it starts — its own description says "call
+		// this first" — so the reminder to announce work belongs here rather than
+		// only in the working_on description, which is read by whoever already
+		// decided to use it.
+		"before_you_start": "If you are about to work on a page or a board task for more than a moment, " +
+			"call working_on(page_id, agent, note) first — a person watching then sees who is on it and what for, " +
+			"live. Call it again with done: true when you finish. Nothing expires on you in between.",
 	}
 	if u.TokenWorkspaces == nil {
 		out["workspace_scope"] = "all workspaces you are a member of"
