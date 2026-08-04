@@ -81,9 +81,15 @@ func (s *Server) handleListPages(w http.ResponseWriter, r *http.Request) {
 	// sub-pages have no parent in the list, and the sidebar showed them flat
 	// under Documents, stripped of their context. Rows with children are the
 	// rare case, so the tens-of-thousands argument above keeps holding.
+	//
+	// And EXCEPT a database nested inside another one. It is not a row — the
+	// count argument never applied to it — but it was dropped by the same rule,
+	// so the sidebar only ever saw it through the rows endpoint and drew it as
+	// a row: no ⋯ menu, and therefore no way to move it back out again.
 	rows, err := s.db.Query(`SELECT `+pageMetaCols+` FROM pages p
 		WHERE workspace_id IN (`+placeholders(len(ws))+`)
 		AND (parent_id IS NULL OR trashed_at IS NOT NULL
+		     OR p.type = 'collection'
 		     OR (SELECT type FROM pages parent WHERE parent.id = p.parent_id) != 'collection'
 		     OR EXISTS (SELECT 1 FROM pages c WHERE c.parent_id = p.id AND c.trashed_at IS NULL))
 		ORDER BY position, created_at`, args...)

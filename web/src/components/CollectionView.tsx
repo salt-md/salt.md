@@ -56,6 +56,7 @@ import {
   Mail,
   Phone,
   MapPin,
+  CornerUpRight,
 } from 'lucide-react';
 
 // Small type glyph shown next to each property (Notion-style visibility panel).
@@ -1433,7 +1434,7 @@ function BoardView({
                                 onDrop(r.id, groupBy, c.id);
                               }}
                             >
-                              → {c.name}
+                              <CornerUpRight size={15} /> {c.name}
                             </button>
                           ))}
                       </div>

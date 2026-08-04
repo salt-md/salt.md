@@ -1180,7 +1180,7 @@ function CoverMenu({
   return (
     <div className="cover-menu" ref={ref}>
       <button className="cover-upload" onClick={onUpload}>
-        {t('⤒ Upload image')}
+        <Upload size={15} /> {t('Upload image')}
       </button>
       <div className="cover-grid">
         {COVER_GRADIENTS.map((g) => (

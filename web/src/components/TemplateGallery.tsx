@@ -211,7 +211,7 @@ export default function TemplateGallery({
             {current && (
               <>
                 <button className="btn-sm" onClick={() => onUnflag(current.id)}>
-                  {t('📋 Remove template flag')}
+                  <LayoutTemplate size={13} /> {t('Remove template flag')}
                 </button>
                 <button className="btn-sm danger" onClick={() => onTrash(current.id)}>
                   <Trash2 size={13} /> {t('Delete')}

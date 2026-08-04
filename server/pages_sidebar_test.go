@@ -77,3 +77,52 @@ func TestListPagesIncludesRowsWithChildren(t *testing.T) {
 		t.Errorf("trashed sub-page missing — the trash needs it")
 	}
 }
+
+// A database nested inside another database is not a row of it. It was dropped
+// by the same exclusion anyway, so the sidebar only ever learned about it from
+// the rows endpoint and drew it as a row — which has no ⋯ menu. Once a database
+// had been dragged into another one, nothing in the interface could take it
+// back out.
+func TestListPagesIncludesADatabaseInsideADatabase(t *testing.T) {
+	s := testServer(t)
+	uid, cookie := signedIn(t, s, "nested@example.com")
+	ws := makeWorkspace(t, s, uid)
+
+	mk := func(id, parent, typ string) {
+		t.Helper()
+		var par any
+		if parent != "" {
+			par = parent
+		}
+		if _, err := s.db.Exec(`INSERT INTO pages (id, parent_id, title, content, position, created_at, updated_at, workspace_id, owner_id, visibility, type)
+			VALUES (?, ?, ?, '[]', 0, ?, ?, ?, ?, 'workspace', ?)`,
+			id, par, id, now(), now(), ws, uid, typ); err != nil {
+			t.Fatalf("insert %s: %v", id, err)
+		}
+	}
+	mk("outer", "", "collection")
+	mk("inner", "outer", "collection") // a database inside a database
+	mk("plain-row", "outer", "doc")    // a real row, still excluded
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/pages", nil)
+	req.Header.Set("Cookie", cookie)
+	s.ServeHTTP(rec, req)
+	var list []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&list); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	got := map[string]bool{}
+	for _, p := range list {
+		got[p.ID] = true
+	}
+	if !got["inner"] {
+		t.Error("a database inside a database is missing — the sidebar can only reach it as a row, and a row has no menu")
+	}
+	// The count argument is about rows and still holds for them.
+	if got["plain-row"] {
+		t.Error("a bare row leaked into /api/pages")
+	}
+}

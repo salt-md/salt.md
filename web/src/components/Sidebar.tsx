@@ -19,7 +19,7 @@ import TemplateGallery from './TemplateGallery';
 import BlueprintLibrary from './BlueprintLibrary';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip } from 'lucide-react';
+import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -91,6 +91,12 @@ interface TreeCtx {
   onOpenInNewTab: (id: string) => void;
   toggleExpand: (id: string) => void;
   onCreateChild: (id: string) => void;
+  // Two things a person could not do at all until now, while an agent could do
+  // both over MCP: put a database INSIDE a page, and get one back out again.
+  // The capabilities were always there (onCreate takes a type, onMove takes a
+  // null parent) — nothing offered them.
+  onCreateChildDb: (id: string) => void;
+  onMoveToTop: (id: string) => void;
   onShowFiles: (id: string, title: string) => void;
   setMenuFor: (id: string | null) => void;
   onTrash: (id: string) => void;
@@ -137,11 +143,25 @@ function DbRows({
   // of 50 — append any that the window missed, so a subtree is never
   // unreachable just because its row sorts late.
   const inTree = ctx.childrenMap.get(collectionId) ?? [];
-  const missing = inTree.filter((w) => !rows.some((r) => r.id === w.id));
-  const all = [...rows, ...missing.map((m) => ({ id: m.id, title: m.title, icon: m.icon }))];
-  if (all.length === 0) return <div className="tree-db-empty" style={pad}>{t('No entries')}</div>;
+  // A database nested inside another one is NOT one of its rows — it is a page
+  // that happens to live there. Drawn as a row it got the row's markup, which
+  // has a ＋ and no ⋯ menu: so once a database had been dragged into another
+  // one, the interface offered no way whatsoever to get it back out. It renders
+  // as a proper tree item now, with the full menu.
+  const nestedDbs = inTree.filter((p) => p.type === 'collection');
+  const isNestedDb = (id: string) => nestedDbs.some((d) => d.id === id);
+  const missing = inTree.filter((w) => !isNestedDb(w.id) && !rows.some((r) => r.id === w.id));
+  const all = [
+    ...rows.filter((r) => !isNestedDb(r.id)),
+    ...missing.map((m) => ({ id: m.id, title: m.title, icon: m.icon })),
+  ];
+  if (all.length === 0 && nestedDbs.length === 0)
+    return <div className="tree-db-empty" style={pad}>{t('No entries')}</div>;
   return (
     <div className="tree-db-rows">
+      {nestedDbs.map((d) => (
+        <TreeItem key={d.id} p={d} depth={depth} ctx={ctx} section="dbs" />
+      ))}
       {all.map((r) => {
         const kids = ctx.childrenMap.get(r.id) ?? [];
         const isOpen = ctx.expanded.has(r.id);
@@ -378,7 +398,7 @@ function TreeItem({
                   ctx.onOpenInNewTab(p.id);
                 }}
               >
-                {t('↗ Open in new tab')}
+                <SquareArrowOutUpRight size={16} /> {t('Open in new tab')}
               </button>
               <button
                 onClick={() => {
@@ -386,7 +406,8 @@ function TreeItem({
                   ctx.onToggleFavorite(p.id);
                 }}
               >
-                {ctx.favorites.has(p.id) ? '★ Remove from favorites' : '☆ Add to favorites'}
+                <Star size={16} fill={ctx.favorites.has(p.id) ? 'currentColor' : 'none'} />{' '}
+                {ctx.favorites.has(p.id) ? t('Remove from favorites') : t('Add to favorites')}
               </button>
               <button
                 onClick={() => {
@@ -394,8 +415,29 @@ function TreeItem({
                   ctx.onDuplicate(p.id);
                 }}
               >
-                {t('⧉ Duplicate')}
+                <Copy size={16} /> {t('Duplicate')}
               </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onCreateChildDb(p.id);
+                }}
+              >
+                <Table2 size={16} /> {t('New collection inside')}
+              </button>
+              {/* Only when there is a parent to leave. A database dragged into
+                  another one had no way back at all: it lives in that one's
+                  subtree, and nothing in the interface moved it out. */}
+              {p.parentId && (
+                <button
+                  onClick={() => {
+                    ctx.setMenuFor(null);
+                    ctx.onMoveToTop(p.id);
+                  }}
+                >
+                  <CornerLeftUp size={16} /> {t('Move to top level')}
+                </button>
+              )}
               {ctx.workspaces.length > 1 && (
                 <div className="menu-sub">
                   <div className="menu-label">{t('Move to workspace')}</div>
@@ -409,7 +451,7 @@ function TreeItem({
                           ctx.onMoveToWorkspace(p.id, w.id, w.name);
                         }}
                       >
-                        → {w.name}
+                        <CornerUpRight size={16} /> {w.name}
                       </button>
                     ))}
                 </div>
@@ -420,7 +462,7 @@ function TreeItem({
                   ctx.onShowFiles(p.id, p.title || t('Untitled'));
                 }}
               >
-                {t('📎 Files in this subtree')}
+                <Paperclip size={16} /> {t('Files in this subtree')}
               </button>
               <button
                 onClick={() => {
@@ -435,7 +477,7 @@ function TreeItem({
                     .catch(() => toast(t('Could not save as template')));
                 }}
               >
-                {t('📋 Save as template')}
+                <LayoutTemplate size={16} /> {t('Save as template')}
               </button>
               <button
                 onClick={() => {
@@ -443,7 +485,7 @@ function TreeItem({
                   api.download(`/api/export/${p.id}`);
                 }}
               >
-                {t('⤓ Export Markdown')}
+                <Download size={16} /> {t('Export Markdown')}
               </button>
               <button
                 className="danger"
@@ -452,7 +494,7 @@ function TreeItem({
                   ctx.onTrash(p.id);
                 }}
               >
-                {t('🗑 Move to trash')}
+                <Trash2 size={16} /> {t('Move to trash')}
               </button>
             </div>
           )}
@@ -681,6 +723,14 @@ export default function Sidebar({
     onCreateChild: (id) => {
       onCreate(id);
       expand(id);
+    },
+    onCreateChildDb: (id) => {
+      onCreate(id, 'collection');
+      expand(id);
+    },
+    onMoveToTop: (id) => {
+      const roots = (childrenMap.get('') ?? []).filter((k) => k.id !== id);
+      onMove(id, null, roots.length ? roots[roots.length - 1].position + 1 : 1);
     },
     onShowFiles: (id, title) => setFilesFor({ under: id, title }),
     setMenuFor,
@@ -1183,7 +1233,7 @@ export default function Sidebar({
                           unflagTemplate(p.id);
                         }}
                       >
-                        {t('📋 Remove template flag')}
+                        <LayoutTemplate size={16} /> {t('Remove template flag')}
                       </button>
                       <button
                         className="danger"
@@ -1192,7 +1242,7 @@ export default function Sidebar({
                           onTrash(p.id);
                         }}
                       >
-                        {t('🗑 Move to trash')}
+                        <Trash2 size={16} /> {t('Move to trash')}
                       </button>
                     </div>
                   )}
@@ -1213,14 +1263,14 @@ export default function Sidebar({
                 <span className="tree-icon"><PageIcon icon={p.icon} size={15} fallback={<FileText size={15} />} /></span>
                 <span className="tree-title">{p.title || 'Untitled'}</span>
                 <button title={t('Restore')} onClick={() => onRestore(p.id)}>
-                  ↩
+                  <Undo2 size={14} />
                 </button>
                 <button
                   title={t('Delete forever')}
                   className="danger"
                   onClick={() => onDeleteForever(p.id)}
                 >
-                  ✕
+                  <X size={14} />
                 </button>
               </div>
             ))}
