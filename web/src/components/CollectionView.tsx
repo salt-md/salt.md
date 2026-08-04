@@ -709,7 +709,7 @@ function FormView({
         toast(t('Public link created'));
       }
     } catch {
-      toast('Teilen fehlgeschlagen');
+      toast(t('Sharing failed'));
     } finally {
       setShareBusy(false);
     }
@@ -723,7 +723,7 @@ function FormView({
       setShareUrl(null);
       toast(t('Public link revoked'));
     } catch {
-      toast('Fehlgeschlagen');
+      toast(t('That did not work'));
     } finally {
       setShareBusy(false);
     }
@@ -751,7 +751,7 @@ function FormView({
       onSubmitted();
       setDone(true);
     } catch {
-      toast('Senden fehlgeschlagen');
+      toast(t('Sending failed'));
     } finally {
       setBusy(false);
     }

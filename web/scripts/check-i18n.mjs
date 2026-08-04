@@ -298,6 +298,50 @@ const germanLines = [];
   }
 }
 
+// A STRING LITERAL is judged more harshly than a line: ONE unambiguous German
+// word is enough. That is the same bargain the Go side struck in
+// TestUserFacingStringsAreEnglish, and for the same reason — short interface
+// text is exactly the shape the line rule cannot see. "Teilen fehlgeschlagen"
+// carries no umlaut and only one word from the list above, so it read as clean
+// while sitting in a toast for months. Four of these were found by hand on one
+// day; this is what stops the fifth.
+//
+// The words here must not exist in English and must not appear in a class name,
+// an id or a URL — anything ambiguous belongs in the line list above, not here.
+const GERMAN_STRONG =
+  /(?<![\w-])(fehlgeschlagen|umbenennen|umbenannt|verschieben|verschoben|loeschen|löschen|geloescht|gelöscht|gespeichert|speichern|hochladen|hochgeladen|anlegen|angelegt|erstellen|erstellt|schliessen|schließen|abbrechen|hinzufuegen|hinzufügen|entfernen|entfernt|bearbeiten|suchen|senden|gesendet|teilen|geteilt|beitritt|importierter|einsammeln|referenzierte|auswaehlen|auswählen|verbinden|verbunden|zurueck|zurück|weiter|fertig|ungueltig|ungültig|vorhanden|erforderlich)(?![\w])/iu;
+
+// Every quoted string in the source, JSX text included via the line rule above.
+const germanStrings = [];
+{
+  const stack = [src];
+  const STR = /(['"`])((?:\\.|(?!\1)[^\\])*?)\1/g;
+  while (stack.length) {
+    const d = stack.pop();
+    for (const name of readdirSync(d)) {
+      const p2 = join(d, name);
+      if (statSync(p2).isDirectory()) {
+        if (name !== 'locales') stack.push(p2);
+      } else if (/\.tsx?$/.test(p2) && !SKIP.has(name)) {
+        const rel = relative(join(here, '..'), p2);
+        readFileSync(p2, 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            if (/i18n-ok:\s*\S/.test(line)) return;
+            for (const m of line.matchAll(STR)) {
+              const text = m[2];
+              if (!/[A-Za-zÄÖÜäöüß]{3}/.test(text)) continue;
+              if (GERMAN_STRONG.test(text)) {
+                germanStrings.push(`${rel}:${i + 1}  ${text.slice(0, 60)}`);
+                break;
+              }
+            }
+          });
+      }
+    }
+  }
+}
+
 // `--german` lists them grouped by file, so the sweep can be worked through one
 // file at a time — the same shape as `--bare`.
 if (process.argv.includes('--german')) {
@@ -390,10 +434,16 @@ else {
   for (const s of germanLines.slice(0, 8)) console.log(`      ${s}`);
   if (germanLines.length > 8) console.log(`      … and ${germanLines.length - 8} more`);
 }
+if (germanStrings.length === 0) console.log('    ok   no German inside a string literal');
+else {
+  console.log(`    ${germanStrings.length} string literal(s) read as German`);
+  for (const s of germanStrings.slice(0, 12)) console.log(`      ${s}`);
+  if (germanStrings.length > 12) console.log(`      … and ${germanStrings.length - 12} more`);
+}
 
 console.log();
 const stale = report.filter((r) => r.missing > 0 || r.orphans.length > 0);
-if (errors.length || unwrapped > 0 || stale.length || germanLines.length) {
+if (errors.length || unwrapped > 0 || stale.length || germanLines.length || germanStrings.length) {
   if (errors.length) console.log(`  FAILED — ${errors.length} formatting violation(s)`);
   if (unwrapped > 0)
     console.log(`  FAILED — ${unwrapped} user-visible string(s) not wrapped in t()`);
@@ -401,6 +451,8 @@ if (errors.length || unwrapped > 0 || stale.length || germanLines.length) {
     console.log(`  FAILED — ${r.name}: ${r.missing} untranslated, ${r.orphans.length} orphaned`);
   if (germanLines.length)
     console.log(`  FAILED — ${germanLines.length} German line(s) in the source`);
+  if (germanStrings.length)
+    console.log(`  FAILED — ${germanStrings.length} German string literal(s) — one word is enough here`);
   console.log('\n  Fix, or justify the line with `i18n-ok: <reason>`.');
   console.log('  For a catalog: node scripts/check-i18n.mjs --missing <locale>');
   console.log('  For the German list: node scripts/check-i18n.mjs --german');

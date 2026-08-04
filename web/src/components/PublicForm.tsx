@@ -44,7 +44,7 @@ export default function PublicForm({ token }: { token: string }) {
       await api.publicFormSubmit(token, title.trim(), props);
       setDone(true);
     } catch {
-      toast('Senden fehlgeschlagen');
+      toast(t('Sending failed'));
     } finally {
       setBusy(false);
     }

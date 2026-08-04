@@ -52,7 +52,7 @@ export default function InviteAccept({
     try {
       finish(await api.acceptInvite(token, '', '', ''));
     } catch (err) {
-      setError((err as Error).message || 'Beitritt fehlgeschlagen');
+      setError((err as Error).message || t('Joining failed'));
     } finally {
       setBusy(false);
     }
@@ -68,7 +68,7 @@ export default function InviteAccept({
       // As with signing in: go by the reason in the answer, not the message text.
       const e = err as ApiError;
       if (e.code === '2fa_required') setNeedCode(true);
-      setError(e.message || 'Beitritt fehlgeschlagen');
+      setError(e.message || t('Joining failed'));
     } finally {
       setBusy(false);
     }

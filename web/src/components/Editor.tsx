@@ -501,7 +501,7 @@ function PageHeader({
       // Absolute URL on the external domain when configured; else current origin.
       setShareUrl(res.url.startsWith('http') ? res.url : location.origin + res.url);
     } catch {
-      toast('Teilen fehlgeschlagen');
+      toast(t('Sharing failed'));
     }
   };
 
@@ -604,7 +604,7 @@ function PageHeader({
         onNavigate(r.id);
       }
     } catch (err) {
-      toast((err as Error).message || 'Import fehlgeschlagen');
+      toast((err as Error).message || t('Import failed'));
     }
   };
 
@@ -1397,7 +1397,7 @@ function BlockContent({
       {
         title: t('Embed a collection'),
         subtext: t('Show an existing collection inside the document'),
-        aliases: ['datenbank', 'database', 'db', 'tabelle', 'board', 'kanban'],
+        aliases: ['datenbank', 'database', 'db', 'tabelle', 'board', 'kanban'], // i18n-ok: search aliases, deliberately multilingual so a German user can type it
         group: 'Basic blocks',
         icon: <span>▦</span>,
         onItemClick: () =>

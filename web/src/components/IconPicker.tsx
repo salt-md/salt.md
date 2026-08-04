@@ -114,7 +114,7 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId, anchor }
       const url = await api.upload(file, pageId);
       onPick(url);
     } catch {
-      toast('Upload fehlgeschlagen');
+      toast(t('Upload failed'));
     } finally {
       setUploading(false);
     }
@@ -145,7 +145,7 @@ export default function IconPicker({ onPick, onRemove, onClose, pageId, anchor }
         <input
           className="icon-search"
           autoFocus
-          placeholder={tab === 'emoji' ? 'Emoji suchen…' : 'Icon suchen…'}
+          placeholder={tab === 'emoji' ? t('Search emoji…') : t('Search icons…')}
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />

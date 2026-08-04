@@ -744,7 +744,7 @@ export default function Sidebar({
       void api
         .updatePage(pageId, { workspaceId: wsId })
         .then(() => {
-          toast(`Nach „${wsName}" verschoben`);
+          toast(t('Moved to “{name}”').replace('{name}', wsName));
           // The page tree updates itself through the server's change feed
           // (pagesChanged); only the workspace counters need catching up here.
           onWorkspacesChanged();
