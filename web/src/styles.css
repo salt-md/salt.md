@@ -8405,64 +8405,20 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   }
 }
 
-/* --- the ⋯ on a view tab -----------------------------------------------------
-   A view could be created and never removed, so the tab needed an action of its
-   own. It stays out of the way: shown on hover, and on the tab you are on —
-   otherwise a board with five views carries five dots that mean nothing until
-   you want one. */
+/* --- the view's own menu ------------------------------------------------------
+   It lives in the toolbar with filter, sort and columns, because that row is
+   already "settings for the view you are on". Inside the tab it was a smudge in
+   the pill, and it had to reserve room in a row where nothing else does — which
+   pushed every tab apart at rest. */
 
-.view-tab-wrap {
+.view-menu-wrap {
   position: relative;
   display: inline-flex;
-  align-items: center;
-}
-
-/* ABSOLUTE, not just transparent. An invisible button that still occupies its
-   box pushes every tab apart by its own width — the tabs stood 18px too far
-   from each other at rest and closed up on hover. The same mistake as the card
-   marks, made twice in one day: opacity hides a thing, it does not remove it
-   from the row. */
-.view-tab-more {
-  position: absolute;
-  right: 2px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 18px;
-  height: 18px;
-  border-radius: 5px;
-  color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.12s;
-}
-
-/* The dots belong to the view you are ON, and they are there the whole time it
-   is active. Showing them on hover instead means the tab has to make room at
-   the moment the pointer arrives, which shoves every tab to its right — the
-   jump is smaller than reserving the space permanently, but it is still a jump,
-   and it happens exactly while you are aiming at something. This way nothing
-   ever moves. The cost is one extra click to remove a view you are not on. */
-.view-tab-wrap:has(.view-tab.active) .view-tab {
-  padding-right: 26px;
-}
-
-.view-tab-wrap:has(.view-tab.active) .view-tab-more,
-.view-tab-wrap:focus-within .view-tab-more {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.view-tab-more:hover {
-  background: var(--hover);
-  color: var(--fg);
 }
 
 .view-tab-menu {
-  top: 28px;
-  right: auto;
-  left: 0;
+  top: 30px;
+  right: 0;
+  left: auto;
   min-width: 170px;
 }

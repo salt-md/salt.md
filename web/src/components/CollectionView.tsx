@@ -449,31 +449,6 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
               <span className="view-tab-ic">{tabIcon(v.type)}</span>
               {v.name}
             </button>
-            <button
-              className="view-tab-more"
-              title={t('View options')}
-              onClick={(e) => {
-                e.stopPropagation();
-                setViewMenuFor((cur) => (cur === v.id ? null : v.id));
-              }}
-            >
-              <MoreHorizontal size={13} />
-            </button>
-            {viewMenuFor === v.id && (
-              <>
-                <div className="fs-backdrop" onClick={() => setViewMenuFor(null)} />
-                <div className="menu view-tab-menu">
-                  <button onClick={() => void renameView(v)}>
-                    <Pencil size={15} /> {t('Rename view')}
-                  </button>
-                  {config.views.length > 1 && (
-                    <button className="danger" onClick={() => removeView(v)}>
-                      <Trash2 size={15} /> {t('Remove view')}
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
           </span>
         ))}
         <button
@@ -559,6 +534,35 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
         <button className="btn-sm" onClick={() => setSchemaOpen(true)}>
           <Settings2 size={14} /> {t('Properties')}
         </button>
+        {/* Renaming and removing the view you are on. It sat inside the tab as a
+            ⋯ first, which looked like a smudge in the pill and had to reserve
+            room in a row where nothing else does. This bar is already "settings
+            for the current view" — filter, sort, group, columns — so it is
+            where the last two belong. */}
+        <div className="view-menu-wrap">
+          <button
+            className="btn-sm"
+            title={t('View options')}
+            onClick={() => setViewMenuFor((cur) => (cur ? null : view.id))}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+          {viewMenuFor && (
+            <>
+              <div className="fs-backdrop" onClick={() => setViewMenuFor(null)} />
+              <div className="menu view-tab-menu">
+                <button onClick={() => void renameView(view)}>
+                  <Pencil size={15} /> {t('Rename view')}
+                </button>
+                {config.views.length > 1 && (
+                  <button className="danger" onClick={() => removeView(view)}>
+                    <Trash2 size={15} /> {t('Remove view')}
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
         {view.type !== 'form' && (
           <button className="btn-sm primary" onClick={() => void addRow()}>
             <Plus size={14} /> New
@@ -1768,7 +1772,8 @@ function ColumnsControl({
   return (
     <div className="fs-controls">
       <button ref={btnRef} className={'btn-sm' + (hidden.size ? ' active' : '')} onClick={() => setOpen((o) => !o)}>
-        <Eye size={14} /> Eigenschaften{hidden.size ? ` (${shown.length}/${schema.length})` : ''}
+        <Eye size={14} /> {t('Columns')}
+        {hidden.size ? ` (${shown.length}/${schema.length})` : ''}
       </button>
       {open && pos && (
         <Portal>
