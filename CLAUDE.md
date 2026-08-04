@@ -545,7 +545,32 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
-**Production runs `1.6.10`** (2026-08-02 22:45). The big one for agents: the MCP
+**Production runs `1.6.11`** (2026-08-04 18:44), on his word ("du kannst pushen
+und auf produktiv deployen"): the whole fixed path in one go, **13 commits in
+one release** — which is the cadence rule working rather than a tag per fix.
+
+The blueprint library (a shelf of ready-made workspaces where "New workspace"
+used to be a name prompt), plus three defects reported from real use in one
+day, all of the "looks right, is not" kind: IP addresses read as phone numbers
+and replaced by a receiver icon (version numbers too); a database filed under a
+document drawn in the Documents section and missing from Collections while both
+counts read correctly; and a database inside another database with no way out —
+`/api/pages` excludes a database's children (right for rows, tens of thousands
+possible), a nested database fell under the same rule and was therefore drawn
+as a row, which has no ⋯ menu and so no action at all.
+
+Two checksum proofs, one on each side of the swap: the running binary matched
+the published `v1.6.10` asset exactly before, and the `v1.6.11` asset after —
+that is how you know production runs the artefact. Verified by behaviour on top:
+`/api/library` answers `401` where an unknown path falls through to the SPA with
+`200`, and the served bundle carries the shelf, `New collection inside`,
+`Move to top level` and the IPv4 test while the emoji trash label is gone. Four
+startup lines, no search-index rebuild, 468 MB of data, 645 files. Backup:
+`/root/salt-backups/salt-data-20260804-184414-vor-1.6.11.tar.gz` (378M, gzip
+verified); `/opt/salt/salt.bak-1.6.10` sits beside it and its checksum is the
+published one too. 23G free.
+
+**Production ran `1.6.10`** (2026-08-02 22:45). The big one for agents: the MCP
 catalogue went **55 → 31 tools** (the seven `list_*` became `list(kind:)`, seven
 duplicates folded into the tools they belonged to, and pairs like
 share/unshare, trash/restore, create_view/update_view merged), views became
