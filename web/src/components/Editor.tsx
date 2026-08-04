@@ -889,7 +889,7 @@ function PageHeader({
                     setOverflowOpen(false);
                   }}
                 >
-                  <FileCode size={15} /> Web-Seite (.html)
+                  <FileCode size={15} /> {t('Web page (.html)')}
                 </button>
                 <button
                   className="menu-item"

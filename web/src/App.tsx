@@ -621,9 +621,13 @@ export default function App() {
   const trashPage = useCallback(
     async (id: string) => {
       await api.trashPage(id);
+      // Leaving you on the page you just threw away was harmless while this was
+      // reachable from the sidebar only — there you are usually looking at
+      // something else. The page's own menu can do it now, so it has to move.
+      if (id === currentId) navigate(null);
       await loadPages();
     },
-    [loadPages],
+    [loadPages, currentId, navigate],
   );
 
   const duplicatePage = useCallback(
@@ -633,7 +637,7 @@ export default function App() {
         await loadPages();
         navigate(r.id);
       } catch {
-        toast('Duplizieren fehlgeschlagen');
+        toast(t('Could not be duplicated'));
       }
     },
     [loadPages, navigate],

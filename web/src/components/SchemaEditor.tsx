@@ -200,32 +200,6 @@ export default function SchemaEditor({
     onClose();
   };
 
-  const toggleBoardView = () => {
-    if (views.some((v) => v.type === 'board')) {
-      setViews(views.filter((v) => v.type !== 'board'));
-    } else {
-      const groupBy = schema.find((p) => p.type === 'select')?.id ?? '';
-      setViews([{ id: 'board', name: 'Board', type: 'board', groupBy }, ...views]);
-    }
-  };
-
-  const toggleGalleryView = () => {
-    if (views.some((v) => v.type === 'gallery')) {
-      setViews(views.filter((v) => v.type !== 'gallery'));
-    } else {
-      setViews([...views, { id: 'gallery', name: 'Gallery', type: 'gallery' }]);
-    }
-  };
-
-  const toggleCalendarView = () => {
-    if (views.some((v) => v.type === 'calendar')) {
-      setViews(views.filter((v) => v.type !== 'calendar'));
-    } else {
-      const dateProp = schema.find((p) => p.type === 'date')?.id ?? '';
-      setViews([...views, { id: 'calendar', name: 'Calendar', type: 'calendar', dateProp }]);
-    }
-  };
-
   const relationProps = schema.filter((p) => p.type === 'relation');
 
   // Config UI shown under a property row for the computed/linked types.
@@ -573,31 +547,6 @@ export default function SchemaEditor({
           </select>
           <button className="btn" onClick={addProp}>Add</button>
         </div>
-        <label className="check-label board-toggle">
-          <input
-            type="checkbox"
-            checked={views.some((v) => v.type === 'board')}
-            onChange={toggleBoardView}
-          />
-          {t('Show Kanban board view')}
-        </label>
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={views.some((v) => v.type === 'gallery')}
-            onChange={toggleGalleryView}
-          />
-          {t('Show Gallery view')}
-        </label>
-        <label className="check-label">
-          <input
-            type="checkbox"
-            checked={views.some((v) => v.type === 'calendar')}
-            onChange={toggleCalendarView}
-            disabled={!schema.some((p) => p.type === 'date') && !views.some((v) => v.type === 'calendar')}
-          />
-          Show Calendar view {!schema.some((p) => p.type === 'date') && <span className="prop-empty">(needs a Date property)</span>}
-        </label>
         <div className="dialog-buttons">
           <button className="btn" onClick={onClose}>{t('Cancel')}</button>
           <button className="btn primary" onClick={save}>{t('Save')}</button>
