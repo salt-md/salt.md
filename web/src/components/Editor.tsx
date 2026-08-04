@@ -32,7 +32,7 @@ import { usePeers, setPeers, clearPeers } from '../presence';
 import { tagColorClass, TAG_PALETTE } from '../tags';
 import { collectTags, suggestTags } from '../tagSuggest';
 import { useMenuDismiss } from '../modal';
-import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2 } from 'lucide-react';
+import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2, Trash2 } from 'lucide-react';
 
 export interface EditorProps {
   pageId: string;
@@ -49,6 +49,12 @@ export interface EditorProps {
   onMissing: (id: string) => void;
   onNavigate: (id: string | null) => void;
   onCreatePage: (parentId: string | null, type?: 'doc' | 'collection') => void;
+  // Deleting was reachable from the sidebar tree only. A database ROW — and any
+  // page filed under one — never appears there as a tree item, so nothing in the
+  // interface could throw it away: the row menu offers ＋ alone, the board card's
+  // ⋯ only moves between columns, and this menu had no entry. The page menu is
+  // the one menu every page has, so it is the honest place for it.
+  onTrash: (id: string) => void;
   onPagesChanged: () => void;
 }
 
@@ -356,6 +362,7 @@ function PageHeader({
   onToggleFavorite,
   onMetaChange,
   onNavigate,
+  onTrash,
   onLocalMeta,
   onPagesChanged,
   pagesById,
@@ -899,6 +906,17 @@ function PageHeader({
                 >
                   <Printer size={15} /> {t('Print / as PDF')}
                 </button>
+                {canEdit && (
+                  <button
+                    className="menu-item danger"
+                    onClick={() => {
+                      setOverflowOpen(false);
+                      onTrash(pageId);
+                    }}
+                  >
+                    <Trash2 size={15} /> {t('Move to trash')}
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -5,6 +5,7 @@ import { useBoardDrag } from '../boardDrag';
 import { tagColorClass } from '../tags';
 import { compare, firstWeekday, formatMonth, toDayString, weekdayNames } from '../format';
 import { t } from '../i18n';
+import { promptText } from '../dialog';
 import type {
   CollectionConfig,
   Filter,
@@ -57,6 +58,9 @@ import {
   Phone,
   MapPin,
   CornerUpRight,
+  MoreHorizontal,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 
 // Small type glyph shown next to each property (Notion-style visibility panel).
@@ -209,6 +213,7 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
   const [total, setTotal] = useState(0);
   const [addViewOpen, setAddViewOpen] = useState(false);
   const addViewBtnRef = useRef<HTMLButtonElement>(null);
+  const [viewMenuFor, setViewMenuFor] = useState<string | null>(null);
   const [addViewPos, setAddViewPos] = useState<React.CSSProperties | null>(null);
   useLayoutEffect(() => {
     if (!addViewOpen || !addViewBtnRef.current) {
@@ -361,6 +366,28 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     void saveConfig(next);
   };
 
+  // Renaming and removing a view. Both were MCP-only: the ＋ made views and
+  // nothing took them away, so a board somebody added by accident stayed for
+  // good. The Properties dialog had three checkboxes for it, but they worked by
+  // TYPE — they could not remove one of two boards, and never offered Table,
+  // List, Timeline or Form at all.
+  const renameView = async (v: ViewDef) => {
+    const name = await promptText(t('Rename view'), { defaultValue: v.name, confirmText: t('Rename') });
+    setViewMenuFor(null);
+    const n = name?.trim();
+    if (!n || n === v.name) return;
+    void saveConfig({ ...config, views: config.views.map((x) => (x.id === v.id ? { ...x, name: n } : x)) });
+  };
+
+  // A collection with no view has nothing to render, so the last one stays.
+  const removeView = (v: ViewDef) => {
+    setViewMenuFor(null);
+    if (config.views.length <= 1) return;
+    const rest = config.views.filter((x) => x.id !== v.id);
+    void saveConfig({ ...config, views: rest });
+    if (v.id === viewId) setViewId(rest[0].id);
+  };
+
   const addView = (type: ViewDef['type']) => {
     const labels: Record<ViewDef['type'], string> = {
       table: t('Table'),
@@ -413,14 +440,41 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     <div className="collection-toolbar">
       <div className="view-tabs">
         {config.views.map((v) => (
-          <button
-            key={v.id}
-            className={'view-tab view-tab--' + v.type + (v.id === view.id ? ' active' : '')}
-            onClick={() => setViewId(v.id)}
-          >
-            <span className="view-tab-ic">{tabIcon(v.type)}</span>
-            {v.name}
-          </button>
+          <span key={v.id} className="view-tab-wrap">
+            <button
+              className={'view-tab view-tab--' + v.type + (v.id === view.id ? ' active' : '')}
+              onClick={() => setViewId(v.id)}
+              onDoubleClick={() => void renameView(v)}
+            >
+              <span className="view-tab-ic">{tabIcon(v.type)}</span>
+              {v.name}
+            </button>
+            <button
+              className="view-tab-more"
+              title={t('View options')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setViewMenuFor((cur) => (cur === v.id ? null : v.id));
+              }}
+            >
+              <MoreHorizontal size={13} />
+            </button>
+            {viewMenuFor === v.id && (
+              <>
+                <div className="fs-backdrop" onClick={() => setViewMenuFor(null)} />
+                <div className="menu view-tab-menu">
+                  <button onClick={() => void renameView(v)}>
+                    <Pencil size={15} /> {t('Rename view')}
+                  </button>
+                  {config.views.length > 1 && (
+                    <button className="danger" onClick={() => removeView(v)}>
+                      <Trash2 size={15} /> {t('Remove view')}
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
+          </span>
         ))}
         <button
           ref={addViewBtnRef}

@@ -893,6 +893,7 @@ export default function App() {
               onMissing={handleMissing}
               onNavigate={navigate}
               onCreatePage={createPage}
+              onTrash={trashPage}
               onPagesChanged={loadPages}
             />
           </>
