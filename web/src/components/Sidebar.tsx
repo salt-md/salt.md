@@ -19,7 +19,7 @@ import TemplateGallery from './TemplateGallery';
 import BlueprintLibrary from './BlueprintLibrary';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X } from 'lucide-react';
+import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X, MoreHorizontal } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -119,10 +119,14 @@ interface TreeCtx {
 // Documents with no hint of their parent.
 function DbRows({
   collectionId,
+  workspaceId,
   depth,
   ctx,
 }: {
   collectionId: string;
+  // The rows live in the same workspace as their database — without it the
+  // "move to workspace" list offers the one they are already in.
+  workspaceId: string;
   depth: number;
   ctx: TreeCtx;
 }) {
@@ -186,10 +190,23 @@ function DbRows({
               {/* Until now a row could only get sub-pages through MCP — the
                   interface offered no way at all, so the dossier under a deal
                   was something an agent could build and a person could not. */}
+              {/* The same ＋ and the same ⋯ as a tree item. A row had only the
+                  ＋ until now, so a page filed under a database could not be
+                  duplicated, exported or thrown away from here at all — you had
+                  to open it first and hope its own menu had what you wanted. */}
               <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
                 <button title={t('Add sub-page')} onClick={() => ctx.onCreateChild(r.id)}>
                   +
                 </button>
+                <button
+                  title={t('More')}
+                  onClick={() => ctx.setMenuFor(ctx.menuFor === r.id ? null : r.id)}
+                >
+                  <MoreHorizontal size={13} />
+                </button>
+                {ctx.menuFor === r.id && (
+                  <PageMenu id={r.id} title={r.title} parentId={collectionId} workspaceId={workspaceId} ctx={ctx} />
+                )}
               </span>
             </div>
             {isOpen && kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} section="dbs" />)}
@@ -310,6 +327,134 @@ function FlatRow({
   );
 }
 
+// The row menu, as its own component because a database ROW needs exactly the
+// same one. Two copies would be two answers to "what can you do with a page",
+// and the row's copy would be the one that quietly falls behind.
+function PageMenu({
+  id,
+  title,
+  parentId,
+  workspaceId,
+  ctx,
+}: {
+  id: string;
+  title: string;
+  parentId?: string | null;
+  workspaceId?: string;
+  ctx: TreeCtx;
+}) {
+  return (
+    <div className="menu">
+              {/* The visible way to get a second tab — ⌘-click and middle-click
+                  exist too, but nothing in the interface said so. */}
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onOpenInNewTab(id);
+                }}
+              >
+                <SquareArrowOutUpRight size={16} /> {t('Open in new tab')}
+              </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onToggleFavorite(id);
+                }}
+              >
+                <Star size={16} fill={ctx.favorites.has(id) ? 'currentColor' : 'none'} />{' '}
+                {ctx.favorites.has(id) ? t('Remove from favorites') : t('Add to favorites')}
+              </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onDuplicate(id);
+                }}
+              >
+                <Copy size={16} /> {t('Duplicate')}
+              </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onCreateChildDb(id);
+                }}
+              >
+                <Table2 size={16} /> {t('New collection inside')}
+              </button>
+              {/* Only when there is a parent to leave. A database dragged into
+                  another one had no way back at all: it lives in that one's
+                  subtree, and nothing in the interface moved it out. */}
+              {parentId && (
+                <button
+                  onClick={() => {
+                    ctx.setMenuFor(null);
+                    ctx.onMoveToTop(id);
+                  }}
+                >
+                  <CornerLeftUp size={16} /> {t('Move to top level')}
+                </button>
+              )}
+              {ctx.workspaces.length > 1 && (
+                <div className="menu-sub">
+                  <div className="menu-label">{t('Move to workspace')}</div>
+                  {ctx.workspaces
+                    .filter((w) => w.id !== workspaceId)
+                    .map((w) => (
+                      <button
+                        key={w.id}
+                        onClick={() => {
+                          ctx.setMenuFor(null);
+                          ctx.onMoveToWorkspace(id, w.id, w.name);
+                        }}
+                      >
+                        <CornerUpRight size={16} /> {w.name}
+                      </button>
+                    ))}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onShowFiles(id, title || t('Untitled'));
+                }}
+              >
+                <Paperclip size={16} /> {t('Files in this subtree')}
+              </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  // A template is a SNAPSHOT: the copy becomes the template and
+                  // keeps this moment's state; the page here stays a normal page.
+                  // (Flagging the page itself kept template and original one
+                  // object — editing either changed "the template".)
+                  void api
+                    .duplicatePage(id, false, true)
+                    .then(() => toast(t('Saved as template')))
+                    .catch(() => toast(t('Could not save as template')));
+                }}
+              >
+                <LayoutTemplate size={16} /> {t('Save as template')}
+              </button>
+              <button
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  api.download(`/api/export/${id}`);
+                }}
+              >
+                <Download size={16} /> {t('Export Markdown')}
+              </button>
+              <button
+                className="danger"
+                onClick={() => {
+                  ctx.setMenuFor(null);
+                  ctx.onTrash(id);
+                }}
+              >
+                <Trash2 size={16} /> {t('Move to trash')}
+              </button>
+    </div>
+  );
+}
+
 function TreeItem({
   p,
   depth,
@@ -389,118 +534,11 @@ function TreeItem({
             ⋯
           </button>
           {ctx.menuFor === p.id && (
-            <div className="menu">
-              {/* The visible way to get a second tab — ⌘-click and middle-click
-                  exist too, but nothing in the interface said so. */}
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  ctx.onOpenInNewTab(p.id);
-                }}
-              >
-                <SquareArrowOutUpRight size={16} /> {t('Open in new tab')}
-              </button>
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  ctx.onToggleFavorite(p.id);
-                }}
-              >
-                <Star size={16} fill={ctx.favorites.has(p.id) ? 'currentColor' : 'none'} />{' '}
-                {ctx.favorites.has(p.id) ? t('Remove from favorites') : t('Add to favorites')}
-              </button>
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  ctx.onDuplicate(p.id);
-                }}
-              >
-                <Copy size={16} /> {t('Duplicate')}
-              </button>
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  ctx.onCreateChildDb(p.id);
-                }}
-              >
-                <Table2 size={16} /> {t('New collection inside')}
-              </button>
-              {/* Only when there is a parent to leave. A database dragged into
-                  another one had no way back at all: it lives in that one's
-                  subtree, and nothing in the interface moved it out. */}
-              {p.parentId && (
-                <button
-                  onClick={() => {
-                    ctx.setMenuFor(null);
-                    ctx.onMoveToTop(p.id);
-                  }}
-                >
-                  <CornerLeftUp size={16} /> {t('Move to top level')}
-                </button>
-              )}
-              {ctx.workspaces.length > 1 && (
-                <div className="menu-sub">
-                  <div className="menu-label">{t('Move to workspace')}</div>
-                  {ctx.workspaces
-                    .filter((w) => w.id !== p.workspaceId)
-                    .map((w) => (
-                      <button
-                        key={w.id}
-                        onClick={() => {
-                          ctx.setMenuFor(null);
-                          ctx.onMoveToWorkspace(p.id, w.id, w.name);
-                        }}
-                      >
-                        <CornerUpRight size={16} /> {w.name}
-                      </button>
-                    ))}
-                </div>
-              )}
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  ctx.onShowFiles(p.id, p.title || t('Untitled'));
-                }}
-              >
-                <Paperclip size={16} /> {t('Files in this subtree')}
-              </button>
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  // A template is a SNAPSHOT: the copy becomes the template and
-                  // keeps this moment's state; the page here stays a normal page.
-                  // (Flagging the page itself kept template and original one
-                  // object — editing either changed "the template".)
-                  void api
-                    .duplicatePage(p.id, false, true)
-                    .then(() => toast(t('Saved as template')))
-                    .catch(() => toast(t('Could not save as template')));
-                }}
-              >
-                <LayoutTemplate size={16} /> {t('Save as template')}
-              </button>
-              <button
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  api.download(`/api/export/${p.id}`);
-                }}
-              >
-                <Download size={16} /> {t('Export Markdown')}
-              </button>
-              <button
-                className="danger"
-                onClick={() => {
-                  ctx.setMenuFor(null);
-                  ctx.onTrash(p.id);
-                }}
-              >
-                <Trash2 size={16} /> {t('Move to trash')}
-              </button>
-            </div>
+            <PageMenu id={p.id} title={p.title} parentId={p.parentId} workspaceId={p.workspaceId} ctx={ctx} />
           )}
         </span>
       </div>
-      {isExpanded && isDb && <DbRows collectionId={p.id} depth={depth + 1} ctx={ctx} />}
+      {isExpanded && isDb && <DbRows collectionId={p.id} workspaceId={p.workspaceId} depth={depth + 1} ctx={ctx} />}
       {isExpanded &&
         !isDb &&
         kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} section={section} />)}

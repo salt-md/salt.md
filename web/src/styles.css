@@ -8417,22 +8417,42 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   align-items: center;
 }
 
+/* ABSOLUTE, not just transparent. An invisible button that still occupies its
+   box pushes every tab apart by its own width — the tabs stood 18px too far
+   from each other at rest and closed up on hover. The same mistake as the card
+   marks, made twice in one day: opacity hides a thing, it does not remove it
+   from the row. */
 .view-tab-more {
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 18px;
   height: 18px;
-  margin-left: -4px;
   border-radius: 5px;
   color: var(--muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s;
 }
 
-.view-tab-wrap:hover .view-tab-more,
+/* The dots belong to the view you are ON, and they are there the whole time it
+   is active. Showing them on hover instead means the tab has to make room at
+   the moment the pointer arrives, which shoves every tab to its right — the
+   jump is smaller than reserving the space permanently, but it is still a jump,
+   and it happens exactly while you are aiming at something. This way nothing
+   ever moves. The cost is one extra click to remove a view you are not on. */
+.view-tab-wrap:has(.view-tab.active) .view-tab {
+  padding-right: 26px;
+}
+
+.view-tab-wrap:has(.view-tab.active) .view-tab-more,
 .view-tab-wrap:focus-within .view-tab-more {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .view-tab-more:hover {
