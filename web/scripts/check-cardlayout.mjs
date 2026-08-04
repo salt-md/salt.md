@@ -80,6 +80,23 @@ try {
   // A short number must not be mistaken for a phone number.
   check('a bare 42 is a note', cl.zoneOf(text, '42'), 'note');
 
+  // Reported from a real documentation workspace: every IP on every card was
+  // drawn as a telephone receiver, with the address itself hidden behind the
+  // icon. Digits separated by dots are exactly what the phone pattern matches,
+  // so the address shape has to be tested first and win.
+  check('an IP is a fact, not a contact', cl.zoneOf(text, '192.168.99.245'), 'fact');
+  check('a subnet is a fact', cl.zoneOf(text, '10.0.0.0/8'), 'fact');
+  check('a gateway is a fact', cl.zoneOf(text, '10.0.0.1'), 'fact');
+  check('an IP never gets a phone icon', cl.contactKind(text, '192.168.99.245'), 'address');
+  // And the shape still has to be an address: four groups, none above 255.
+  // Not an address by shape, and still not a phone number: a dotted list of
+  // three or more groups is neither, so it falls through to plain text.
+  check('999.1.1.1 is neither', cl.zoneOf(text, '999.1.1.1'), 'note');
+  check('a version number is neither', cl.zoneOf(text, '1.6.11'), 'note');
+  check('a dotted date is neither', cl.zoneOf(text, '2026.08.03'), 'note');
+  // The reason this was hard to see: real phone numbers must keep working.
+  check('a dotted phone number is still a contact', cl.zoneOf(text, '06202.935631'), 'contact');
+
   check('mail icon', cl.contactKind(text, 'x@y.de'), 'mail');
   check('phone icon', cl.contactKind(text, '+49 221 139870'), 'phone');
   check('address icon', cl.contactKind(text, '50996 Koeln'), 'address');

@@ -172,7 +172,7 @@ function DbRows({
                 </button>
               </span>
             </div>
-            {isOpen && kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} />)}
+            {isOpen && kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} section="dbs" />)}
           </div>
         );
       })}
@@ -290,8 +290,25 @@ function FlatRow({
   );
 }
 
-function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx }) {
-  const kids = ctx.childrenMap.get(p.id) ?? [];
+function TreeItem({
+  p,
+  depth,
+  ctx,
+  section = 'docs',
+}: {
+  p: PageMeta;
+  depth: number;
+  ctx: TreeCtx;
+  section?: 'docs' | 'dbs';
+}) {
+  // A database filed under a document is still a database, and the two counts
+  // above the trees have always said so: Documents excludes collections,
+  // Collections counts every one of them. The trees did not — Documents drew
+  // any nested collection, and Collections showed only the top-level ones, so
+  // the same database was in the wrong section AND missing from the right one
+  // while both numbers looked correct. Sections now match their counts.
+  const allKids = ctx.childrenMap.get(p.id) ?? [];
+  const kids = section === 'docs' ? allKids.filter((k) => k.type !== 'collection') : allKids;
   const isDb = p.type === 'collection';
   // Databases have no tree children (their rows are excluded from /api/pages) but
   // can be expanded to lazily reveal their rows — so they get a chevron too.
@@ -444,7 +461,7 @@ function TreeItem({ p, depth, ctx }: { p: PageMeta; depth: number; ctx: TreeCtx 
       {isExpanded && isDb && <DbRows collectionId={p.id} depth={depth + 1} ctx={ctx} />}
       {isExpanded &&
         !isDb &&
-        kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} />)}
+        kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} section={section} />)}
     </div>
   );
 }
@@ -682,7 +699,7 @@ export default function Sidebar({
           // (pagesChanged); only the workspace counters need catching up here.
           onWorkspacesChanged();
         })
-        .catch((e: Error) => toast(e.message || 'Verschieben fehlgeschlagen'));
+        .catch((e: Error) => toast(e.message || t('Moving failed')));
     },
     dragStart: (id, e) => {
       dragId.current = id;
@@ -717,7 +734,6 @@ export default function Sidebar({
   // as clearly separated sections (nested items stay under their parent).
   const topLevel = childrenMap.get('') ?? [];
   const topDocs = topLevel.filter((p) => p.type !== 'collection');
-  const topDbs = topLevel.filter((p) => p.type === 'collection');
   // Filtering searches the WHOLE section, not just its top level — a nested
   // page you can't see is exactly the one you're trying to find. Hits render
   // flat (with their parent as context) because tree indentation is noise once
@@ -745,20 +761,29 @@ export default function Sidebar({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pages, currentWs],
   );
+  // A database filed under a document is a root here, not a top-level page —
+  // otherwise it shows nowhere at all while still being counted. Only a
+  // database inside ANOTHER database stays put, because there it belongs to
+  // that one's subtree (a dossier under a row).
+  const topDbs = useMemo(
+    () => allDbs.filter((p) => !chainHasDb(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allDbs, byId],
+  );
   const renameWorkspace = async () => {
     if (!activeWs) return;
-    const name = await promptText('Workspace umbenennen', {
+    const name = await promptText(t('Rename workspace'), {
       defaultValue: activeWs.name,
       placeholder: t('New name'),
-      confirmText: 'Umbenennen',
+      confirmText: t('Rename'),
     });
     if (!name?.trim() || name.trim() === activeWs.name) return;
     try {
       await api.updateWorkspace(activeWs.id, { name: name.trim() });
       onWorkspacesChanged();
-      toast('Workspace umbenannt');
+      toast(t('Workspace renamed'));
     } catch (e) {
-      toast((e as Error).message || 'Umbenennen fehlgeschlagen');
+      toast((e as Error).message || t('Renaming failed'));
     }
   };
 
@@ -1108,7 +1133,7 @@ export default function Sidebar({
             onCreate={() => onCreate(null, 'collection')}
           >
             {topDbs.length ? (
-              topDbs.map((p) => <TreeItem key={p.id} p={p} depth={0} ctx={ctx} />)
+              topDbs.map((p) => <TreeItem key={p.id} p={p} depth={0} ctx={ctx} section="dbs" />)
             ) : (
               <div className="sb-empty">{t('No collection yet')}</div>
             )}
@@ -1328,7 +1353,7 @@ function WorkspaceImageModal({
       onChanged();
       onClose();
     } catch (e) {
-      toast((e as Error).message || 'Speichern fehlgeschlagen');
+      toast((e as Error).message || t('Saving failed'));
     } finally {
       setBusy(false);
     }
@@ -1345,7 +1370,7 @@ function WorkspaceImageModal({
       onChanged();
       onClose();
     } catch (err) {
-      toast((err as Error).message || 'Upload fehlgeschlagen');
+      toast((err as Error).message || t('Upload failed'));
     } finally {
       setBusy(false);
     }
