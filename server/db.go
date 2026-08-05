@@ -382,6 +382,12 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "api_tokens", "workspace_scope", `workspace_scope TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate api_tokens.workspace_scope: %w", err)
 	}
+	// Where a token was last used from. A token that rides in a URL cannot be
+	// kept secret, so the defence is noticing: "last used yesterday from an
+	// address in another country" is a question somebody can actually answer.
+	if err := ensureColumn(db, "api_tokens", "last_used_ip", `last_used_ip TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate api_tokens.last_used_ip: %w", err)
+	}
 	// TOTP two-factor auth (secret stored on setup, enforced once enabled).
 	if err := ensureColumn(db, "users", "totp_secret", `totp_secret TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate users.totp_secret: %w", err)

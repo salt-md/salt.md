@@ -8422,3 +8422,11 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   left: auto;
   min-width: 170px;
 }
+
+/* The address a token was last used from, beside its date. Muted and
+   monospaced: it is there to be recognised or not recognised at a glance, not
+   to be read as prose. */
+.token-origin {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono, ui-monospace, monospace);
+}

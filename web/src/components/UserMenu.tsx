@@ -993,6 +993,16 @@ function TokensModal({ onClose }: { onClose: () => void }) {
                 {tk.lastUsedAt
                   ? t('used {date}', { date: formatDay(tk.lastUsedAt) })
                   : t('never used')}
+                {/* WHERE from. A token that travels in a URL (/mcp/{token})
+                    cannot be kept secret, so the defence is noticing: an
+                    address nobody recognises is a question worth asking, and
+                    the answer is one click away (Revoke). */}
+                {tk.lastUsedIp && (
+                  <>
+                    {' · '}
+                    <span className="token-origin">{tk.lastUsedIp}</span>
+                  </>
+                )}
               </span>
               <button
                 className="icon-btn danger"

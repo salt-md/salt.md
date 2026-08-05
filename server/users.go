@@ -152,10 +152,21 @@ func (s *Server) userByID(id string) *user {
 func (s *Server) currentUser(r *http.Request) *user {
 	if auth := r.Header.Get("Authorization"); strings.HasPrefix(auth, "Bearer ") {
 		tok := strings.TrimPrefix(auth, "Bearer ")
+		// Guessing gets cut off before the lookup once an address has burned
+		// through its budget of WRONG tokens. Only failures pay in, so an agent
+		// hammering away with a good token is never touched by this.
+		if s.tokenRate.exhausted(s.clientIP(r)) {
+			return nil
+		}
 		var userID, id, scope, wsScope string
 		err := s.db.QueryRow(`SELECT id, user_id, scope, workspace_scope FROM api_tokens WHERE token_hash = ?`, tokenHash(tok)).Scan(&id, &userID, &scope, &wsScope)
 		if err == nil {
-			s.db.Exec(`UPDATE api_tokens SET last_used_at = ? WHERE id = ?`, now(), id)
+			// WHERE it was used from, not just when. A token that travels in a URL
+			// (/mcp/{token}) cannot be kept secret — it sits in the connector's
+			// config, in Cloudflare's logs and in whatever proxy is between. What
+			// CAN be done is make a stranger using it obvious, and rotating cheap.
+			s.db.Exec(`UPDATE api_tokens SET last_used_at = ?, last_used_ip = ? WHERE id = ?`,
+				now(), s.clientIP(r), id)
 			u := s.userByID(userID)
 			if u != nil {
 				if scope != "read" {
@@ -172,6 +183,11 @@ func (s *Server) currentUser(r *http.Request) *user {
 			}
 			return u
 		}
+		// A REJECTED token is throttled; a valid one is not. An agent makes
+		// hundreds of calls a minute with a good token and must not be slowed,
+		// while guessing has no reason to be free.
+		s.tokenRate.allow(s.clientIP(r))
+		s.logAuthFailure(r, "token")
 		return nil
 	}
 	val, ok := sessionCookieValue(r)
@@ -431,6 +447,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		hash = dummyHash // verify anyway so timing doesn't reveal account existence
 	}
 	if !verifyPassword(body.Password, hash) || err != nil {
+		s.logAuthFailure(r, "password")
 		httpErrorCode(w, http.StatusUnauthorized, "bad_credentials", "Wrong email or wrong password.")
 		return
 	}
@@ -759,10 +776,13 @@ type apiToken struct {
 	Workspaces []string `json:"workspaces"` // empty = all the user's workspaces
 	CreatedAt  string   `json:"createdAt"`
 	LastUsedAt *string  `json:"lastUsedAt"`
+	// Where from. The point of recording it is that somebody can SEE it — a
+	// token that rides in a URL is defended by noticing, not by secrecy.
+	LastUsedIP string `json:"lastUsedIp"`
 }
 
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query(`SELECT id, name, scope, workspace_scope, created_at, last_used_at FROM api_tokens WHERE user_id = ? ORDER BY created_at`, requestUser(r).ID)
+	rows, err := s.db.Query(`SELECT id, name, scope, workspace_scope, created_at, last_used_at, last_used_ip FROM api_tokens WHERE user_id = ? ORDER BY created_at`, requestUser(r).ID)
 	if err != nil {
 		httpError(w, 500, err.Error())
 		return
@@ -772,7 +792,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	for rows.Next() {
 		var t apiToken
 		var wsScope string
-		if err := rows.Scan(&t.ID, &t.Name, &t.Scope, &wsScope, &t.CreatedAt, &t.LastUsedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.Scope, &wsScope, &t.CreatedAt, &t.LastUsedAt, &t.LastUsedIP); err != nil {
 			httpError(w, 500, err.Error())
 			return
 		}

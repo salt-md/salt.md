@@ -187,6 +187,20 @@ func (rl *rateLimiter) allow(key string) bool {
 	return true
 }
 
+// exhausted answers "has this key already used up its budget" WITHOUT taking a
+// token. It exists so a limiter can be fed by failures alone: the honest caller
+// never fails, so it never consumes, and asking whether to reject must not
+// charge it either.
+func (rl *rateLimiter) exhausted(key string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	b := rl.buckets[key]
+	if b == nil {
+		return false
+	}
+	return b.tokens+time.Since(b.last).Seconds()*rl.rate < 1
+}
+
 // ---- idempotency ----
 
 // idempotentResult returns a cached result for key if present.

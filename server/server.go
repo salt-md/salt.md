@@ -31,6 +31,7 @@ type Server struct {
 	mcpIcon     string          // data URI of the logo for serverInfo.icons (see mcp.go)
 	ingest      *ingestRegistry // bulk imports in flight (see ingest.go)
 	loginRate   *rateLimiter
+	tokenRate   *rateLimiter
 	formRate    *rateLimiter
 	stopCleanup chan struct{}
 	// webhookTransport overrides how webhook deliveries reach the network. Nil
@@ -79,17 +80,19 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	}
 
 	s := &Server{
-		mcpIcon:     iconURI,
-		ingest:      newIngestRegistry(),
-		db:          db,
-		mux:         http.NewServeMux(),
-		dataDir:     dataDir,
-		loginSem:    make(chan struct{}, 4),
-		events:      newEventHub(),
-		collab:      newCollabHub(),
-		mcpRate:     newRateLimiter(240, 60), // 240 writes/min per token, burst 60
-		loginRate:   newRateLimiter(30, 10),  // 30 login attempts/min per IP, burst 10
-		formRate:    newRateLimiter(20, 8),   // 20 public form submits/min per IP, burst 8
+		mcpIcon:   iconURI,
+		ingest:    newIngestRegistry(),
+		db:        db,
+		mux:       http.NewServeMux(),
+		dataDir:   dataDir,
+		loginSem:  make(chan struct{}, 4),
+		events:    newEventHub(),
+		collab:    newCollabHub(),
+		mcpRate:   newRateLimiter(240, 60), // 240 writes/min per token, burst 60
+		loginRate: newRateLimiter(30, 10),  // 30 login attempts/min per IP, burst 10
+		// Fed by REJECTED tokens only, so a working agent never touches it.
+		tokenRate:   newRateLimiter(60, 20),
+		formRate:    newRateLimiter(20, 8), // 20 public form submits/min per IP, burst 8
 		stopCleanup: make(chan struct{}),
 	}
 	if err := s.seed(); err != nil {

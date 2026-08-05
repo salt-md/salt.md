@@ -145,6 +145,7 @@ export interface ApiToken {
   workspaces: string[]; // empty = all the user's workspaces
   createdAt: string;
   lastUsedAt: string | null;
+  lastUsedIp: string;
 }
 
 export type PropType =
