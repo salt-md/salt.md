@@ -3584,9 +3584,40 @@ button {
   margin-bottom: 14px;
 }
 
+/* .prop-select / .prop-input are borderless ON PURPOSE — they were built for
+   editing a value inside a table cell, where a frame around every field is
+   noise. This bar is not that: three standalone controls sitting on a page,
+   and without a frame they read as stray text rather than as things you can
+   click. So the frame comes back here, for all three of them — framing only
+   the one somebody points at is how a row of controls stops matching itself. */
+.index-controls .prop-select,
+.index-controls .prop-input {
+  border-color: var(--border);
+  background: var(--card);
+  padding: 5px 8px;
+  height: 30px;
+  /* And not width:100%. That is right for a property filling its table cell
+     and wrong here: in a wrapping row every one of these claimed a full line,
+     so the bar broke into three. Invisible while they had no frame, obvious the
+     moment they did. */
+  width: auto;
+}
+.index-controls .prop-select:hover,
+.index-controls .prop-input:hover {
+  border-color: var(--muted);
+  background: var(--card);
+}
+.index-controls .prop-select:focus,
+.index-controls .prop-input:focus {
+  border-color: var(--accent);
+}
+
 .index-search {
-  flex: 1;
-  min-width: 180px;
+  /* The one that grows — it is what people reach for — but not past the point
+     where a search box looks like a text editor. */
+  flex: 1 1 200px;
+  max-width: 380px;
+  min-width: 160px;
 }
 
 .index-stat {
@@ -9089,5 +9120,6 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
    "Dokumentation und Betrieb Rheinland" would otherwise push the search box off
    a narrow screen — and the search box is the one people reach for. */
 .index-ws {
+  flex: none;
   max-width: 190px;
 }
