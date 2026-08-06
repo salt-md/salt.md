@@ -25,7 +25,7 @@ top level, under a document, or inside another collection.
 Over MCP:
 
 ```
-create_database(title: "Sites", schema: [
+create_database(title: "Locations", schema: [
   { id: "status", name: "Status", type: "select",
     options: [{ id: "active", name: "Active" }, { id: "planned", name: "Planned" }] },
   { id: "opened", name: "Opened", type: "date" }
@@ -36,8 +36,8 @@ Then rows, many at a time:
 
 ```
 create_rows(page_id: "<collection>", rows: [
-  { title: "Neuwied", properties: { status: "active" } },
-  { title: "Koblenz", properties: { status: "planned" } }
+  { title: "Warehouse North", properties: { status: "active" } },
+  { title: "Warehouse South", properties: { status: "planned" } }
 ])
 ```
 

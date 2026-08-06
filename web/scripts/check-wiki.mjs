@@ -112,6 +112,47 @@ for (const [file, text] of pages) {
   }
 }
 
+// ---- 6: nothing real in the examples --------------------------------------
+//
+// This wiki goes on a public website. Examples written while looking at a live
+// instance carry real customer names, real hostnames and real addresses
+// straight into it — which is how a customer list gets published by somebody
+// being helpful. It happened: a tree diagram named three of the owner's
+// customers, and it took a human reading it to notice.
+//
+// A rule cannot recognise a company name, so it cannot catch that class. What
+// it CAN pin down is every identifier that is unambiguously real: an address, a
+// hostname, an email. Those are the ones that get copied without thinking.
+//
+// The name class is covered by a written rule instead — see README.md — and by
+// the fact that examples here have to be obviously invented.
+
+const ALLOWED_HOSTS = /^(example\.(com|org|net)|localhost|github\.com|raw\.githubusercontent\.com|ghcr\.io|your-instance)$/;
+// Reserved for documentation (RFC 5737) plus the loopback address.
+// 169.254.169.254 is the cloud metadata endpoint — a well-known constant that
+// the webhook page names precisely because deliveries must never reach it. It
+// belongs to nobody.
+const ALLOWED_IPS = /^(127\.0\.0\.1|0\.0\.0\.0|169\.254\.169\.254|192\.0\.2\.\d+|198\.51\.100\.\d+|203\.0\.113\.\d+)$/;
+
+for (const [file, text] of pages) {
+  for (const m of text.matchAll(/\b(\d{1,3}(?:\.\d{1,3}){3})\b/g)) {
+    if (!ALLOWED_IPS.test(m[1])) {
+      errors.push(`${file}: ${m[1]} is a real-looking IP address — use 192.0.2.x`);
+    }
+  }
+  for (const m of text.matchAll(/[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)) {
+    if (!ALLOWED_HOSTS.test(m[1])) {
+      errors.push(`${file}: an email at ${m[1]} — use example.com`);
+    }
+  }
+  for (const m of text.matchAll(/https?:\/\/([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g)) {
+    const host = m[1].replace(/^www\./, '');
+    if (!ALLOWED_HOSTS.test(host) && !host.endsWith('salt.md') && host !== 'salt-md.github.io') {
+      errors.push(`${file}: links to ${host} — is that ours, or somebody's real instance?`);
+    }
+  }
+}
+
 // ---- report ----------------------------------------------------------------
 
 console.log(`\n  wiki: ${files.length} pages, ${tools.size} tools, ${routes.length} routes`);

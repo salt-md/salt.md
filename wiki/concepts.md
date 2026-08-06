@@ -107,14 +107,14 @@ than to text. See [Properties](properties.md#relation).
 ## How they fit together
 
 ```
-Workspace  "Documentation"
-├── Page   "AWO Bezirksverband"            ← a document
-│   ├── Collection "Sites"                 ← a database, filed under the document
-│   │   ├── Row "Neuwied"                  ← a page with property values
+Workspace  "Operations"
+├── Page   "Customer handbook"             ← a document
+│   ├── Collection "Locations"             ← a database, filed under the document
+│   │   ├── Row "Warehouse North"          ← a page with property values
 │   │   │   └── Page "Network & uplink"    ← a sub-page of a ROW
-│   │   └── Row "Koblenz"
-│   └── Page "VPN concept"
-└── Page   "Phonekom AG"
+│   │   └── Row "Warehouse South"
+│   └── Page "Rollout plan"
+└── Page   "Suppliers"
 ```
 
 The sidebar can show this as one tree, or split into Documents and Collections —

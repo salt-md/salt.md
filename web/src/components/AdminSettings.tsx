@@ -279,7 +279,7 @@ ingress:
                 {tab === 'general' && (
                   <>
                     <label>{t('Instance name (sign-in page & title)')}</label>
-                    <input className="prop-input" placeholder={t('e.g. VIICO Notes')} value={s.instanceName} onChange={(e) => set('instanceName', e.target.value)} />
+                    <input className="prop-input" placeholder={t('e.g. Acme Notes')} value={s.instanceName} onChange={(e) => set('instanceName', e.target.value)} />
                     <label>{t('Public base URL (for links, mail, calendars)')}</label>
                     <input className="prop-input" placeholder="https://notes.example.com" value={s.publicBaseUrl} onChange={(e) => set('publicBaseUrl', e.target.value)} />
                     <label>{t('Max. file size per upload (MB)')}</label>

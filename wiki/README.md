@@ -66,6 +66,24 @@ Being clear about this saves everyone time.
   plus a private flag per page. There is no per-page ACL.
 - **Not multi-tenant.** One instance is one organisation.
 
+## Rules for writing in this wiki
+
+**Every example is invented.** No customer, no colleague, no real hostname, no
+real address, no real email — not even as a placeholder, and least of all when
+the shape came from looking at a live instance while writing.
+
+This is not caution for its own sake. This wiki is published. An example copied
+from a real workspace publishes whatever it names, and the person who wrote it
+was being helpful rather than careless — which is exactly why a rule is needed
+instead of good intentions.
+
+`check-wiki.mjs` catches real-looking addresses, hostnames and email domains. It
+**cannot** recognise a company name, so that part is on whoever writes: if the
+name came from somewhere real, change it.
+
+Use `example.com`, the documentation IP ranges (`192.0.2.x`), and names that are
+obviously made up.
+
 ## Conventions in this wiki
 
 - **Bold** marks a term the product uses with a specific meaning.

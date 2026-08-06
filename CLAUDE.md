@@ -854,6 +854,29 @@ Four things about it that are easy to undo by accident:
   `previewFormat()` for anything that must not remount; `applyPrefs()` only
   once the value is stored.
 
+## The wiki
+
+`wiki/` is the user-facing documentation, English, ~17 pages, destined for
+salt.md/wiki. Two rules, both learned the hard way:
+
+**It is derived from the code, never from memory or from the Vorgänge.** The
+workspace only knows what has been written down since somebody started writing
+things down; the code knows everything. `check-wiki.mjs` runs in the gate and
+holds the mechanical half — every tool named exists, every tool that exists is
+named, every `/api/` path is a route, every property and view type has a
+section, every internal link resolves. It cannot check whether a sentence is
+TRUE; nothing can.
+
+**Every example is invented.** The first draft named three of his customers in a
+tree diagram — written while looking at his live instance, and headed for a
+public website. He caught it, not a test. The check now refuses real-looking IPs,
+hostnames and email domains, but it cannot recognise a company name, so that half
+is a written rule: if the name came from somewhere real, change it.
+
+The same applies outside the wiki. The instance-name placeholder in the admin
+dialog said "e.g. VIICO Notes" — his own company, shipped to everyone who
+installs Salt.md. It is "Acme Notes" now.
+
 ## Licence
 
 **AGPL-3.0** since 2026-07-26. It replaced PolyForm Noncommercial, which
