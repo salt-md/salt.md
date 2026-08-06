@@ -122,6 +122,27 @@ function closeAuthWindow() {
 
 let pendingVerifier = null;
 
+/** Does this server know the browser hand-off at all?
+ *
+ *  It is a newer route than the app, and pointing the app at an instance that
+ *  predates it is the ordinary case, not the exception. Without this check the
+ *  browser opens on a path the old server does not have, falls through to the
+ *  single-page app, and the person is simply standing in their workspace in a
+ *  browser wondering what happened — which is exactly what it did.
+ *
+ *  An invalid challenge is used deliberately: a server that knows the route
+ *  answers 400 and stores nothing, an older one falls through with 200. So the
+ *  probe costs nothing and leaves no half-finished sign-in behind. */
+async function serverDoesBrowserSignIn(server) {
+  try {
+    const res = await session.defaultSession.fetch(
+      server + '/desktop/login?challenge=probe', { redirect: 'manual' });
+    return res.status === 400;
+  } catch {
+    return false;
+  }
+}
+
 function startBrowserSignIn() {
   const server = readSettings().server;
   if (!server) return;
@@ -242,12 +263,22 @@ function createWindow() {
     // protocol could not be registered — otherwise somebody whose machine
     // refuses salt:// would have no way in at all.
     if (isAuthStart(server, url)) {
-      if (protocolRegistered) {
-        event.preventDefault();
-        startBrowserSignIn();
+      if (!protocolRegistered) {
+        openAuthWindow();
         return;
       }
-      openAuthWindow();
+      // Held while we ask the server whether it can do this. If it cannot, the
+      // same navigation is resumed in this window — nobody is left in a browser
+      // looking at a page that means nothing to them.
+      event.preventDefault();
+      void serverDoesBrowserSignIn(server).then((yes) => {
+        if (yes) {
+          startBrowserSignIn();
+          return;
+        }
+        openAuthWindow();
+        if (win && !win.isDestroyed()) win.loadURL(url);
+      });
       return;
     }
     if (url.startsWith(server)) {
