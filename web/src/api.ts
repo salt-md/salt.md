@@ -416,6 +416,18 @@ export const api = {
     }),
   deleteComment: (id: string) => req<{ ok: boolean }>(`/api/comments/${id}`, { method: 'DELETE' }),
 
+  // The raw trail. There is no edit and no single delete on purpose — see
+  // server/notelog.go. clearNotes drops the whole of it and is the only removal
+  // there is; the server refuses it to anything but a signed-in person.
+  pageNotes: (pageId: string) => req<import('./types').PageNote[]>(`/api/pages/${pageId}/notes`),
+  addNote: (pageId: string, body: string) =>
+    req<{ id: string }>(`/api/pages/${pageId}/notes`, {
+      method: 'POST',
+      body: JSON.stringify({ body }),
+    }),
+  clearNotes: (pageId: string) =>
+    req<{ ok: boolean; removed: number }>(`/api/pages/${pageId}/notes`, { method: 'DELETE' }),
+
   listTags: () => req<{ tag: string; count: number }[]>('/api/tags'),
   tagColors: (workspaceId: string) =>
     req<Record<string, string>>(`/api/tag-colors?workspace=${encodeURIComponent(workspaceId)}`),

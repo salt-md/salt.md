@@ -374,6 +374,22 @@ var mcpTools = []map[string]any{
 			"required": []string{"page_id"}},
 	},
 	{
+		"name": "note",
+		"description": "Drop a note on a page while you work — one line, no title, no place to choose. It joins that page's raw trail, in order, with the time you wrote it. " +
+			"Use it for what a write-up loses: the approach you tried and dropped, the thing that surprised you, the number you looked up, why you did NOT take the obvious road. Write it AS it happens; that is the whole value. " +
+			"A note can never be edited or removed, by you or anyone — that is what makes it worth reading later, because you wrote it before you knew how it would end. Correct a wrong one by adding another that says so. " +
+			"Everyone who may read the page sees the trail; a person can discard the whole of it deliberately. " +
+			"This is not working_on: that says you are here now, this leaves something behind.",
+		"inputSchema": map[string]any{"type": "object",
+			"properties": map[string]any{
+				"page_id": map[string]any{"type": "string", "description": "The page or database row this belongs to. Usually the one you checked in on."},
+				"text":    map[string]any{"type": "string", "description": "The note. One or two sentences, as you would say it out loud."},
+				"agent":   map[string]any{"type": "string", "description": "Which agent you are — one of " + knownAgentList() + ". Optional; shown beside the note with the account it came through."},
+				"label":   map[string]any{"type": "string", "description": "What you call yourself, when that is not the key above (e.g. \"Claude Code\") — same as in working_on, so the trail names you the way the badge does."},
+			},
+			"required": []string{"page_id", "text"}},
+	},
+	{
 		"name":        "whoami",
 		"description": "Who am I and what am I allowed to do: user, token scope (read/write), which workspaces this token may reach, and which actions are deliberately NOT available over MCP. Call this first when a write fails, to tell a permission problem from a wrong id. Read-only.",
 		"inputSchema": map[string]any{"type": "object", "properties": map[string]any{}},
@@ -671,6 +687,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		Agent           string `json:"agent"`
 		Label           string `json:"label"`
 		Note            string `json:"note"`
+		Text            string `json:"text"` // note() — the trail entry itself
+
 		ExpectedMinutes int    `json:"expected_minutes"`
 		Done            bool   `json:"done"`
 		// The merged tools: one action/mode word instead of a separate entry.
@@ -704,7 +722,7 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 		name == "delete_comment" ||
 		name == "set_sharing" ||
 		name == "workspace" || name == "embed_database" || name == "import_url" ||
-		name == "working_on" ||
+		name == "working_on" || name == "note" ||
 		// Workspace rules (W123): a proposal is inert, but it IS a write.
 		name == "propose_workspace_rules"
 	switch name {
@@ -1119,6 +1137,8 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 			return s.mcpGetLinks(u, args.PageID, args.WorkspaceID, args.Kinds, args.IncludeNodes)
 		case "working_on":
 			return s.mcpWorkingOn(u, args.PageID, args.Agent, args.Label, args.Note, args.ExpectedMinutes, args.Done)
+		case "note":
+			return s.mcpNote(u, args.PageID, args.Text, args.Agent, args.Label)
 		case "workspace":
 			return s.mcpWorkspace(u, args.WorkspaceID, args.Name, args.Icon, args.FromWorkspace)
 		default:
@@ -1133,12 +1153,21 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 	// detail. The generic one here would use the tool's reply instead, so the
 	// log read "started working on: Checked out of page b534…" — two lines per
 	// call, and the second one saying the opposite of what happened.
-	if err == nil && mutating && name != "working_on" {
-		ws := s.pageWorkspace(args.PageID)
-		if ws == "" { // create_page has no page_id arg — attribute to the actor's workspace
-			ws = s.userDefaultWorkspace(userID)
+	// note is excluded for a different reason: the trail IS the record — dated,
+	// permanent, and readable by exactly the people allowed to see the page.
+	// Copying the text into the audit log as well would spread it to a second
+	// place that a different set of people (workspace admins) reads, and buy
+	// nothing that is not already there.
+	if err == nil && mutating {
+		if name != "working_on" && name != "note" {
+			ws := s.pageWorkspace(args.PageID)
+			if ws == "" { // create_page has no page_id arg — attribute to the actor's workspace
+				ws = s.userDefaultWorkspace(userID)
+			}
+			s.audit("agent", userID, u.Name+" (MCP)", name, args.PageID, ws, result)
 		}
-		s.audit("agent", userID, u.Name+" (MCP)", name, args.PageID, ws, result)
+		// Idempotency applies to every mutating tool, including these two: a
+		// retried call must not append a second trail entry.
 		s.storeIdempotent(idemKey, result)
 	}
 	return result, err

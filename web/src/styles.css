@@ -8749,3 +8749,151 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   margin-top: 3px;
   flex: none;
 }
+
+/* ---- The raw trail (NoteTrail) ----
+   Deliberately quieter than the comments above it. A comment asks for an
+   answer; a trail entry asks for nothing, and is read only when somebody
+   doubts the written-up version. Same slim collapsed row, one step further
+   down in weight and colour. */
+.trail {
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.trail-bar,
+.trail-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  /* A button centres its text by default. Harmless for the comment bar above,
+     where nothing grows — here the time span fills the row and its label
+     drifted into the middle of the page. */
+  text-align: left;
+}
+.trail-bar:hover,
+.trail-start:hover {
+  color: var(--fg);
+}
+.trail-bar svg,
+.trail-start svg {
+  flex: none;
+}
+/* The span sits right of the count and takes the leftover room, so the chevron
+   stays pinned at the edge whatever the numbers are. */
+.trail-span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.75;
+}
+.trail-chev {
+  transition: transform 0.15s;
+}
+.trail.is-open .trail-chev {
+  transform: rotate(180deg);
+}
+.trail.is-open .trail-bar {
+  color: var(--fg);
+}
+
+.trail-body {
+  padding-bottom: 14px;
+}
+
+/* One entry per row: time, text, who. The time column is fixed width and
+   tabular so the entries line up into a column you can scan down — that
+   alignment is most of what makes a trail readable as a sequence. */
+.trail-item {
+  display: grid;
+  grid-template-columns: 3.6rem 1fr auto;
+  gap: 10px;
+  align-items: baseline;
+  padding: 5px 0;
+  line-height: 1.5;
+}
+.trail-time {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+.trail-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.trail-who {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.trail-via::before {
+  content: '·';
+  margin-right: 5px;
+}
+
+.trail-compose {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+.trail-compose textarea {
+  flex: 1;
+  resize: none;
+  min-height: 32px;
+  padding: 6px 9px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--fg);
+  background: var(--bg-soft, transparent);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.trail-compose textarea:focus {
+  outline: none;
+  border-color: var(--accent, var(--fg));
+}
+
+.trail-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.trail-clear {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: none;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.trail-clear:hover {
+  color: var(--danger, #d64545);
+}
+
+@media (max-width: 640px) {
+  /* The author drops below on a narrow screen rather than squeezing the text
+     into a two-word column. */
+  .trail-item {
+    grid-template-columns: 3.4rem 1fr;
+  }
+  .trail-who {
+    grid-column: 2;
+  }
+}

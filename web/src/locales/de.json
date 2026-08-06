@@ -186,6 +186,9 @@
   "Description": "Beschreibung",
   "Description (optional) — explains what the form is for.": "Beschreibung (optional) — erklärt, wofür das Formular ist.",
   "Disable 2FA": "2FA deaktivieren",
+  "Discard": "Verwerfen",
+  "Discard the whole trail": "Rohspur verwerfen",
+  "Discard the whole trail of this page? This affects {notes} and cannot be undone.": "Die ganze Rohspur dieser Seite verwerfen? Das betrifft {notes} und lässt sich nicht rückgängig machen.",
   "Disconnect": "Trennen",
   "Disconnecting failed": "Trennen fehlgeschlagen",
   "Dismiss proposal": "Vorschlag verwerfen",
@@ -409,8 +412,13 @@
   "No workspaces.": "Keine Workspaces.",
   "No {name}": "Ohne {name}",
   "Nobody found.": "Niemand gefunden.",
+  "Not discarded": "Nicht verworfen",
+  "Note": "Notieren",
   "Note list as a middle column (Bear style)": "Notizliste als Mittelspalte (Bear-Stil)",
+  "Note not saved": "Schnipsel nicht gespeichert",
+  "Note something down": "Etwas notieren",
   "Notes": "Notizen",
+  "Notes cannot be edited or removed one by one — that is what makes them worth reading later.": "Einzelne Schnipsel lassen sich nicht ändern und nicht löschen — genau das macht sie später lesenswert.",
   "Notes mode": "Notizen-Modus",
   "Nothing has happened yet.": "Noch nichts passiert.",
   "Nothing hidden": "Nichts ausgeblendet",
@@ -500,6 +508,7 @@
   "Publicly reachable:": "Öffentlich erreichbar:",
   "Purple": "Lila",
   "QR code for the authenticator app": "QR-Code für die Authenticator-App",
+  "Raw trail": "Rohspur",
   "Reactivate": "Wieder aktivieren",
   "Read & write": "Lesen & Schreiben",
   "Read access to “{name}” until {time} — the people in charge have been told.": "Lesezugriff auf „{name}“ bis {time} — die Verantwortlichen wurden informiert.",
@@ -744,6 +753,7 @@
   "Week starts on": "Woche beginnt am",
   "Welcome to Salt.md": "Willkommen bei Salt.md",
   "What agents may do here": "Was Agenten hier dürfen",
+  "What just happened, in one line…": "Was gerade passiert ist, in einer Zeile…",
   "What should the calendar contain?": "Was soll der Kalender enthalten?",
   "When should we call?": "Wann sollen wir anrufen?",
   "Where": "Wo",
@@ -888,6 +898,10 @@
     "other": "{n} Mitglieder"
   },
   "{n} min": "{n} Min.",
+  "{n} notes": {
+    "one": "{n} Schnipsel",
+    "other": "{n} Schnipsel"
+  },
   "{n} pages": {
     "one": "{n} Seite",
     "other": "{n} Seiten"

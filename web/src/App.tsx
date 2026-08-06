@@ -398,7 +398,12 @@ export default function App() {
     let warnedVersion = false;
     es.onmessage = (e) => {
       try {
-        const msg = JSON.parse(e.data) as { type: string; version?: string; collection?: string };
+        const msg = JSON.parse(e.data) as {
+          type: string;
+          version?: string;
+          collection?: string;
+          id?: string;
+        };
         if (msg.type === 'hello' && msg.version && msg.version !== BUILD_VERSION && !warnedVersion) {
           warnedVersion = true;
           toast(t('A new version is available — reload the page'));
@@ -419,6 +424,11 @@ export default function App() {
         // fetched through a route that checks permissions per page.
         if (msg.type === 'presence') {
           window.dispatchEvent(new CustomEvent('salt:presence'));
+        }
+        // A note landed on a page's trail. Names the page and nothing more —
+        // the text would reach every browser on the instance.
+        if (msg.type === 'notes' && msg.id) {
+          window.dispatchEvent(new CustomEvent('salt:notes', { detail: msg.id }));
         }
       } catch {
         /* ignore malformed events */

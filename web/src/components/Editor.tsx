@@ -25,6 +25,7 @@ import { BlockContext } from '../blockContext';
 import CollectionView from './CollectionView';
 import { HistoryModal } from './PageHistory';
 import CommentsSection, { initials, OPEN_COMMENTS_EVENT } from './CommentsSection';
+import NoteTrail from './NoteTrail';
 import { FilePreview, isPreviewable } from './FilePreview';
 import StructurePanel, { structurePanelOpen, setStructurePanelOpen } from './StructurePanel';
 import { AgentPresence } from './AgentBadge';
@@ -1156,9 +1157,12 @@ function PageHeader({
         )}
       </div>
       {children}
-      {/* Comments belong at the end of the document, not in a column
-          beside it — see CommentsSection. Only for documents and rows; a
-          Datenbank-Seite hat unten ihre Tabelle, darunter waere es verloren. */}
+      {/* Comments belong at the end of the document, not in a column beside it
+          — see CommentsSection. Only for documents and rows: a database page
+          carries its table down there, and anything below that is lost.
+          The raw trail goes last of all. Comments are a conversation aimed at
+          people; the trail is evidence, and evidence belongs under the account
+          it supports. */}
       {page.type !== 'collection' && (
         <div className="comments-wrap">
           <CommentsSection
@@ -1167,6 +1171,7 @@ function PageHeader({
             onCountChange={setOpenComments}
             hidden={commentsHidden}
           />
+          <NoteTrail pageId={pageId} canWrite={canEdit} />
         </div>
       )}
       </div>

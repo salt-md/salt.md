@@ -292,6 +292,12 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("POST /api/comments/{id}/resolve", s.auth(s.handleResolveComment))
 	m.HandleFunc("DELETE /api/comments/{id}", s.auth(s.handleDeleteComment))
 
+	m.HandleFunc("GET /api/pages/{id}/notes", s.auth(s.handleListNotes))
+	m.HandleFunc("POST /api/pages/{id}/notes", s.auth(s.handleAddNote))
+	// Discarding a trail is a person's decision — an API token is a second key
+	// to content, and the agent whose trail it is must not be able to drop it.
+	m.HandleFunc("DELETE /api/pages/{id}/notes", s.auth(s.sessionOnly(s.handleClearNotes)))
+
 	m.HandleFunc("GET /api/events", s.auth(s.handleEvents))
 	m.HandleFunc("GET /api/presence", s.auth(s.handlePresence))
 	m.HandleFunc("GET /collab/{id}", s.auth(s.handleCollab))

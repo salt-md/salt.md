@@ -6,7 +6,7 @@ import { t, plural } from '../i18n';
 // The agent's own logo, from the same files the connect dialog shows — the mark
 // you saw while setting it up is the mark you see while it works. Anything
 // without one gets the neutral robot rather than a lookalike.
-function AgentMark({ agent, size }: { agent: string; size: number }) {
+export function AgentMark({ agent, size }: { agent: string; size: number }) {
   const logo = agentLogo(agent);
   if (!logo) return <Bot size={size} />;
   return (

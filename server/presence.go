@@ -83,6 +83,18 @@ func (s *Server) mcpWorkingOn(u *user, pageID, agent, label, note string, expect
 	}
 	key := normalizeAgent(agent)
 	if done {
+		// The bridge to the raw trail (notelog.go). The note carried while
+		// working is already what a trail entry is — short, written in the
+		// moment, before the ending was known — and it used to be thrown away
+		// at check-out. Read it BEFORE the delete, and take the note passed on
+		// this call if there is one: "done, and here is how it went" is the
+		// most useful last line there is.
+		last := strings.TrimSpace(note)
+		if last == "" {
+			s.db.QueryRow(`SELECT note FROM agent_presence WHERE page_id = ? AND account_id = ? AND agent = ?`,
+				pageID, u.ID, key).Scan(&last)
+			last = strings.TrimSpace(last)
+		}
 		res, err := s.db.Exec(`DELETE FROM agent_presence WHERE page_id = ? AND account_id = ? AND agent = ?`,
 			pageID, u.ID, key)
 		if err != nil {
@@ -92,8 +104,14 @@ func (s *Server) mcpWorkingOn(u *user, pageID, agent, label, note string, expect
 		if n, _ := res.RowsAffected(); n == 0 {
 			return "Nothing to check out of — you were not marked as working on that page.", nil
 		}
+		kept := ""
+		if last != "" {
+			if _, err := s.addNote(u, pageID, last, key, strings.TrimSpace(label)); err == nil {
+				kept = " Your last note stays on the page as a trail entry."
+			}
+		}
 		s.audit("agent", u.ID, u.Name, "working_on_end", pageID, s.pageWorkspace(pageID), label)
-		return fmt.Sprintf("Checked out of page %s.", pageID), nil
+		return fmt.Sprintf("Checked out of page %s.%s", pageID, kept), nil
 	}
 	if strings.TrimSpace(label) == "" {
 		label = strings.TrimSpace(agent)

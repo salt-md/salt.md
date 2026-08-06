@@ -142,6 +142,18 @@ export interface Comment {
   resolvedAt: string | null;
 }
 
+// One entry of a page's raw trail. No resolvedAt, no editedAt and no author id
+// to check against: nothing about it can change after it is written, which is
+// the entire point (server/notelog.go).
+export interface PageNote {
+  id: string;
+  body: string;
+  author: string; // the account — verified
+  agent?: string; // what an agent called itself — a claim
+  label?: string;
+  createdAt: string;
+}
+
 export interface ApiToken {
   id: string;
   name: string;

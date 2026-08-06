@@ -175,6 +175,21 @@ CREATE TABLE IF NOT EXISTS agent_presence (
 );
 CREATE INDEX IF NOT EXISTS idx_presence_page ON agent_presence(page_id);
 CREATE INDEX IF NOT EXISTS idx_presence_seen ON agent_presence(last_seen);
+-- The raw trail (see notelog.go). Append-only by rule, not by grant: there is
+-- no UPDATE and no single-row DELETE anywhere in the code, only a whole-page
+-- clear a person triggers. agent is a claim, exactly like presence's; the
+-- author is the verified half and both are shown together.
+CREATE TABLE IF NOT EXISTS page_notes (
+	id TEXT PRIMARY KEY,
+	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+	author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+	author_name TEXT NOT NULL DEFAULT '',
+	agent TEXT NOT NULL DEFAULT '',
+	label TEXT NOT NULL DEFAULT '',
+	body TEXT NOT NULL,
+	created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_page_notes_page ON page_notes(page_id, created_at);
 CREATE TABLE IF NOT EXISTS favorites (
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
