@@ -8750,6 +8750,78 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   flex: none;
 }
 
+/* Dropping a file from the desktop onto a document (dropFiles.ts).
+   The whole scroll area accepts it, not just the text column — the margins and
+   the empty stretch below the last block are most of what people aim at. */
+.page-body.is-dropping {
+  outline: 2px dashed var(--accent, var(--fg));
+  outline-offset: -6px;
+  border-radius: 8px;
+}
+
+/* Fixed, not absolute: .editor-scroll is the scroller, so an absolutely
+   positioned hint sits at the top of the CONTENT and is off-screen the moment
+   somebody has scrolled down — which is exactly when they are dropping at the
+   end of a long page. */
+.drop-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+}
+
+/* The skill download, at the foot of "Connect an agent". A row rather than a
+   button on its own: connecting and teaching are two halves of the same job,
+   and the sentence is what makes anybody press it. */
+.agent-skill {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.agent-skill-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.agent-skill-title {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.agent-skill-sub {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.agent-skill .btn-sm {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+@media (max-width: 640px) {
+  .agent-skill {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 /* ---- The raw trail (NoteTrail) ----
    Deliberately quieter than the comments above it. A comment asks for an
    answer; a trail entry asks for nothing, and is read only when somebody

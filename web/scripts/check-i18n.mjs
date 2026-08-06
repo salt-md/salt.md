@@ -308,8 +308,25 @@ const germanLines = [];
 //
 // The words here must not exist in English and must not appear in a class name,
 // an id or a URL — anything ambiguous belongs in the line list above, not here.
+// Verbs and participles — what a BUTTON says.
 const GERMAN_STRONG =
   /(?<![\w-])(fehlgeschlagen|umbenennen|umbenannt|verschieben|verschoben|loeschen|löschen|geloescht|gelöscht|gespeichert|speichern|hochladen|hochgeladen|anlegen|angelegt|erstellen|erstellt|schliessen|schließen|abbrechen|hinzufuegen|hinzufügen|entfernen|entfernt|bearbeiten|suchen|senden|gesendet|teilen|geteilt|beitritt|importierter|einsammeln|referenzierte|auswaehlen|auswählen|verbinden|verbunden|zurueck|zurück|weiter|fertig|ungueltig|ungültig|vorhanden|erforderlich|aufklappen|zuklappen|einklappen|ausklappen|umbenannt|gespeicherte|geoeffnet|geöffnet|geschlossen|verworfen|uebernehmen|übernehmen|bestaetigen|bestätigen|wiederherstellen|zuruecksetzen|zurücksetzen)(?![\w])/iu;
+
+// Nouns and adjectives — what a MENU ENTRY or a description says, and the class
+// both other rules were blind to. "Hervorgehobener Hinweis mit Emoji" sat in
+// the slash menu, on screen, through every pass: no umlaut, no verb from the
+// list above, and a JSX rule cannot see a value in an object literal.
+//
+// Only words that are not also English and not plausible as an identifier or a
+// file name — a false positive here fails somebody's build for no reason, and
+// the answer to that is a smaller list, not a disabled check.
+const GERMAN_NOUNS =
+  /(?<![\w-])(hinweis|hinweise|ueberschrift|überschrift|inhaltsverzeichnis|einstellung|einstellungen|verzeichnis|datei|dateien|ordner|benutzer|kennwort|passwort|auswahl|vorlage|vorlagen|eintrag|eintraege|einträge|spalte|spalten|zeile|zeilen|tabelle|sammlung|sammlungen|arbeitsbereich|papierkorb|kommentar|kommentare|abschnitt|anhang|hervorgehoben|hervorgehobener|hervorgehobene|ungelesen|verfuegbar|verfügbar|nachricht|nachrichten|beschreibung|karte|karten)(?![\w])/iu;
+
+/** A STRING reads as German if one unambiguous word is in it. One is enough
+ *  here and not enough for a whole line, because interface text is short: "Nicht
+ *  gefunden" has no umlaut and two words, and the line rule would never see it. */
+const stringReadsGerman = (s) => GERMAN_STRONG.test(s) || GERMAN_NOUNS.test(s);
 
 // Every quoted string in the source, JSX text included via the line rule above.
 const germanStrings = [];
@@ -331,7 +348,7 @@ const germanStrings = [];
             for (const m of line.matchAll(STR)) {
               const text = m[2];
               if (!/[A-Za-zÄÖÜäöüß]{3}/.test(text)) continue;
-              if (GERMAN_STRONG.test(text)) {
+              if (stringReadsGerman(text)) {
                 germanStrings.push(`${rel}:${i + 1}  ${text.slice(0, 60)}`);
                 break;
               }

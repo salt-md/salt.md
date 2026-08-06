@@ -21,6 +21,7 @@ import { toast } from './toast';
 import Logo from './Logo';
 import ThemeSwitch, { type ThemePref } from './ThemeSwitch';
 import { applyPrefs, plural, t } from './i18n';
+import { guardDrops } from './dropFiles';
 
 /** Schriftwahl: 'system' laesst alles wie bisher, 'brand' schaltet die
  *  mitgelieferten Inter- und JetBrains-Mono-Schriften ein. */
@@ -388,6 +389,12 @@ export default function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // A file dropped anywhere the application does not handle itself would be
+  // NAVIGATED TO by the browser — the whole app replaced by a PDF viewer, with
+  // whatever was open gone. Missing a drop is a shrug; losing the page for
+  // aiming two centimetres wide is not. See dropFiles.ts.
+  useEffect(() => guardDrops(), []);
 
   // Live updates: whenever anyone (or an agent via the API) changes the page
   // tree, the server broadcasts an SSE event and we refetch.

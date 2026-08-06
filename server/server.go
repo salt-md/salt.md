@@ -298,6 +298,9 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	// to content, and the agent whose trail it is must not be able to drop it.
 	m.HandleFunc("DELETE /api/pages/{id}/notes", s.auth(s.sessionOnly(s.handleClearNotes)))
 
+	// The agent skill, generated for this instance (see skill.go).
+	m.HandleFunc("GET /api/skill", s.auth(s.handleSkill))
+
 	m.HandleFunc("GET /api/events", s.auth(s.handleEvents))
 	m.HandleFunc("GET /api/presence", s.auth(s.handlePresence))
 	m.HandleFunc("GET /collab/{id}", s.auth(s.handleCollab))

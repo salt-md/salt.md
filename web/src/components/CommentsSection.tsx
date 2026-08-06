@@ -114,7 +114,7 @@ export default function CommentsSection({
   return (
     <section
       className={'comments-section' + (expanded ? ' is-open' : '')}
-      id="kommentare"
+      id="comments"
       aria-label={t('Comments')}
     >
       <button

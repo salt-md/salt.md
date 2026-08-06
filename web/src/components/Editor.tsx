@@ -33,7 +33,8 @@ import { usePeers, setPeers, clearPeers } from '../presence';
 import { tagColorClass, TAG_PALETTE } from '../tags';
 import { collectTags, suggestTags } from '../tagSuggest';
 import { useMenuDismiss } from '../modal';
-import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2, Trash2 } from 'lucide-react';
+import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2, Trash2, FilePlus2 } from 'lucide-react';
+import { blockTypeFor, carriesExternalFiles } from '../dropFiles';
 
 export interface EditorProps {
   pageId: string;
@@ -411,7 +412,7 @@ function PageHeader({
     window.dispatchEvent(new CustomEvent(OPEN_COMMENTS_EVENT));
     // Render first, then scroll — the row does not exist while hidden.
     requestAnimationFrame(() =>
-      document.getElementById('kommentare')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     );
   };
   const peers = usePeers(pageId);
@@ -1382,18 +1383,18 @@ function BlockContent({
   const getSlashItems = async (query: string) => {
     const custom = [
       {
-        title: 'Callout',
-        subtext: 'Hervorgehobener Hinweis mit Emoji',
-        aliases: ['callout', 'hinweis', 'info', 'warnung'],
+        title: t('Callout'),
+        subtext: t('A highlighted note with an emoji'),
+        aliases: ['callout', 'hinweis', 'info', 'warnung'], // i18n-ok: search aliases, deliberately multilingual so a German user can type it
         group: 'Basic blocks',
         icon: <span>💡</span>,
         onItemClick: () =>
           insertOrUpdateBlockForSlashMenu(editor, { type: 'callout' } as never),
       },
       {
-        title: 'Bookmark / Embed',
-        subtext: 'Link-Karte oder YouTube/Vimeo-Player',
-        aliases: ['bookmark', 'embed', 'link', 'video', 'youtube'],
+        title: t('Bookmark / Embed'),
+        subtext: t('A link card, or a YouTube/Vimeo player'),
+        aliases: ['bookmark', 'embed', 'link', 'video', 'youtube'], // i18n-ok: search aliases, deliberately multilingual so a German user can type it
         group: 'Media',
         icon: <span>🔖</span>,
         onItemClick: () =>
@@ -1409,9 +1410,9 @@ function BlockContent({
           insertOrUpdateBlockForSlashMenu(editor, { type: 'database' } as never),
       },
       {
-        title: 'Inhaltsverzeichnis',
+        title: t('Table of contents'),
         subtext: t('Auto-generated list of every heading'),
-        aliases: ['toc', 'inhalt', 'inhaltsverzeichnis', 'outline'],
+        aliases: ['toc', 'inhalt', 'inhaltsverzeichnis', 'outline'], // i18n-ok: search aliases, deliberately multilingual so a German user can type it
         group: 'Basic blocks',
         icon: <span>📑</span>,
         onItemClick: () => insertOrUpdateBlockForSlashMenu(editor, { type: 'toc' } as never),
@@ -1552,8 +1553,117 @@ function BlockContent({
     setPreview({ name: props.name || url.split('/').pop() || url, url });
   };
 
+  // Dropping a file from outside the browser. BlockNote handles a drop that
+  // lands on the text; this covers the rest of the page, which is most of the
+  // area somebody aims at — and where the browser's default is to navigate to
+  // the file and throw the application away. See dropFiles.ts.
+  const [dropping, setDropping] = useState(false);
+  const dragDepth = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!canEdit || !carriesExternalFiles(e.dataTransfer)) return;
+    // dragenter/dragleave fire for every child element the pointer crosses, so
+    // a plain boolean flickers the overlay away over every block. Counting
+    // enter against leave is the standard fix and the only one that survives
+    // nested content.
+    dragDepth.current += 1;
+    setDropping(true);
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    if (!canEdit || !carriesExternalFiles(e.dataTransfer)) return;
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDropping(false);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!canEdit || !carriesExternalFiles(e.dataTransfer)) return;
+    // Without this the drop event never fires at all — the browser only asks
+    // "may I drop here?" once per dragover, and silence means no.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDrop = async (e: React.DragEvent) => {
+    if (!canEdit || !carriesExternalFiles(e.dataTransfer)) return;
+    dragDepth.current = 0;
+    setDropping(false);
+    // A drop that landed on the text belongs to BlockNote: it knows WHERE
+    // between the blocks the pointer was, which is the whole reason to drop
+    // there rather than at the end. Doing it here as well would insert twice.
+    if ((e.target as Element)?.closest?.('.bn-editor')) return;
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files || []);
+    if (!files.length) return;
+    // One at a time on purpose. Uploads are size-capped and the server sizes
+    // PDF extraction to the memory it believes it has; ten at once from a
+    // folder drag is the shape that took an instance down once already.
+    //
+    // A failure does not stop the rest — dropping five and getting four plus a
+    // named failure beats getting nothing.
+    let added = 0;
+    for (const file of files) {
+      try {
+        const url = await api.upload(file, pageId);
+        // Appended at the end: a drop outside the text names no position.
+        editor.insertBlocks(
+          [{ type: blockTypeFor(file), props: { url, name: file.name } } as never],
+          editor.document[editor.document.length - 1],
+          'after',
+        );
+        added++;
+      } catch (err) {
+        toast((err as Error).message || t('“{name}” was not uploaded', { name: file.name }));
+      }
+    }
+    if (added > 1) toast(plural(added, '{n} file added', '{n} files added'));
+  };
+
+  const handlers = useRef({ enter: onDragEnter, leave: onDragLeave, over: onDragOver, drop: onDrop });
+  handlers.current = { enter: onDragEnter, leave: onDragLeave, over: onDragOver, drop: onDrop };
+
+  // Registered on the scroller that holds cover, title, tags AND content, not
+  // just on the text area — dropping onto the title is a perfectly ordinary aim
+  // and it is a strip this component does not render. Native listeners rather
+  // than JSX props because that element belongs to PageHeader; the listeners
+  // live exactly as long as a DOCUMENT editor is mounted, so a collection page
+  // (whose body is a table) never grows a drop zone that would mean nothing.
+  useEffect(() => {
+    const zone = scrollRef.current?.closest('.page-body');
+    if (!zone) return;
+    const enter = (e: Event) => handlers.current.enter(e as unknown as React.DragEvent);
+    const leave = (e: Event) => handlers.current.leave(e as unknown as React.DragEvent);
+    const over = (e: Event) => handlers.current.over(e as unknown as React.DragEvent);
+    const drop = (e: Event) => void handlers.current.drop(e as unknown as React.DragEvent);
+    zone.addEventListener('dragenter', enter);
+    zone.addEventListener('dragleave', leave);
+    zone.addEventListener('dragover', over);
+    zone.addEventListener('drop', drop);
+    return () => {
+      zone.removeEventListener('dragenter', enter);
+      zone.removeEventListener('dragleave', leave);
+      zone.removeEventListener('dragover', over);
+      zone.removeEventListener('drop', drop);
+      zone.classList.remove('is-dropping');
+    };
+    // Registered ONCE, reading the current handlers out of a ref. Re-binding on
+    // every render would swap the pair out MID-DRAG — between the dragenter
+    // that shows the overlay and the dragover that accepts the drop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The outline sits on an element this component does not render, so it is set
+  // rather than expressed in JSX.
+  useEffect(() => {
+    scrollRef.current?.closest('.page-body')?.classList.toggle('is-dropping', dropping);
+  }, [dropping]);
+
   return (
-    <div className="editor-scroll">
+    <div className="editor-scroll" ref={scrollRef}>
+      {dropping && (
+        <div className="drop-hint" aria-hidden>
+          <FilePlus2 size={18} />
+          {t('Drop to add to this page')}
+        </div>
+      )}
       <div className="editor-inner" onClickCapture={onFileClick}>
         {/* The database block renders inside the editor and would otherwise
             not reach the page list, the tag colours or navigation. */}

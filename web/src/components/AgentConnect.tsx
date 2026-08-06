@@ -4,7 +4,7 @@ import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
 import type { Workspace } from '../types';
-import { Bot, Check, Copy, ShieldCheck, KeyRound } from 'lucide-react';
+import { Bot, Check, Copy, Download, ShieldCheck, KeyRound } from 'lucide-react';
 import { t } from '../i18n';
 
 // "Connect an agent" (wave 44): Salt.md is AI-native — every agent talks to the
@@ -308,6 +308,30 @@ export default function AgentConnectModal({
               )}
             </p>
           )}
+
+          {/* Connecting is only half of it. An agent that is connected still
+              does not know how this team works, and being told in a chat means
+              being told again in the next one — which is the actual complaint.
+              The skill is generated per instance, so the address, the workspace
+              ids and the rules in it are this instance's own; its first
+              instruction is to write a short block into the repository's
+              CLAUDE.md / AGENTS.md, which is the file that survives. */}
+          <div className="agent-skill">
+            <div className="agent-skill-main">
+              <span className="agent-skill-title">{t('Teach the agent how you work here')}</span>
+              <span className="agent-skill-sub">
+                {t(
+                  'A skill with the playbook, this workspace and its rules. It installs a short block into the repository so the next session knows it too — without being told again.',
+                )}
+              </span>
+            </div>
+            <button
+              className="btn-sm"
+              onClick={() => api.download(`/api/skill?workspace=${encodeURIComponent(currentWs)}`)}
+            >
+              <Download size={13} /> {t('Download skill')}
+            </button>
+          </div>
 
           <button className="btn dialog-close" onClick={onClose}>{t('Close')}</button>
         </div>
