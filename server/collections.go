@@ -80,6 +80,10 @@ func (s *Server) handlePutCollection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.pagesChanged()
+	// The schema and the views ARE the database: adding a column or removing a
+	// view changes it for everyone, and an open view on a second screen kept
+	// drawing the old shape.
+	s.rowsChanged(id)
 	writeJSON(w, map[string]json.RawMessage{"schema": body.Schema, "views": body.Views})
 }
 

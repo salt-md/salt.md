@@ -804,6 +804,14 @@ func (s *Server) handleDeletePage(w http.ResponseWriter, r *http.Request) {
 		s.collab.reset(pid)
 	}
 	s.pagesChanged()
+	// And the DATABASE the page belonged to, if any. Creating and updating have
+	// always named it; trashing did not — so a board on a second screen kept
+	// showing the card of a row that was already gone, until somebody reloaded.
+	// The whole subtree, because a database can sit inside the part being
+	// thrown away.
+	for _, pid := range ids {
+		s.rowChanged(pid)
+	}
 	// One event per page in the subtree: a receiver filtering on a single page
 	// would otherwise never hear that it went, because only the root was named.
 	for _, pid := range ids {
@@ -885,6 +893,10 @@ func (s *Server) handleRestorePage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.pagesChanged()
+	// Same on the way back: a restored row has to reappear on an open board.
+	for _, pid := range ids {
+		s.rowChanged(pid)
+	}
 	writeJSON(w, map[string]bool{"ok": true})
 }
 

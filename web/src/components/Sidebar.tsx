@@ -135,12 +135,25 @@ function DbRows({
   const [rows, setRows] = useState<{ id: string; title: string; icon: string }[] | null>(null);
   useEffect(() => {
     let alive = true;
-    void api
-      .collectionRows(collectionId, { limit: 50 })
-      .then((res) => alive && setRows(res.rows.map((r) => ({ id: r.id, title: r.title, icon: r.icon }))))
-      .catch(() => alive && setRows([]));
+    const load = () =>
+      void api
+        .collectionRows(collectionId, { limit: 50 })
+        .then((res) => alive && setRows(res.rows.map((r) => ({ id: r.id, title: r.title, icon: r.icon }))))
+        .catch(() => alive && setRows([]));
+    load();
+    // Fetched ONCE when unfolded and never again, which meant a row added or
+    // thrown away anywhere else simply did not appear or disappear here — the
+    // event arrived, and nothing was listening. Same signal the collection view
+    // uses, and narrowed the same way: only when it names THIS database, or a
+    // list with fifty thousand rows would re-crawl itself on every rename
+    // anywhere.
+    const onRows = (e: Event) => {
+      if ((e as CustomEvent<string>).detail === collectionId) load();
+    };
+    window.addEventListener('salt:rows', onRows);
     return () => {
       alive = false;
+      window.removeEventListener('salt:rows', onRows);
     };
   }, [collectionId]);
   const pad = { paddingLeft: 6 + depth * 14 };
