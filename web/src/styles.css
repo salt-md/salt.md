@@ -9123,3 +9123,32 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   flex: none;
   max-width: 190px;
 }
+
+/* ---- Running inside the desktop app ----
+   The window has no title bar on macOS: the traffic lights are drawn INSIDE it,
+   at the top left. While the sidebar is open they sit in its empty header and
+   nothing has to move. Collapsed, they land on the tab bar and on the page
+   title — so the corner is reserved, and only then.
+
+   The attribute is set by the app's preload (desktop/src/preload.js); in a
+   browser it is absent and none of this applies. */
+[data-desktop='mac'] .app.sidebar-collapsed .tab-bar,
+[data-desktop='mac'] .app.sidebar-collapsed .topbar {
+  padding-left: 78px;
+}
+
+/* The sidebar's own header already begins below the buttons, but its first row
+   sits high enough to touch them on a short window. */
+[data-desktop='mac'] .app:not(.sidebar-collapsed) .sidebar {
+  padding-top: 6px;
+}
+
+/* The strip beside the buttons drags the window, the way a title bar would.
+   Without it a window with no title bar can only be moved by its edges. */
+[data-desktop='mac'] .tab-bar {
+  -webkit-app-region: drag;
+}
+[data-desktop='mac'] .tab-bar .tab,
+[data-desktop='mac'] .tab-bar button {
+  -webkit-app-region: no-drag;
+}
