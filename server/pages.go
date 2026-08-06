@@ -64,7 +64,7 @@ const pageMetaCols = `id, parent_id, title, icon, cover, position, updated_at, t
 func (s *Server) handleListPages(w http.ResponseWriter, r *http.Request) {
 	// Scope to the user's workspaces (further narrowed by a workspace-scoped
 	// token), then drop private subtrees they can't see.
-	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
+	ws := s.scopeWorkspacesFor(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
 	if len(ws) == 0 {
 		writeJSON(w, []pageMeta{})
 		return
@@ -909,7 +909,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	match := ftsMatch(q)
 
 	userID := requestUser(r).ID
-	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(userID))
+	ws := s.scopeWorkspacesFor(requestUser(r), s.visibleWorkspaces(userID))
 	if len(ws) == 0 {
 		writeJSON(w, results)
 		return

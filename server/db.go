@@ -423,6 +423,19 @@ func openDB(path string) (*sql.DB, error) {
 	if err := ensureColumn(db, "api_tokens", "last_used_ip", `last_used_ip TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate api_tokens.last_used_ip: %w", err)
 	}
+	// What a workspace allows an AGENT to do — open (the default, unchanged) |
+	// strict (signed-in connections only) | closed (none). Opt-in: an empty
+	// value reads as open, so nothing changes for anybody who does not set it.
+	if err := ensureColumn(db, "workspaces", "agent_access", `agent_access TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.agent_access: %w", err)
+	}
+	// How the sidebar shows this workspace: split (Documents and Collections as
+	// separate sections, the default) | mixed (one tree, a database sits where
+	// it was filed). A documentation workspace wants the second — there the
+	// databases genuinely belong under their document.
+	if err := ensureColumn(db, "workspaces", "tree_mode", `tree_mode TEXT NOT NULL DEFAULT ''`); err != nil {
+		return nil, fmt.Errorf("migrate workspaces.tree_mode: %w", err)
+	}
 	// TOTP two-factor auth (secret stored on setup, enforced once enabled).
 	if err := ensureColumn(db, "users", "totp_secret", `totp_secret TEXT NOT NULL DEFAULT ''`); err != nil {
 		return nil, fmt.Errorf("migrate users.totp_secret: %w", err)

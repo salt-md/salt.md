@@ -101,22 +101,31 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 		// with their framing, not scattered through an untrusted-content block.
 		HasRules bool `json:"has_rules"`
 	}
-	out := []ws{}
-	withheld := 0
+	// DRAIN FIRST, then judge. The reach check reads the workspace's own rule
+	// from the database, and a query issued inside an open cursor blocks the
+	// whole server on a single connection — the deadlock this codebase warns
+	// about, walked straight into by filtering in the loop.
+	all := []ws{}
 	for rows.Next() {
 		var w ws
 		if err := rows.Scan(&w.ID, &w.Name, &w.Role, &w.HasRules); err != nil {
 			rows.Close()
 			return "", err
 		}
-		if !u.tokenCanReach(w.ID) {
+		all = append(all, w)
+	}
+	rows.Close()
+
+	out := []ws{}
+	withheld := 0
+	for _, w := range all {
+		if !s.credentialMayEnter(u, w.ID) {
 			withheld++
 			continue
 		}
 		w.InScope = true
 		out = append(out, w)
 	}
-	rows.Close()
 	res := map[string]any{"workspaces": out}
 	if withheld > 0 {
 		res["not_granted"] = withheld
@@ -147,7 +156,7 @@ func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	// connection's reach, sends an agent looking for a typo. Saying which of
 	// the two it is costs nothing — the caller already knows the workspace
 	// exists, it is their own account — and it tells them what to do instead.
-	if !u.tokenCanReach(wsID) {
+	if !s.credentialMayEnter(u, wsID) {
 		return "", "", fmt.Errorf("workspace %q is outside what this connection was granted — ask for it to be added, or name one it can reach", wsID)
 	}
 	var name, rules, proposal string
@@ -236,7 +245,7 @@ func (s *Server) mcpProposeWorkspaceRules(u *user, wsID, rules string) (string, 
 	if wsID == "" {
 		wsID = s.defaultWorkspaceFor(u)
 	}
-	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
+	if wsID == "" || !s.isMember(u.ID, wsID) || !s.credentialMayEnter(u, wsID) {
 		return "", fmt.Errorf("workspace %q not found", wsID)
 	}
 	if s.workspaceRole(u.ID, wsID) != "admin" {
@@ -285,13 +294,13 @@ func (s *Server) mcpGetPermissions(u *user, pageID string) (string, error) {
 	if err := s.db.QueryRow(`SELECT workspace_id, trashed_at FROM pages WHERE id = ?`, pageID).Scan(&ws, &trashed); err != nil {
 		return "", fmt.Errorf("page %q not found", pageID)
 	}
-	canRead := s.canRead(u.ID, pageID) && u.tokenCanReach(ws)
+	canRead := s.canRead(u.ID, pageID) && s.credentialMayEnter(u, ws)
 	if !canRead {
 		// Do not give away that the page exists.
 		return "", fmt.Errorf("page %q not found", pageID)
 	}
 	role := s.workspaceRole(u.ID, ws)
-	canWrite := s.canWrite(u.ID, pageID) && u.tokenCanReach(ws) && u.TokenScope != "read"
+	canWrite := s.canWrite(u.ID, pageID) && s.credentialMayEnter(u, ws) && u.TokenScope != "read"
 	reason := ""
 	switch {
 	case u.TokenScope == "read":

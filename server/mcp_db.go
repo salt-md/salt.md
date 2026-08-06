@@ -256,7 +256,7 @@ func (s *Server) mcpMovePage(userID, pageID, parentID string) (string, error) {
 // addresses of every colleague anyway, because the query read the user's
 // memberships directly.
 func (s *Server) mcpListUsers(u *user) (string, error) {
-	ws := scopeWorkspaces(u, s.visibleWorkspaces(u.ID))
+	ws := s.scopeWorkspacesFor(u, s.visibleWorkspaces(u.ID))
 	if len(ws) == 0 {
 		return "[]", nil
 	}

@@ -406,12 +406,12 @@ func (s *Server) mcpEmbedDatabase(u *user, pageID, databaseID string) (string, e
 // afterwards.
 func (s *Server) mcpWorkspaceScope(u *user, wsID string) ([]string, error) {
 	if wsID != "" {
-		if !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
+		if !s.isMember(u.ID, wsID) || !s.credentialMayEnter(u, wsID) {
 			return nil, fmt.Errorf("workspace %q not found", wsID)
 		}
 		return []string{wsID}, nil
 	}
-	ws := scopeWorkspaces(u, s.visibleWorkspaces(u.ID))
+	ws := s.scopeWorkspacesFor(u, s.visibleWorkspaces(u.ID))
 	if len(ws) == 0 {
 		return nil, fmt.Errorf("no workspace available")
 	}
@@ -457,12 +457,12 @@ func (s *Server) mcpCreateWorkspaceTarget(u *user, wsID string) (string, error) 
 		if wsID == "" {
 			return "", fmt.Errorf("no workspace available")
 		}
-		if !u.tokenCanReach(wsID) {
+		if !s.credentialMayEnter(u, wsID) {
 			return "", fmt.Errorf("this token cannot create top-level pages in the default workspace; pass workspace_id (see list with kind=\"workspaces\") or a parent_id inside an allowed workspace")
 		}
 		return wsID, nil
 	}
-	if !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
+	if !s.isMember(u.ID, wsID) || !s.credentialMayEnter(u, wsID) {
 		return "", fmt.Errorf("workspace %q not found", wsID)
 	}
 	if s.workspaceRole(u.ID, wsID) == "viewer" {

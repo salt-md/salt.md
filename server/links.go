@@ -73,7 +73,7 @@ func (s *Server) updateLinks(sourceID, content string, trashed bool) {
 // graph view. Nodes come from the client's already-loaded page list; only edges
 // whose BOTH endpoints are live pages in a visible workspace are returned.
 func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
-	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
+	ws := s.scopeWorkspacesFor(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
 	if len(ws) == 0 {
 		writeJSON(w, map[string]any{"edges": []any{}})
 		return

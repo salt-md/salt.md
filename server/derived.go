@@ -290,7 +290,7 @@ func (s *Server) relatedRows(u *user, relationProp string, rows []map[string]any
 		// a token restricted to workspace A would read values out of workspace B
 		// through a relation — one the human is a member of, but the token is
 		// not meant to reach.
-		if !u.tokenCanReach(s.pageWorkspace(id)) {
+		if !s.credentialMayEnter(u, s.pageWorkspace(id)) {
 			continue
 		}
 		var p string
@@ -375,7 +375,7 @@ func (s *Server) backrelationIDs(u *user, def propDef, rows []map[string]any) []
 				break
 			}
 		}
-		if !hits || !u.tokenCanReach(c.ws) || !s.canRead(u.ID, c.id) {
+		if !hits || !s.credentialMayEnter(u, c.ws) || !s.canRead(u.ID, c.id) {
 			continue
 		}
 		for _, t := range targets {

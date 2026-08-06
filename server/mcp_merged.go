@@ -208,7 +208,7 @@ func (s *Server) mcpWorkspace(u *user, wsID, name, icon, from string) (string, e
 		}
 		return s.mcpCreateWorkspace(u.ID, name)
 	}
-	if !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
+	if !s.isMember(u.ID, wsID) || !s.credentialMayEnter(u, wsID) {
 		return "", fmt.Errorf("workspace %q not found", wsID)
 	}
 	if !s.isWorkspaceAdmin(u.ID, wsID) {

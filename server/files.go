@@ -188,7 +188,7 @@ func (s *Server) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	wsID := r.URL.Query().Get("workspace")
 	under := r.URL.Query().Get("under")
 
-	visible := scopeWorkspaces(u, s.visibleWorkspaces(u.ID))
+	visible := s.scopeWorkspacesFor(u, s.visibleWorkspaces(u.ID))
 	if wsID != "" {
 		if !s.isMember(u.ID, wsID) || !s.tokenReachesWorkspace(r, wsID) {
 			httpError(w, 404, "workspace not found")
@@ -297,7 +297,7 @@ func (s *Server) mcpListFiles(u *user, wsID, under string) (string, error) {
 	if wsID == "" && under == "" {
 		wsID = s.defaultWorkspaceFor(u)
 	}
-	if wsID != "" && (!s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID)) {
+	if wsID != "" && (!s.isMember(u.ID, wsID) || !s.credentialMayEnter(u, wsID)) {
 		return "", fmt.Errorf("workspace %q not found", wsID)
 	}
 	var subtree map[string]bool
@@ -312,7 +312,7 @@ func (s *Server) mcpListFiles(u *user, wsID, under string) (string, error) {
 		scope = append(scope, wsID)
 	} else {
 		for _, w := range s.visibleWorkspaces(u.ID) {
-			if u.tokenCanReach(w) {
+			if s.credentialMayEnter(u, w) {
 				scope = append(scope, w)
 			}
 		}

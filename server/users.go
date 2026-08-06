@@ -44,6 +44,9 @@ type user struct {
 	// "write" (full) or "read" (read-only). Empty for cookie/session auth,
 	// which is always full access. Not serialized.
 	TokenScope string `json:"-"`
+	// api | oauth — see the workspace-level rule in workspaces.go. Empty for a
+	// browser session, which that rule never limits.
+	TokenKind string `json:"-"`
 	// TokenWorkspaces restricts a token to specific workspaces. nil means
 	// unrestricted (all the user's workspaces); non-nil is the allow-list.
 	// Cookie/session auth is always nil (unrestricted). Not serialized.
@@ -108,6 +111,14 @@ func verifyPassword(password, phc string) bool {
 }
 
 // ---- sessions & API tokens ----
+
+// Which KIND of credential a request arrived with. The workspace-level rule
+// distinguishes them: a permanent API token and a signed-in grant are not the
+// same promise, however similar their permissions look.
+const (
+	tokenKindAPI   = "api"
+	tokenKindOAuth = "oauth"
+)
 
 func tokenHash(token string) string {
 	h := sha256.Sum256([]byte(token))
@@ -179,6 +190,7 @@ func (s *Server) currentUser(r *http.Request) *user {
 					scope = "write"
 				}
 				u.TokenScope = scope
+				u.TokenKind = tokenKindAPI
 				if strings.TrimSpace(wsScope) != "" {
 					for _, w := range strings.Split(wsScope, ",") {
 						if w = strings.TrimSpace(w); w != "" {

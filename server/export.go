@@ -436,7 +436,7 @@ func (s *Server) handleExportPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 	userID := requestUser(r).ID
-	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(userID))
+	ws := s.scopeWorkspacesFor(requestUser(r), s.visibleWorkspaces(userID))
 	// ?workspace= narrows to ONE workspace — "export workspace" in the menu
 	// must not quietly take the whole instance along.
 	if only := r.URL.Query().Get("workspace"); only != "" {

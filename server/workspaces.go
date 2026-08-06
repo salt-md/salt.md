@@ -210,7 +210,7 @@ func (s *Server) canReadReq(r *http.Request, pageID string) bool {
 		return false
 	}
 	u := requestUser(r)
-	return u.TokenWorkspaces == nil || u.tokenCanReach(s.pageWorkspace(pageID))
+	return s.credentialMayEnter(u, s.pageWorkspace(pageID))
 }
 
 func (s *Server) canWriteReq(r *http.Request, pageID string) bool {
@@ -219,6 +219,88 @@ func (s *Server) canWriteReq(r *http.Request, pageID string) bool {
 	}
 	u := requestUser(r)
 	return u.TokenWorkspaces == nil || u.tokenCanReach(s.pageWorkspace(pageID))
+}
+
+// ---- what a workspace itself allows (W-opt-in) ------------------------------
+//
+// Until now the reach of an agent was decided ENTIRELY by whoever issued the
+// credential. A workspace holding personal data had no say: it could only hope
+// that every token ever minted happened to leave it out. With one agent that is
+// manageable; with five agents over two years it is discipline, and discipline
+// is not access control.
+//
+// So the workspace gets a say, and it is OPT-IN — the default is exactly the
+// behaviour that exists today, so an instance that updates and changes nothing
+// notices nothing.
+//
+//	open    (default) any credential that was granted this workspace
+//	strict  only a credential somebody SIGNED IN for: short-lived, revocable,
+//	        and chosen on a consent screen. A permanent API token is refused
+//	        here even when it names this workspace.
+//	closed  no agent at all — browser sessions only.
+//
+// "strict" rather than "closed" is the answer for a confidential workspace in an
+// agent-first product: closed keeps agents out, strict lets them in on terms.
+const (
+	agentAccessOpen   = "open"
+	agentAccessStrict = "strict"
+	agentAccessClosed = "closed"
+)
+
+func validAgentAccess(v string) bool {
+	return v == agentAccessOpen || v == agentAccessStrict || v == agentAccessClosed
+}
+
+func (s *Server) workspaceAgentAccess(wsID string) string {
+	var v string
+	s.db.QueryRow(`SELECT COALESCE(agent_access, '') FROM workspaces WHERE id = ?`, wsID).Scan(&v)
+	if !validAgentAccess(v) {
+		return agentAccessOpen
+	}
+	return v
+}
+
+// credentialMayEnter is THE workspace-level gate, and it is one function on
+// purpose: thirty-odd places ask "may this caller reach that workspace", and a
+// rule spread across thirty of them is a rule with a hole in it by next month.
+//
+// A browser session is never limited by this. The setting is about what an
+// AGENT may reach; a person signing in is the one who decides it.
+func (s *Server) credentialMayEnter(u *user, wsID string) bool {
+	if u == nil {
+		return false
+	}
+	// The credential's OWN list first. This is a no-op for a session (nil list),
+	// so it needs no special case — and taking a shortcut on TokenScope instead
+	// was wrong: the marker for "a credential with a list" has always been the
+	// list itself, and a test caught the difference immediately.
+	if !u.tokenCanReach(wsID) {
+		return false
+	}
+	// The workspace's own rule applies to AGENTS. A person in a browser is the
+	// one who sets it, so it is not turned against them.
+	if u.TokenKind == "" {
+		return true
+	}
+	switch s.workspaceAgentAccess(wsID) {
+	case agentAccessClosed:
+		return false
+	case agentAccessStrict:
+		return u.TokenKind == tokenKindOAuth
+	}
+	return true
+}
+
+// scopeWorkspacesFor is scopeWorkspaces plus the workspace's own rule — the
+// list form of credentialMayEnter, for every enumeration.
+func (s *Server) scopeWorkspacesFor(u *user, ws []string) []string {
+	out := make([]string, 0, len(ws))
+	for _, w := range scopeWorkspaces(u, ws) {
+		if s.credentialMayEnter(u, w) {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // narrowedToWorkspaces is true when the caller arrived with a credential tied to

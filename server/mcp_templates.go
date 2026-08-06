@@ -21,7 +21,7 @@ import (
 // stages as everywhere else: the token's workspaces first, then canRead per
 // hit, which is what keeps somebody else's private template out of the list.
 func (s *Server) mcpListTemplates(u *user) (string, error) {
-	ws := scopeWorkspaces(u, s.visibleWorkspaces(u.ID))
+	ws := s.scopeWorkspacesFor(u, s.visibleWorkspaces(u.ID))
 	if len(ws) == 0 {
 		return "[]", nil
 	}

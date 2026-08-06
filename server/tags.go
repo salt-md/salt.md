@@ -123,7 +123,7 @@ func (s *Server) handleSetTagColor(w http.ResponseWriter, r *http.Request) {
 // count, most-used first — powering the sidebar "Tags" section and tag filter.
 func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 	userID := requestUser(r).ID
-	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(userID))
+	ws := s.scopeWorkspacesFor(requestUser(r), s.visibleWorkspaces(userID))
 	if len(ws) == 0 {
 		writeJSON(w, []map[string]any{})
 		return

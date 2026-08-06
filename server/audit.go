@@ -45,7 +45,7 @@ type auditEntry struct {
 // Keyset pagination: ?before=<id> returns older entries, ?limit caps the page
 // (default 50, max 200) — so the whole history is reachable, not just the tail.
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
-	ws := scopeWorkspaces(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
+	ws := s.scopeWorkspacesFor(requestUser(r), s.visibleWorkspaces(requestUser(r).ID))
 	// Events that concern the whole instance (an account deactivated, a workspace
 	// handed over or deleted) hang off no workspace, or off one that no longer
 	// exists. The workspace filter therefore made them vanish for EVERYBODY —

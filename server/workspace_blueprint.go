@@ -30,7 +30,7 @@ func (s *Server) blueprintWorkspace(u *user, name, sourceWS string) (string, err
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
-	if !s.isMember(u.ID, sourceWS) || !u.tokenCanReach(sourceWS) {
+	if !s.isMember(u.ID, sourceWS) || !s.credentialMayEnter(u, sourceWS) {
 		return "", fmt.Errorf("workspace %q not found", sourceWS)
 	}
 

@@ -535,7 +535,7 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 	if spec.DatabaseID != "" {
 		// tokenCanReach on top: canWrite does not know the workspace boundary of a
 		// restricted token, which would otherwise write outside its own area.
-		if !s.canWrite(u.ID, spec.DatabaseID) || u.TokenScope == "read" || !u.tokenCanReach(s.pageWorkspace(spec.DatabaseID)) {
+		if !s.canWrite(u.ID, spec.DatabaseID) || u.TokenScope == "read" || !s.credentialMayEnter(u, s.pageWorkspace(spec.DatabaseID)) {
 			return "", fmt.Errorf("database %q not found", spec.DatabaseID)
 		}
 		schema, _, err := s.loadCollection(spec.DatabaseID)
@@ -569,7 +569,7 @@ func (s *Server) startIngest(u *user, spec ingestSpec) (string, error) {
 		parentID = spec.DatabaseID
 		target = "database " + spec.DatabaseID
 	} else if spec.ParentID != "" {
-		if !s.canWrite(u.ID, spec.ParentID) || u.TokenScope == "read" || !u.tokenCanReach(s.pageWorkspace(spec.ParentID)) {
+		if !s.canWrite(u.ID, spec.ParentID) || u.TokenScope == "read" || !s.credentialMayEnter(u, s.pageWorkspace(spec.ParentID)) {
 			return "", fmt.Errorf("parent page %q not found", spec.ParentID)
 		}
 		if err := s.db.QueryRow(`SELECT workspace_id FROM pages WHERE id = ? AND trashed_at IS NULL`,

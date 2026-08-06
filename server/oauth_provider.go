@@ -534,6 +534,7 @@ func (s *Server) userForAccessToken(tok, ip string) *user {
 		scope = "write"
 	}
 	u.TokenScope = scope
+	u.TokenKind = tokenKindOAuth
 	if strings.TrimSpace(workspaces) != "" {
 		for _, w := range strings.Split(workspaces, ",") {
 			if w = strings.TrimSpace(w); w != "" {

@@ -787,10 +787,10 @@ func (s *Server) mcpCall(u *user, name string, rawArgs json.RawMessage, publicBa
 	// This covers every tool that names a page or a parent, including a move's
 	// destination (checked against the parent workspace).
 	if u.TokenWorkspaces != nil {
-		if args.PageID != "" && !u.tokenCanReach(s.pageWorkspace(args.PageID)) {
+		if args.PageID != "" && !s.credentialMayEnter(u, s.pageWorkspace(args.PageID)) {
 			return "", fmt.Errorf("page %q not found", args.PageID)
 		}
-		if parentID != "" && !u.tokenCanReach(s.pageWorkspace(parentID)) {
+		if parentID != "" && !s.credentialMayEnter(u, s.pageWorkspace(parentID)) {
 			return "", fmt.Errorf("parent page %q not found", parentID)
 		}
 	}
@@ -1149,7 +1149,7 @@ func (s *Server) mcpSearch(u *user, q string) (string, error) {
 	if strings.TrimSpace(q) == "" {
 		return "", fmt.Errorf("query is required")
 	}
-	ws := scopeWorkspaces(u, s.visibleWorkspaces(userID))
+	ws := s.scopeWorkspacesFor(u, s.visibleWorkspaces(userID))
 	if len(ws) == 0 {
 		return "No results.", nil
 	}
@@ -1183,7 +1183,7 @@ func (s *Server) mcpSearch(u *user, q string) (string, error) {
 
 func (s *Server) mcpListPages(u *user) (string, error) {
 	userID := u.ID
-	ws := scopeWorkspaces(u, s.visibleWorkspaces(userID))
+	ws := s.scopeWorkspacesFor(u, s.visibleWorkspaces(userID))
 	if len(ws) == 0 {
 		return "No pages yet.", nil
 	}
