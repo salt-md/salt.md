@@ -36,3 +36,37 @@ macOS will tell whoever opens it that the app is damaged — which is what an
 unsigned app looks like from the outside.
 
 Windows and Linux builds are unsigned for now.
+
+## Building it
+
+```sh
+npm install
+npm run dist:mac     # → dist/Salt.md-<version>-arm64.dmg  (also :win, :linux)
+```
+
+The icon is built from the product logo: `build/icon.svg` is the source,
+`build/icon.png` (1024×1024) is what electron-builder turns into `.icns` and
+`.ico`. The mark on its own is transparent and made of thin strokes — at 32px
+in a dock it would vanish — so it gets a field in the house green and sits at
+about 60% of the tile. macOS icons are not drawn edge to edge, and one that is
+looks bigger than everything beside it.
+
+## Unsigned builds and what they look like
+
+Without signing, macOS attaches a quarantine flag on download and then refuses
+to open the app with **"Salt.md is damaged and can't be opened"**. That message
+is about the missing signature, not about the file.
+
+Until signing is set up, the way past it is:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/Salt.md.app
+```
+
+That is fine for you and unacceptable for anybody you hand the app to — nobody
+should be told to run a shell command to open an application.
+
+**Signing** happens automatically when `APPLE_ID`,
+`APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are in the environment at
+build time; the entitlements and the hardened runtime are already configured.
+Windows and Linux builds stay unsigned for now.
