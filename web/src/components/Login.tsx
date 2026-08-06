@@ -5,6 +5,28 @@ import Logo from '../Logo';
 import { t } from '../i18n';
 import { serverMessage } from '../serverErrors';
 
+
+// Where to go after signing in, when somebody arrived with a destination.
+//
+// Only a same-origin PATH is accepted — never an absolute URL, never a
+// protocol-relative one. This value is followed straight after a successful
+// sign-in, which is precisely the shape an open redirect is built from.
+//
+// A hard navigation rather than a route change: the destination is a
+// server-rendered page (the desktop app's approval screen), not somewhere the
+// single-page app knows how to go.
+/** The same destination, as a query string to hang on the provider links. */
+function oauthNextParam(): string {
+  const next = nextDestination();
+  return next ? '?next=' + encodeURIComponent(next) : '';
+}
+
+function nextDestination(): string {
+  const raw = new URLSearchParams(window.location.search).get('next') ?? '';
+  if (!raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\')) return '';
+  return raw;
+}
+
 export default function Login({ onSuccess }: { onSuccess: (user: User) => void }) {
   const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [name, setName] = useState('');
@@ -55,6 +77,13 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
         return;
       }
       const user = await api.login(email, password, needCode ? code : undefined);
+      const next = nextDestination();
+      if (next) {
+        // Leaving the app entirely — do not hand control to onSuccess, which
+        // would mount the workspace behind a page that is already navigating.
+        window.location.assign(next);
+        return;
+      }
       onSuccess(user);
     } catch (err) {
       // Branch on the reason in the response, not on the message text: the
@@ -130,7 +159,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
           <>
             <div className="login-divider"><span>{t('or')}</span></div>
             {oauth.google && (
-              <a className="btn oauth-btn" href="/api/oauth/google/start">
+              <a className="btn oauth-btn" href={'/api/oauth/google/start' + oauthNextParam()}>
                 <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
                   <path fill="#4285F4" d="M23.5 12.27c0-.85-.08-1.66-.22-2.45H12v4.64h6.45a5.52 5.52 0 0 1-2.39 3.62v3h3.86c2.26-2.09 3.58-5.17 3.58-8.81z" />
                   <path fill="#34A853" d="M12 24c3.24 0 5.96-1.07 7.94-2.91l-3.86-3c-1.07.72-2.44 1.14-4.08 1.14-3.13 0-5.78-2.11-6.73-4.96H1.29v3.1A12 12 0 0 0 12 24z" />
@@ -141,7 +170,7 @@ export default function Login({ onSuccess }: { onSuccess: (user: User) => void }
               </a>
             )}
             {oauth.microsoft && (
-              <a className="btn oauth-btn" href="/api/oauth/microsoft/start">
+              <a className="btn oauth-btn" href={'/api/oauth/microsoft/start' + oauthNextParam()}>
                 <svg width="17" height="17" viewBox="0 0 23 23" aria-hidden="true">
                   <rect x="1" y="1" width="10" height="10" fill="#F35325" />
                   <rect x="12" y="1" width="10" height="10" fill="#81BC06" />

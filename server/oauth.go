@@ -74,6 +74,28 @@ type oauthTx struct {
 	State    string `json:"s"`
 	Verifier string `json:"v"`
 	Exp      int64  `json:"e"`
+	// Where to land afterwards. Rides in the state cookie rather than in the
+	// query, so nothing a provider echoes back can steer it — and it is checked
+	// again on the way out, because a value that survived a round trip through
+	// somebody else's service is not trusted just because we sent it.
+	Next string `json:"n,omitempty"`
+}
+
+// safeNext accepts only a same-origin PATH. Anything else — an absolute URL, a
+// protocol-relative "//evil.example", a backslash Windows treats as a slash —
+// is dropped. This value ends up in a redirect after a successful sign-in,
+// which makes it exactly the shape an open redirect is built from.
+func safeNext(v string) string {
+	if v == "" || !strings.HasPrefix(v, "/") {
+		return ""
+	}
+	if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "/\\") {
+		return ""
+	}
+	if strings.ContainsAny(v, "\r\n") {
+		return ""
+	}
+	return v
 }
 
 func b64url(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
@@ -137,7 +159,11 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 	sum := sha256.Sum256([]byte(verifier))
 	challenge := b64url(sum[:])
 
-	tx, _ := json.Marshal(oauthTx{Provider: pname, State: state, Verifier: verifier, Exp: time.Now().Add(10 * time.Minute).Unix()})
+	tx, _ := json.Marshal(oauthTx{
+		Provider: pname, State: state, Verifier: verifier,
+		Exp:  time.Now().Add(10 * time.Minute).Unix(),
+		Next: safeNext(r.URL.Query().Get("next")),
+	})
 	http.SetCookie(w, &http.Cookie{
 		Name:     oauthCookie,
 		Value:    b64url(tx),
@@ -277,7 +303,15 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, r, sessTok, s.sessionDays()*24*3600)
-	http.Redirect(w, r, "/", http.StatusFound)
+	// Back where the sign-in started, when it started somewhere specific — the
+	// desktop app sends people through here and needs them to come back to
+	// /desktop/login rather than land in the workspace, which is where the
+	// round trip used to end.
+	dest := safeNext(tx.Next)
+	if dest == "" {
+		dest = "/"
+	}
+	http.Redirect(w, r, dest, http.StatusFound)
 }
 
 // parseIDToken extracts the claims we need from a JWT delivered directly by

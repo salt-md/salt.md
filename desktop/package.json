@@ -1,6 +1,6 @@
 {
   "name": "salt-desktop",
-  "productName": "Salt.md",
+  "productName": "salt.md",
   "version": "0.1.0",
   "description": "Salt.md in its own window",
   "license": "AGPL-3.0-only",
@@ -21,9 +21,10 @@
   },
   "build": {
     "appId": "md.salt.desktop",
-    "productName": "Salt.md",
+    "productName": "salt.md",
     "files": [
       "src/**/*",
+      "build/icon*.png",
       "!**/*.map"
     ],
     "directories": {

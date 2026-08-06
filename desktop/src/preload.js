@@ -51,11 +51,27 @@ html[data-desktop='mac'] .app:not(.sidebar-collapsed) .sidebar-header {
   padding-top: 38px;
 }
 
-/* The strip beside the buttons drags the window, the way a title bar would.
-   Without it a window with no title bar moves only by its edges. */
-html[data-desktop='mac'] .tab-bar { -webkit-app-region: drag; }
-html[data-desktop='mac'] .tab-bar .tab,
-html[data-desktop='mac'] .tab-bar button { -webkit-app-region: no-drag; }
+/* Dragging the window.
+   A window with no title bar has nothing to grab, so the strip at the height
+   of the buttons has to do it — and that strip is a different element
+   depending on the state, which is why the first version only worked
+   sometimes: it named the tab bar, which is absent when a single tab is open.
+
+   The container drags and every child opts out. What is left draggable is
+   exactly the empty space — the padding beside the buttons and the gaps
+   between controls — while every button, field and tab still takes its click.
+   Listing the children the other way round would mean naming each one, and
+   the next control added to that row would silently not be clickable. */
+html[data-desktop='mac'] .sidebar-header,
+html[data-desktop='mac'] .tab-bar,
+html[data-desktop='mac'] .app.sidebar-collapsed .topbar {
+  -webkit-app-region: drag;
+}
+html[data-desktop='mac'] .sidebar-header *,
+html[data-desktop='mac'] .tab-bar *,
+html[data-desktop='mac'] .app.sidebar-collapsed .topbar * {
+  -webkit-app-region: no-drag;
+}
 `;
 
 function apply() {

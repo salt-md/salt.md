@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, Menu, dialog, ipcMain, session } = require('electron');
+const { app, BrowserWindow, shell, Menu, dialog, ipcMain, session, nativeTheme, nativeImage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const { normalizeURL } = require('./serverURL');
@@ -32,6 +32,36 @@ const crypto = require('node:crypto');
 const desktopScheme = 'salt';
 
 const store = path.join(app.getPath('userData'), 'settings.json');
+
+// The app was called "Salt.md" before it was called "salt.md", and Electron
+// derives the settings directory from that name. Renaming it would therefore
+// have silently forgotten which server somebody had configured — the one thing
+// this app stores. Moved once, quietly, and only when there is nothing here yet.
+(function carryOverOldSettings() {
+  if (fs.existsSync(store)) return;
+  const old = path.join(path.dirname(app.getPath('userData')), 'Salt.md', 'settings.json');
+  try {
+    if (fs.existsSync(old)) {
+      fs.mkdirSync(path.dirname(store), { recursive: true });
+      fs.copyFileSync(old, store);
+    }
+  } catch {
+    /* a missing old profile is the normal case, not a problem */
+  }
+})();
+
+// The dock icon follows the system theme.
+//
+// macOS has no dark-mode app icon — what Finder and Launchpad show is fixed at
+// build time, and that stays the light one. The DOCK icon can be set at
+// runtime, though, and the dock is what you actually look at while the app is
+// open. So it swaps, and it swaps live when the system does.
+function applyDockIcon() {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  const file = nativeTheme.shouldUseDarkColors ? 'icon-dark.png' : 'icon.png';
+  const img = nativeImage.createFromPath(path.join(__dirname, '../build', file));
+  if (!img.isEmpty()) app.dock.setIcon(img);
+}
 
 function readSettings() {
   try {
@@ -341,7 +371,7 @@ function buildMenu() {
           click: () =>
             dialog.showMessageBox(win, {
               type: 'info',
-              message: 'Salt.md',
+              message: 'salt.md',
               detail:
                 `Version ${app.getVersion()}\n\n` +
                 'This app is a window onto a Salt.md server you run. ' +
@@ -400,6 +430,8 @@ app.whenReady().then(() => {
   session.defaultSession.setPermissionRequestHandler((_wc, _permission, callback) => callback(false));
 
   buildMenu();
+  applyDockIcon();
+  nativeTheme.on('updated', applyDockIcon);
   createWindow();
 
   app.on('activate', () => {
