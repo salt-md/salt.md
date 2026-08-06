@@ -154,7 +154,7 @@ export default function App() {
       /* best-effort */
     }
   }, [sidebarCollapsed]);
-  // After clicking "einklappen" the pointer is still over the sidebar, so the
+  // After clicking "collapse" the pointer is still over the sidebar, so the
   // hover-reveal would instantly show it again ("the click did nothing"). Lock
   // the reveal until the pointer has actually left the sidebar area once.
   const [hoverLock, setHoverLock] = useState(false);

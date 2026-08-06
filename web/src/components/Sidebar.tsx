@@ -21,6 +21,7 @@ import WorkspaceSettings from './WorkspaceSettings';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
 import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X, MoreHorizontal, Settings2 } from 'lucide-react';
+import { AgentDot } from './AgentBadge';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -188,6 +189,7 @@ function DbRows({
               )}
               <span className="tree-icon"><PageIcon icon={r.icon} size={14} fallback={<FileText size={14} />} /></span>
               <span className="tree-title">{r.title || 'Untitled'}</span>
+              <AgentDot pageId={r.id} />
               {/* Until now a row could only get sub-pages through MCP — the
                   interface offered no way at all, so the dossier under a deal
                   was something an agent could build and a person could not. */}
@@ -1130,6 +1132,9 @@ export default function Sidebar({
                 <PageIcon icon={p.icon} size={15} fallback={p.type === 'collection' ? <Table2 size={15} /> : <FileText size={15} />} />
               </span>
               <span className="tree-title">{p.title || 'Untitled'}</span>
+          {/* Same reason as in the table: seeing who is on something should not
+              depend on which view you happen to have open. */}
+          <AgentDot pageId={p.id} />
             </div>
           ))}
         </div>

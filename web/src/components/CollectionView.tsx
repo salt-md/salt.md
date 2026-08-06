@@ -1658,7 +1658,7 @@ function TableView({
                       <button
                         className="db-tree-toggle"
                         onClick={() => toggleTree(r.id)}
-                        aria-label={collapsed.has(r.id) ? 'Aufklappen' : 'Zuklappen'}
+                        aria-label={collapsed.has(r.id) ? t('Expand') : t('Collapse')}
                       >
                         {collapsed.has(r.id) ? '▸' : '▾'}
                       </button>
@@ -1670,6 +1670,11 @@ function TableView({
                     {r.icon && <span className="inline-icon"><PageIcon icon={r.icon} size={14} /> </span>}
                     {r.title || 'Untitled'}
                   </button>
+                  {/* Presence was drawn on the board card and nowhere else, so
+                      anybody working in the table saw nothing at all — which is
+                      most of the time. The mark belongs wherever a row is
+                      listed, not only where it happens to be a card. */}
+                  <AgentDot pageId={r.id} />
                 </span>
                 {!!r.tags?.length && (
                   <span className="db-row-tags">
