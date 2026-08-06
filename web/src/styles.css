@@ -8522,3 +8522,52 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   color: var(--muted);
   margin: 16px 0 0;
 }
+
+/* Which instance is asking. Small and plain — it is identification, not a
+   masthead, and dressing it up would lend the page an authority it should be
+   asking the reader to verify rather than claiming. */
+.consent-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.consent-brand-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.consent-brand-host {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.consent-ws-list {
+  margin-top: 6px;
+  padding-left: 22px;
+  border-left: 1px solid var(--border);
+}
+
+/* The one-line consequence under each choice. It carries the actual decision —
+   "follows along" versus "stays out" — so it is part of the option, not a hint
+   somewhere else. */
+.consent-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.consent-ws input[type='radio'] {
+  margin-top: 3px;
+  align-self: flex-start;
+}
+
+.consent-ws {
+  align-items: flex-start;
+}

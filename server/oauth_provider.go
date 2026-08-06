@@ -304,6 +304,15 @@ func (s *Server) handleOAuthApprove(w http.ResponseWriter, r *http.Request) {
 		Scope       string   `json:"scope"`
 		Resource    string   `json:"resource"`
 		Workspaces  []string `json:"workspaces"`
+		// "Everything, including whatever is made later." Stored as an EMPTY
+		// list, which is what an unrestricted API token already looks like
+		// (TokenWorkspaces == nil) — one meaning, not two.
+		//
+		// It has to be sayable, because a list of ids is a photograph of one
+		// moment: a workspace created tomorrow — by a colleague, or by the agent
+		// itself — is simply not in it, and the connection silently stops
+		// covering the thing somebody just made.
+		AllWorkspaces bool `json:"allWorkspaces"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		httpErrorCode(w, 400, "invalid_json", "invalid JSON")
@@ -322,10 +331,20 @@ func (s *Server) handleOAuthApprove(w http.ResponseWriter, r *http.Request) {
 	// Only workspaces this person is actually in. The consent screen shows their
 	// own list, but the answer comes from a browser and is therefore editable —
 	// so it is checked here rather than trusted.
+	//
+	// "All" needs no filtering and gets none: it is not a list of everything they
+	// are in today, it is the absence of a list. That is the difference between
+	// a grant that follows along and one that was true once.
 	var wsList []string
-	for _, ws := range body.Workspaces {
-		if s.isMember(u.ID, ws) {
-			wsList = append(wsList, ws)
+	if !body.AllWorkspaces {
+		for _, ws := range body.Workspaces {
+			if s.isMember(u.ID, ws) {
+				wsList = append(wsList, ws)
+			}
+		}
+		if len(wsList) == 0 {
+			httpErrorCode(w, 400, "no_workspace", "pick at least one workspace, or allow all of them")
+			return
 		}
 	}
 	code := randomToken(oauthCodeLength)
@@ -623,6 +642,11 @@ func (s *Server) handleOAuthRequestInfo(w http.ResponseWriter, r *http.Request) 
 		"clientName": c.Name,
 		"clientId":   c.ID,
 		"workspaces": list,
+		// WHICH instance is being asked about. Without it the screen could be
+		// any Salt.md anywhere — and "which server am I handing this to" is the
+		// first question somebody should be able to answer at a glance.
+		"instanceName": s.setting("instance_name", ""),
+		"host":         r.Host,
 	})
 }
 

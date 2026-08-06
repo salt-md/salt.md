@@ -436,7 +436,13 @@ export const api = {
   // Signing an agent in (oauth_provider.go). Both need a browser session —
   // approving a grant with a token would be a key minting a better key.
   oauthRequestInfo: (clientId: string) =>
-    req<{ clientName: string; clientId: string; workspaces: { id: string; name: string }[] }>(
+    req<{
+      clientName: string;
+      clientId: string;
+      workspaces: { id: string; name: string }[];
+      instanceName: string;
+      host: string;
+    }>(
       '/api/oauth/request?client_id=' + encodeURIComponent(clientId),
     ),
   oauthApprove: (body: {
@@ -446,6 +452,7 @@ export const api = {
     codeChallengeMethod: string;
     scope: string;
     resource: string;
+    allWorkspaces: boolean;
     workspaces: string[];
   }) => req<{ code: string }>('/api/oauth/approve', { method: 'POST', body: JSON.stringify(body) }),
   oauthGrants: () => req<OAuthGrant[]>('/api/oauth/grants'),

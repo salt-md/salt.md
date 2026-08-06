@@ -187,6 +187,20 @@ func (s *Server) canWriteReq(r *http.Request, pageID string) bool {
 	return u.TokenWorkspaces == nil || u.tokenCanReach(s.pageWorkspace(pageID))
 }
 
+// narrowedToWorkspaces is true when the caller arrived with a credential tied to
+// a FIXED list — a workspace-scoped API token, or an OAuth grant where somebody
+// ticked particular workspaces instead of allowing all.
+//
+// It matters at exactly one place that is easy to miss: creating a workspace.
+// Such a caller would make one and then not be able to open it, because the
+// list it is bound to was written before that workspace existed. Adding it to
+// the list automatically is the obvious fix and the wrong one — a credential
+// that widens its own reach is not a boundary. So creating is refused, with the
+// reason said out loud.
+func narrowedToWorkspaces(u *user) bool {
+	return u != nil && u.TokenWorkspaces != nil
+}
+
 // scopeWorkspaces intersects a workspace list with a request user's token
 // workspace restriction (a workspace-scoped API token). Cookie/session auth and
 // unrestricted tokens (TokenWorkspaces == nil) pass everything through.
@@ -580,6 +594,11 @@ func (s *Server) handleCreateWorkspace(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		httpError(w, 400, "invalid JSON")
+		return
+	}
+	if narrowedToWorkspaces(requestUser(r)) {
+		httpErrorCode(w, http.StatusForbidden, "workspace_scoped",
+			"This connection is limited to particular workspaces, so it cannot create new ones — it would not be able to open them.")
 		return
 	}
 	if strings.TrimSpace(body.Name) == "" {

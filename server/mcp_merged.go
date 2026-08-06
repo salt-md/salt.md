@@ -195,6 +195,9 @@ func (s *Server) mcpGetLinks(u *user, pageID, wsID string, kinds []string, inclu
 // somebody smuggles into the sidebar.
 func (s *Server) mcpWorkspace(u *user, wsID, name, icon, from string) (string, error) {
 	if wsID == "" {
+		if narrowedToWorkspaces(u) {
+			return "", fmt.Errorf("this connection is limited to particular workspaces, so it cannot create new ones — it would not be able to open them")
+		}
 		if icon != "" {
 			return "", fmt.Errorf("pass workspace_id to set an icon — a new workspace is created with a name only")
 		}

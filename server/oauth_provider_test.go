@@ -133,7 +133,7 @@ func TestSigningInGivesAWorkingShortLivedToken(t *testing.T) {
 func TestPKCEIsRequiredAndMustBeS256(t *testing.T) {
 	s := testServer(t)
 	uid, cookie := signedIn(t, s, "pkce@example.test")
-	_ = uid
+	ws := s.firstWorkspaceOf(t, uid)
 	redirect := "https://claude.ai/cb"
 	client := oauthClientFixture(t, s, redirect)
 
@@ -152,7 +152,7 @@ func TestPKCEIsRequiredAndMustBeS256(t *testing.T) {
 		}
 	}
 	// And a wrong verifier never becomes a token.
-	code := approve(t, s, cookie, client, redirect, pkce("the-real-verifier"), "read", nil)
+	code := approve(t, s, cookie, client, redirect, pkce("the-real-verifier"), "read", []string{ws})
 	if status, out := tokenCall(s, url.Values{
 		"grant_type": {"authorization_code"}, "code": {code},
 		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"a-different-verifier"},
@@ -165,7 +165,8 @@ func TestPKCEIsRequiredAndMustBeS256(t *testing.T) {
 // delivered to somebody else's server.
 func TestRedirectURIIsComparedExactly(t *testing.T) {
 	s := testServer(t)
-	_, cookie := signedIn(t, s, "redir@example.test")
+	uid, cookie := signedIn(t, s, "redir@example.test")
+	ws := s.firstWorkspaceOf(t, uid)
 	redirect := "https://claude.ai/cb"
 	client := oauthClientFixture(t, s, redirect)
 
@@ -188,7 +189,7 @@ func TestRedirectURIIsComparedExactly(t *testing.T) {
 		}
 	}
 	// The exchange checks it a second time, against the one used to authorize.
-	code := approve(t, s, cookie, client, redirect, pkce("v"), "read", nil)
+	code := approve(t, s, cookie, client, redirect, pkce("v"), "read", []string{ws})
 	if status, _ := tokenCall(s, url.Values{
 		"grant_type": {"authorization_code"}, "code": {code},
 		"client_id": {client}, "redirect_uri": {"https://evil.example/cb"}, "code_verifier": {"v"},
@@ -200,10 +201,11 @@ func TestRedirectURIIsComparedExactly(t *testing.T) {
 // Rule 3: a code is single use.
 func TestACodeCannotBeUsedTwice(t *testing.T) {
 	s := testServer(t)
-	_, cookie := signedIn(t, s, "replay@example.test")
+	uid, cookie := signedIn(t, s, "replay@example.test")
+	ws := s.firstWorkspaceOf(t, uid)
 	redirect := "https://claude.ai/cb"
 	client := oauthClientFixture(t, s, redirect)
-	code := approve(t, s, cookie, client, redirect, pkce("v"), "read", nil)
+	code := approve(t, s, cookie, client, redirect, pkce("v"), "read", []string{ws})
 
 	form := url.Values{"grant_type": {"authorization_code"}, "code": {code},
 		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"v"}}
@@ -251,24 +253,23 @@ func TestConsentCannotGrantAWorkspaceYouAreNotIn(t *testing.T) {
 
 	redirect := "https://claude.ai/cb"
 	client := oauthClientFixture(t, s, redirect)
-	code := approve(t, s, cookie, client, redirect, pkce("v"), "write", []string{foreign})
 
-	status, out := tokenCall(s, url.Values{
-		"grant_type": {"authorization_code"}, "code": {code},
-		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"v"},
+	// Naming somebody else's workspace filters down to nothing, and nothing is
+	// refused outright rather than turned into a grant that reaches everywhere.
+	// That distinction is the whole point: an empty list MEANS "all", so
+	// silently accepting an empty pick would turn a tampered request into the
+	// widest grant there is — the exact opposite of what was asked for.
+	payload, _ := json.Marshal(map[string]any{
+		"clientId": client, "redirectUri": redirect, "codeChallenge": pkce("v"),
+		"codeChallengeMethod": "S256", "scope": "write", "workspaces": []string{foreign},
 	})
-	if status != http.StatusOK {
-		t.Fatalf("token: %d %v", status, out)
-	}
-	access, _ := out["access_token"].(string)
-	u := s.userForAccessToken(access, "1.2.3.4")
-	if u == nil {
-		t.Fatal("no user for the access token")
-	}
-	for _, w := range u.TokenWorkspaces {
-		if w == foreign {
-			t.Fatal("consent granted a workspace the person is not a member of")
-		}
+	r := httptest.NewRequest("POST", "/api/oauth/approve", strings.NewReader(string(payload)))
+	r.Header.Set("Cookie", cookie)
+	r.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, r)
+	if rec.Code == http.StatusOK {
+		t.Fatal("consent was granted for a workspace the person is not a member of")
 	}
 }
 
@@ -379,5 +380,124 @@ func TestAnUnknownScopeStillReachesTheConsentScreen(t *testing.T) {
 	q, _ := url.ParseQuery(strings.TrimPrefix(loc, "/oauth/consent?"))
 	if q.Get("scope") != "read" {
 		t.Errorf("the consent screen was handed scope %q", q.Get("scope"))
+	}
+}
+
+// A list of workspace ids is a photograph of one moment. He put his finger on
+// it: allow everything today, and a workspace created tomorrow — by a colleague
+// or by the agent itself — is simply not in the picture, so the connection
+// quietly stops covering the thing somebody just made.
+//
+// "All" therefore has to be the ABSENCE of a list, which is exactly what an
+// unrestricted API token already is. One meaning, not two.
+func TestAllWorkspacesCoversOnesMadeLater(t *testing.T) {
+	s := testServer(t)
+	uid, cookie := signedIn(t, s, "all@example.test")
+	redirect := "https://claude.ai/cb"
+	client := oauthClientFixture(t, s, redirect)
+
+	// Consent to everything, while only one workspace exists.
+	payload, _ := json.Marshal(map[string]any{
+		"clientId": client, "redirectUri": redirect, "codeChallenge": pkce("v"),
+		"codeChallengeMethod": "S256", "scope": "write", "allWorkspaces": true,
+	})
+	r := httptest.NewRequest("POST", "/api/oauth/approve", strings.NewReader(string(payload)))
+	r.Header.Set("Cookie", cookie)
+	r.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("approve: %d %s", rec.Code, rec.Body.String())
+	}
+	var appr struct {
+		Code string `json:"code"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &appr)
+
+	status, out := tokenCall(s, url.Values{
+		"grant_type": {"authorization_code"}, "code": {appr.Code},
+		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"v"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("token: %d %v", status, out)
+	}
+	access, _ := out["access_token"].(string)
+
+	// NOW a new workspace appears — after the consent was given.
+	fresh := makeWorkspace(t, s, uid)
+
+	u := s.userForAccessToken(access, "1.2.3.4")
+	if u == nil {
+		t.Fatal("no user for the access token")
+	}
+	if u.TokenWorkspaces != nil {
+		t.Fatalf("an all-workspaces grant stored a list: %v", u.TokenWorkspaces)
+	}
+	if !u.tokenCanReach(fresh) {
+		t.Error("a workspace created after the consent is out of reach — the grant froze at the moment it was given")
+	}
+}
+
+// The other half: picking particular workspaces means picking them, and a new
+// one does NOT quietly join.
+func TestPickedWorkspacesDoNotGrowOnTheirOwn(t *testing.T) {
+	s := testServer(t)
+	uid, cookie := signedIn(t, s, "picked@example.test")
+	ws := s.firstWorkspaceOf(t, uid)
+	redirect := "https://claude.ai/cb"
+	client := oauthClientFixture(t, s, redirect)
+	code := approve(t, s, cookie, client, redirect, pkce("v"), "write", []string{ws})
+
+	_, out := tokenCall(s, url.Values{
+		"grant_type": {"authorization_code"}, "code": {code},
+		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"v"},
+	})
+	access, _ := out["access_token"].(string)
+	fresh := makeWorkspace(t, s, uid)
+
+	u := s.userForAccessToken(access, "1.2.3.4")
+	if u.tokenCanReach(fresh) {
+		t.Error("a workspace nobody consented to became reachable")
+	}
+	if !u.tokenCanReach(ws) {
+		t.Error("the workspace that WAS picked is not reachable")
+	}
+}
+
+// And the trap in between: a narrowed credential must not be able to create a
+// workspace it could then never open. Adding it to the list automatically would
+// be the obvious fix and the wrong one — a credential that widens its own reach
+// is not a boundary.
+func TestANarrowedCredentialCannotCreateAWorkspace(t *testing.T) {
+	s := testServer(t)
+	uid, _ := signedIn(t, s, "narrow@example.test")
+	ws := s.firstWorkspaceOf(t, uid)
+	secret := "a-scoped-token"
+	if _, err := s.db.Exec(`INSERT INTO api_tokens (id, user_id, name, token_hash, scope, workspace_scope, created_at)
+		VALUES (?, ?, 'agent', ?, 'write', ?, ?)`, newID(), uid, tokenHash(secret), ws, now()); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	r := httptest.NewRequest("POST", "/api/workspaces", strings.NewReader(`{"name":"Sneaky"}`))
+	r.Header.Set("Authorization", "Bearer "+secret)
+	r.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, r)
+	if rec.Code == http.StatusOK {
+		t.Fatal("a workspace-scoped credential created a workspace it cannot open")
+	}
+
+	// An UNRESTRICTED token still may — this must not become a blanket ban.
+	open := "an-unscoped-token"
+	if _, err := s.db.Exec(`INSERT INTO api_tokens (id, user_id, name, token_hash, scope, created_at)
+		VALUES (?, ?, 'agent2', ?, 'write', ?)`, newID(), uid, tokenHash(open), now()); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	r = httptest.NewRequest("POST", "/api/workspaces", strings.NewReader(`{"name":"Fine"}`))
+	r.Header.Set("Authorization", "Bearer "+open)
+	r.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	s.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("an unrestricted token was refused too: %d %s", rec.Code, rec.Body.String())
 	}
 }

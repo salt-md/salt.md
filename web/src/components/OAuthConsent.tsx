@@ -21,6 +21,8 @@ interface RequestInfo {
   clientName: string;
   clientId: string;
   workspaces: { id: string; name: string }[];
+  instanceName: string;
+  host: string;
 }
 
 export default function OAuthConsent() {
@@ -38,6 +40,12 @@ export default function OAuthConsent() {
 
   const [info, setInfo] = useState<RequestInfo | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  // "Everything, including whatever is made later" versus "these ones". The
+  // difference is not convenience: a list of workspaces is a photograph of
+  // today, and a workspace created next week — by a colleague, or by the agent
+  // itself — is simply not in it. Both readings are legitimate, so it is asked
+  // rather than assumed.
+  const [reach, setReach] = useState<'all' | 'picked'>('picked');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,7 +74,7 @@ export default function OAuthConsent() {
   };
 
   const approve = async () => {
-    if (busy || picked.size === 0) return;
+    if (busy || (reach === 'picked' && picked.size === 0)) return;
     setBusy(true);
     setError('');
     try {
@@ -77,7 +85,8 @@ export default function OAuthConsent() {
         codeChallengeMethod: method,
         scope,
         resource,
-        workspaces: [...picked],
+        allWorkspaces: reach === 'all',
+        workspaces: reach === 'all' ? [] : [...picked],
       });
       const u = new URL(redirectUri);
       u.searchParams.set('code', code);
@@ -95,6 +104,14 @@ export default function OAuthConsent() {
   return (
     <div className="consent-page">
       <div className="consent-card">
+        {/* Which instance is asking. A consent screen with no identity could be
+            any Salt.md anywhere, and "what am I handing this to" is the first
+            question somebody should be able to answer at a glance. */}
+        <div className="consent-brand">
+          <img src="/favicon.svg" alt="" width={26} height={26} />
+          <span className="consent-brand-name">{info.instanceName || 'Salt.md'}</span>
+          <span className="consent-brand-host">{info.host}</span>
+        </div>
         <h1>
           <KeyRound size={20} /> {t('Grant access?')}
         </h1>
@@ -114,16 +131,37 @@ export default function OAuthConsent() {
         </div>
 
         <div className="consent-block">
-          <div className="consent-block-head">{t('In these workspaces')}</div>
+          <div className="consent-block-head">{t('Where')}</div>
+          <label className="consent-ws">
+            <input type="radio" checked={reach === 'all'} onChange={() => setReach('all')} />
+            <span>
+              {t('Every workspace, including ones added later')}
+              <span className="consent-sub">{t('The connection follows along when you make a new one.')}</span>
+            </span>
+          </label>
+          <label className="consent-ws">
+            <input type="radio" checked={reach === 'picked'} onChange={() => setReach('picked')} />
+            <span>
+              {t('Only the ones I pick')}
+              <span className="consent-sub">{t('A workspace made later stays out until you say otherwise.')}</span>
+            </span>
+          </label>
+
           {/* Nothing is ticked to begin with. A pre-ticked list is a screen
               people click past; an empty one is a decision. */}
-          {info.workspaces.map((w) => (
-            <label key={w.id} className="consent-ws">
-              <input type="checkbox" checked={picked.has(w.id)} onChange={() => toggle(w.id)} />
-              {w.name}
-            </label>
-          ))}
-          {info.workspaces.length === 0 && <p className="dialog-hint">{t('You are not in any workspace yet.')}</p>}
+          {reach === 'picked' && (
+            <div className="consent-ws-list">
+              {info.workspaces.map((w) => (
+                <label key={w.id} className="consent-ws">
+                  <input type="checkbox" checked={picked.has(w.id)} onChange={() => toggle(w.id)} />
+                  {w.name}
+                </label>
+              ))}
+              {info.workspaces.length === 0 && (
+                <p className="dialog-hint">{t('You are not in any workspace yet.')}</p>
+              )}
+            </div>
+          )}
         </div>
 
         <p className="consent-note">
@@ -137,7 +175,11 @@ export default function OAuthConsent() {
           <button className="btn-sm" onClick={deny}>
             {t('Deny')}
           </button>
-          <button className="btn primary" disabled={busy || picked.size === 0} onClick={() => void approve()}>
+          <button
+            className="btn primary"
+            disabled={busy || (reach === 'picked' && picked.size === 0)}
+            onClick={() => void approve()}
+          >
             {t('Allow')}
           </button>
         </div>
