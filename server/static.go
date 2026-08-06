@@ -29,6 +29,17 @@ func spaHandler(dist fs.FS) http.Handler {
 				if p == "sw.js" {
 					w.Header().Set("Cache-Control", "no-cache")
 				}
+				// The HTML document is the one file that must NOT be cached: it
+				// is what names the hashed assets, so a stale copy points a
+				// browser at the previous build's file names and the whole
+				// deploy is invisible until somebody knows to hard-reload.
+				// This was the actual reason an update "did not arrive" —
+				// nothing was set here at all, and a browser then caches it
+				// heuristically. no-cache, not no-store: it may be kept, it
+				// just has to ask first.
+				if strings.HasSuffix(p, ".html") {
+					w.Header().Set("Cache-Control", "no-cache")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
@@ -44,6 +55,9 @@ func spaHandler(dist fs.FS) http.Handler {
 				return
 			}
 		}
+		// Same for the fallback, which is how index.html is served for every
+		// client route — that is the common case, not the exception.
+		w.Header().Set("Cache-Control", "no-cache")
 		r2 := new(http.Request)
 		*r2 = *r
 		r2.URL = new(url.URL)
