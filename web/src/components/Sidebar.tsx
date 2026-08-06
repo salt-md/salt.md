@@ -23,6 +23,7 @@ import { useExclusiveModal, useMenuDismiss } from '../modal';
 import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X, MoreHorizontal, Settings2 } from 'lucide-react';
 import { AgentDot } from './AgentBadge';
 import { tagColorClass } from '../tags';
+import { childrenForSection, topLevelForDocs } from '../treeMode';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
 interface Props {
@@ -84,6 +85,9 @@ interface DropTarget {
 // the whole tree (and kill drag state) on every render.
 interface TreeCtx {
   childrenMap: Map<string, PageMeta[]>;
+  // One tree, or Documents and Collections apart. Reaches TreeItem because the
+  // rule about which children to show depends on it.
+  mixed: boolean;
   expanded: Set<string>;
   currentId: string | null;
   favorites: Set<string>;
@@ -556,7 +560,11 @@ function TreeItem({
   // the same database was in the wrong section AND missing from the right one
   // while both numbers looked correct. Sections now match their counts.
   const allKids = ctx.childrenMap.get(p.id) ?? [];
-  const kids = section === 'docs' ? allKids.filter((k) => k.type !== 'collection') : allKids;
+  // Hide a child database only when the Collections section is there to show
+  // it — see treeMode.ts. In mixed mode it is not, and filtering here made a
+  // database under a document disappear from the interface entirely while the
+  // page count went on counting it.
+  const kids = childrenForSection(allKids, section, ctx.mixed);
   const isDb = p.type === 'collection';
   // Databases have no tree children (their rows are excluded from /api/pages) but
   // can be expanded to lazily reveal their rows — so they get a chevron too.
@@ -766,6 +774,9 @@ export default function Sidebar({
   const unflagTemplate = (id: string) =>
     void api.updatePage(id, { isTemplate: false }).catch(() => toast(t('Could not be changed')));
 
+  // Which of the two sidebar shapes this workspace uses. Needed by the tree
+  // itself, not just by the sections — see treeMode.ts.
+  const mixed = workspaces.find((w) => w.id === currentWs)?.treeMode === 'mixed';
   const { childrenMap, parentKeyOf, trashRoots } = useMemo(() => {
     const visible = pages.filter((p) => !p.trashed && inWs(p));
     const visibleIds = new Set(visible.map((p) => p.id));
@@ -845,6 +856,7 @@ export default function Sidebar({
 
   const ctx: TreeCtx = {
     childrenMap,
+    mixed,
     expanded,
     onOpenInNewTab,
     currentId,
@@ -926,9 +938,8 @@ export default function Sidebar({
   // Both readings are correct, for different workspaces. Earlier today they
   // fought each other: nested databases were moved into the Collections
   // section, which fixed one case by breaking the other. A setting settles it.
-  const mixed = activeWs?.treeMode === 'mixed';
   const topLevel = childrenMap.get('') ?? [];
-  const topDocs = mixed ? topLevel : topLevel.filter((p) => p.type !== 'collection');
+  const topDocs = topLevelForDocs(topLevel, mixed);
   // Filtering searches the WHOLE section, not just its top level — a nested
   // page you can't see is exactly the one you're trying to find. Hits render
   // flat (with their parent as context) because tree indentation is noise once
