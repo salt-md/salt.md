@@ -158,6 +158,12 @@ func (s *Server) currentUser(r *http.Request) *user {
 		if s.tokenRate.exhausted(s.clientIP(r)) {
 			return nil
 		}
+		// An OAuth access token first — it is the short-lived one and the one a
+		// strict workspace will accept, so it must not be shadowed by a lookup
+		// that happens to miss.
+		if u := s.userForAccessToken(tok, s.clientIP(r)); u != nil {
+			return u
+		}
 		var userID, id, scope, wsScope string
 		err := s.db.QueryRow(`SELECT id, user_id, scope, workspace_scope FROM api_tokens WHERE token_hash = ?`, tokenHash(tok)).Scan(&id, &userID, &scope, &wsScope)
 		if err == nil {

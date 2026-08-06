@@ -96,6 +96,8 @@ func (s *Server) runCleanup() {
 	s.db.Exec(`DELETE FROM idempotency WHERE created_at < ?`, time.Now().UTC().Add(-24*time.Hour).Format(time.RFC3339Nano))
 	s.mcpRate.evict()
 	s.loginRate.evict()
+	s.tokenRate.evict()
+	s.sweepOAuth()
 	if days := s.trashRetentionDays(); days > 0 {
 		cutoff := time.Now().UTC().AddDate(0, 0, -days).Format(time.RFC3339Nano)
 		s.db.Exec(`DELETE FROM pages WHERE trashed_at IS NOT NULL AND trashed_at < ?`, cutoff)

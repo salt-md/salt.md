@@ -3,6 +3,7 @@ import type {
   ApiToken,
   Backlink,
   BlueprintEntry,
+  OAuthGrant,
   CollectionConfig,
   Me,
   Page,
@@ -432,6 +433,24 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(fromWorkspace ? { name, fromWorkspace } : { name }),
     }),
+  // Signing an agent in (oauth_provider.go). Both need a browser session —
+  // approving a grant with a token would be a key minting a better key.
+  oauthRequestInfo: (clientId: string) =>
+    req<{ clientName: string; clientId: string; workspaces: { id: string; name: string }[] }>(
+      '/api/oauth/request?client_id=' + encodeURIComponent(clientId),
+    ),
+  oauthApprove: (body: {
+    clientId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    codeChallengeMethod: string;
+    scope: string;
+    resource: string;
+    workspaces: string[];
+  }) => req<{ code: string }>('/api/oauth/approve', { method: 'POST', body: JSON.stringify(body) }),
+  oauthGrants: () => req<OAuthGrant[]>('/api/oauth/grants'),
+  revokeGrant: (id: string) => req<{ ok: boolean }>('/api/oauth/grants/' + id, { method: 'DELETE' }),
+
   // The blueprint library. The shelf ships in the binary, so this never fails
   // for want of a network.
   library: () => req<BlueprintEntry[]>('/api/library'),

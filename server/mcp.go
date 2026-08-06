@@ -460,7 +460,13 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 	}
 	u := s.currentUser(r)
 	if u == nil {
-		w.Header().Set("WWW-Authenticate", "Bearer")
+		// The pointer that makes signing in DISCOVERABLE. Without it a client has
+		// no way to learn this server has an authorization server at all, and
+		// falls back to asking a human to paste a permanent token — which is the
+		// exact thing the OAuth path exists to avoid. One header, and the whole
+		// flow becomes automatic (RFC 9728 §5.1).
+		w.Header().Set("WWW-Authenticate",
+			`Bearer resource_metadata="`+s.publicBase(r)+`/.well-known/oauth-protected-resource"`)
 		httpError(w, http.StatusUnauthorized, "missing or invalid API token")
 		return
 	}

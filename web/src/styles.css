@@ -8430,3 +8430,95 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
   font-variant-numeric: tabular-nums;
   font-family: var(--mono, ui-monospace, monospace);
 }
+
+/* --- the consent screen -------------------------------------------------------
+   A standalone page, not a dialog: it is the whole point of the visit and the
+   only thing on screen. Deliberately plain — the one interactive part is the
+   workspace list, and everything else exists to make that choice readable. */
+
+.consent-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.consent-card {
+  width: min(460px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  padding: 26px;
+  box-shadow: var(--shadow);
+}
+
+.consent-card h1 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 19px;
+  margin: 0 0 10px;
+}
+
+.consent-lead {
+  font-size: 14px;
+  margin: 0 0 14px;
+}
+
+/* The client name is whatever whoever registered typed. Saying so beats
+   dressing it up: a consent screen that lends credibility it cannot check is
+   worse than no screen. */
+.consent-warn {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 11px;
+  margin: 0 0 16px;
+}
+
+.consent-warn svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.consent-block {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-bottom: 12px;
+  font-size: 13.5px;
+}
+
+.consent-block p {
+  margin: 0;
+}
+
+.consent-block-head {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+
+.consent-ws {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13.5px;
+}
+
+.consent-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 16px 0 0;
+}

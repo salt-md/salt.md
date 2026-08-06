@@ -291,3 +291,15 @@ export interface BlueprintProp {
   type: string;
   options?: { name: string; color?: string }[];
 }
+
+// A connection an agent signed in for (server/oauth_provider.go). The counterpart
+// to an API token, except it expires on its own and can be ended from here.
+export interface OAuthGrant {
+  id: string;
+  clientName: string;
+  scope: string;
+  workspaces: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  lastUsedIp: string;
+}

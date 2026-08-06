@@ -135,6 +135,22 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	m.HandleFunc("POST /api/logout", s.handleLogout)
 	m.HandleFunc("POST /api/signup", s.handleSelfSignup)
 	m.HandleFunc("GET /api/signup-policy", s.handleSignupPolicy)
+	// Salt.md AS an authorization server, so an agent can sign in instead of
+	// carrying a key that never dies (oauth_provider.go). Discovery is
+	// unauthenticated on purpose: it carries no data, only the addresses of the
+	// doors. Authorizing needs a browser SESSION — a token approving a grant
+	// would be a key minting a better key.
+	m.HandleFunc("GET /.well-known/oauth-protected-resource", s.handleProtectedResourceMetadata)
+	m.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", s.handleProtectedResourceMetadata)
+	m.HandleFunc("GET /.well-known/oauth-authorization-server", s.handleAuthorizationServerMetadata)
+	m.HandleFunc("POST /oauth/register", s.handleOAuthRegister)
+	m.HandleFunc("GET /oauth/authorize", s.handleOAuthAuthorize)
+	m.HandleFunc("POST /api/oauth/approve", s.auth(s.sessionOnly(s.handleOAuthApprove)))
+	m.HandleFunc("GET /api/oauth/request", s.auth(s.sessionOnly(s.handleOAuthRequestInfo)))
+	m.HandleFunc("POST /oauth/token", s.handleOAuthToken)
+	m.HandleFunc("POST /oauth/revoke", s.handleOAuthRevoke)
+	m.HandleFunc("GET /api/oauth/grants", s.auth(s.sessionOnly(s.handleListGrants)))
+	m.HandleFunc("DELETE /api/oauth/grants/{id}", s.auth(s.sessionOnly(s.handleDeleteGrant)))
 	m.HandleFunc("GET /api/oauth/{provider}/start", s.handleOAuthStart)
 	m.HandleFunc("GET /api/oauth/{provider}/callback", s.handleOAuthCallback)
 

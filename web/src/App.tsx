@@ -12,6 +12,7 @@ import Login from './components/Login';
 import Setup from './components/Setup';
 import InviteAccept from './components/InviteAccept';
 import PublicForm from './components/PublicForm';
+import OAuthConsent from './components/OAuthConsent';
 import { UploadBar, ImageLightbox } from './components/Overlays';
 import Toaster from './components/Toaster';
 import { DialogHost, confirm, promptText } from './dialog';
@@ -552,6 +553,10 @@ export default function App() {
     // Don't hijack the /invite/<token> route: an authenticated invitee must stay
     // on the invite screen long enough to accept, not get replaced with a page.
     if (/^\/invite\/[a-f0-9]+$/.test(window.location.pathname)) return;
+    // Nor the consent screen. It renders only once `me` has loaded, and by then
+    // this effect had already moved the browser to the last page you had open —
+    // the agent's sign-in vanished into the app before anyone could answer it.
+    if (window.location.pathname === '/oauth/consent') return;
     if (currentId) {
       const cur = pages.find((p) => p.id === currentId);
       if (!cur || !cur.trashed) return; // in-tree-and-live, OR a row not in the tree → keep
@@ -746,6 +751,13 @@ export default function App() {
   // into) an account and joins; a signed-in visitor joins as their current
   // account with one click. Handling both stops an already-logged-in invitee
   // from being silently bounced to the landing page without ever joining.
+  // The consent screen for an agent signing in. It needs a real session — the
+  // server bounces an unauthenticated visitor to /login and back here, so by the
+  // time this renders there is somebody to ask.
+  if (window.location.pathname === '/oauth/consent' && me?.authenticated) {
+    return <OAuthConsent />;
+  }
+
   const inviteMatch = window.location.pathname.match(/^\/invite\/([a-f0-9]+)$/);
   if (inviteMatch && me) {
     if (!me.authenticated) {

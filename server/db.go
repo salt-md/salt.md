@@ -74,6 +74,41 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 	created_at TEXT NOT NULL,
 	last_used_at TEXT
 );
+CREATE TABLE IF NOT EXISTS oauth_clients (
+	id TEXT PRIMARY KEY,
+	secret_hash TEXT NOT NULL DEFAULT '',
+	name TEXT NOT NULL,
+	redirect_uris TEXT NOT NULL DEFAULT '[]',
+	created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oauth_codes (
+	code_hash TEXT PRIMARY KEY,
+	client_id TEXT NOT NULL,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	redirect_uri TEXT NOT NULL,
+	challenge TEXT NOT NULL,
+	scope TEXT NOT NULL DEFAULT 'read',
+	workspaces TEXT NOT NULL DEFAULT '',
+	resource TEXT NOT NULL DEFAULT '',
+	expires_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oauth_grants (
+	id TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	client_id TEXT NOT NULL,
+	refresh_hash TEXT NOT NULL UNIQUE,
+	scope TEXT NOT NULL DEFAULT 'read',
+	workspaces TEXT NOT NULL DEFAULT '',
+	resource TEXT NOT NULL DEFAULT '',
+	created_at TEXT NOT NULL,
+	last_used_at TEXT,
+	last_used_ip TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS oauth_access (
+	token_hash TEXT PRIMARY KEY,
+	grant_id TEXT NOT NULL REFERENCES oauth_grants(id) ON DELETE CASCADE,
+	expires_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS collections (
 	page_id TEXT PRIMARY KEY REFERENCES pages(id) ON DELETE CASCADE,
 	schema TEXT NOT NULL DEFAULT '[]',
