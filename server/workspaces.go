@@ -450,12 +450,18 @@ type workspaceJSON struct {
 	RulesProposal   string `json:"rulesProposal"`
 	RulesProposalBy string `json:"rulesProposalBy"`
 	RulesProposalAt string `json:"rulesProposalAt"`
+	// What agents may do here, and how the sidebar shows it. Empty means the
+	// default in both cases — the interface reads that as "open" / "split", so
+	// there is no third state to handle.
+	AgentAccess string `json:"agentAccess"`
+	TreeMode    string `json:"treeMode"`
 }
 
 func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.Query(`
 		SELECT w.id, w.name, m.role, w.icon, w.image, w.is_personal, w.auto_join, w.rules,
-		       w.rules_proposal, COALESCE(pu.name, ''), w.rules_proposal_at
+		       w.rules_proposal, COALESCE(pu.name, ''), w.rules_proposal_at,
+		       COALESCE(w.agent_access, ''), COALESCE(w.tree_mode, '')
 		FROM workspace_members m
 		JOIN workspaces w ON w.id = m.workspace_id
 		LEFT JOIN users pu ON pu.id = w.rules_proposal_by
@@ -470,7 +476,8 @@ func (s *Server) handleListWorkspaces(w http.ResponseWriter, r *http.Request) {
 		var x workspaceJSON
 		var personal, autoJoin int
 		rows.Scan(&x.ID, &x.Name, &x.Role, &x.Icon, &x.Image, &personal, &autoJoin, &x.Rules,
-			&x.RulesProposal, &x.RulesProposalBy, &x.RulesProposalAt)
+			&x.RulesProposal, &x.RulesProposalBy, &x.RulesProposalAt,
+			&x.AgentAccess, &x.TreeMode)
 		x.Personal, x.AutoJoin = personal != 0, autoJoin != 0
 		// A pending proposal is admin business — reviewing it is a governance
 		// act, and members have no rights over the rules beyond reading the
@@ -500,6 +507,11 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		Icon     *string `json:"icon"`
 		Image    *string `json:"image"`
 		AutoJoin *bool   `json:"autoJoin"`
+		// What agents may do here (open|strict|closed) and how the sidebar shows
+		// this workspace (split|mixed). Both are workspace-admin decisions, and
+		// both default to today's behaviour when never set.
+		AgentAccess *string `json:"agentAccess"`
+		TreeMode    *string `json:"treeMode"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		httpError(w, 400, "invalid JSON")
@@ -515,6 +527,28 @@ func (s *Server) handleUpdateWorkspace(w http.ResponseWriter, r *http.Request) {
 		}
 		sets = append(sets, "name = ?")
 		args = append(args, n)
+	}
+	if body.AgentAccess != nil {
+		v := strings.TrimSpace(*body.AgentAccess)
+		if v != "" && !validAgentAccess(v) {
+			httpErrorCode(w, 400, "bad_agent_access", "agentAccess must be open, strict or closed")
+			return
+		}
+		// Turning it OFF for agents is a decision that should be findable
+		// afterwards — "why can the agent suddenly not read this" is a question
+		// somebody will ask weeks later.
+		s.audit("human", requestUser(r).ID, requestUser(r).Name, "set_agent_access", "", wsID, v)
+		sets = append(sets, "agent_access = ?")
+		args = append(args, v)
+	}
+	if body.TreeMode != nil {
+		v := strings.TrimSpace(*body.TreeMode)
+		if v != "" && v != "split" && v != "mixed" {
+			httpErrorCode(w, 400, "bad_tree_mode", "treeMode must be split or mixed")
+			return
+		}
+		sets = append(sets, "tree_mode = ?")
+		args = append(args, v)
 	}
 	if body.Icon != nil {
 		icon := strings.TrimSpace(*body.Icon)

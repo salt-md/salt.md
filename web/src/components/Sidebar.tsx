@@ -17,9 +17,10 @@ import AgentConnectModal from './AgentConnect';
 import BreakGlassLog from './BreakGlassLog';
 import TemplateGallery from './TemplateGallery';
 import BlueprintLibrary from './BlueprintLibrary';
+import WorkspaceSettings from './WorkspaceSettings';
 import StrandedWorkspaces from './StrandedWorkspaces';
 import { useExclusiveModal, useMenuDismiss } from '../modal';
-import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X, MoreHorizontal } from 'lucide-react';
+import { Sun, Moon, Search, Library, Plus, Table2, FileText, Trash2, LayoutTemplate, Tag, ChevronRight, ChevronDown, Users, Check, Download, Upload, Image, PanelLeftClose, PanelLeftOpen, Pencil, Star, ShieldAlert, ScrollText, Paperclip, SquareArrowOutUpRight, Copy, CornerUpRight, CornerLeftUp, Undo2, X, MoreHorizontal, Settings2 } from 'lucide-react';
 import { tagColorClass } from '../tags';
 import ThemeSwitch, { type ThemePref } from '../ThemeSwitch';
 
@@ -820,8 +821,18 @@ export default function Sidebar({
   const activeWs = workspaces.find((w) => w.id === currentWs);
   // Split the top level into documents vs databases so the sidebar shows them
   // as clearly separated sections (nested items stay under their parent).
+  // MIXED: one tree, everything where it was filed. A documentation workspace
+  // wants this — there a database genuinely belongs under its document, and
+  // hoisting it into a separate section tears it away from what it documents.
+  // SPLIT (the default) keeps the two sections, which is right when the
+  // databases ARE the thing and the documents are notes beside them.
+  //
+  // Both readings are correct, for different workspaces. Earlier today they
+  // fought each other: nested databases were moved into the Collections
+  // section, which fixed one case by breaking the other. A setting settles it.
+  const mixed = activeWs?.treeMode === 'mixed';
   const topLevel = childrenMap.get('') ?? [];
-  const topDocs = topLevel.filter((p) => p.type !== 'collection');
+  const topDocs = mixed ? topLevel : topLevel.filter((p) => p.type !== 'collection');
   // Filtering searches the WHOLE section, not just its top level — a nested
   // page you can't see is exactly the one you're trying to find. Hits render
   // flat (with their parent as context) because tree indentation is noise once
@@ -840,7 +851,11 @@ export default function Sidebar({
     return false;
   };
   const allDocs = useMemo(
-    () => pages.filter((p) => !p.trashed && !p.isTemplate && inWs(p) && p.type !== 'collection' && !chainHasDb(p)),
+    () =>
+      pages.filter(
+        (p) =>
+          !p.trashed && !p.isTemplate && inWs(p) && !chainHasDb(p) && (mixed || p.type !== 'collection'),
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pages, currentWs],
   );
@@ -904,6 +919,7 @@ export default function Sidebar({
   // and shows what each answer gets you; a name prompt could only ask the easy
   // one.
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [wsSettingsOpen, setWsSettingsOpen] = useState(false);
   const newWorkspace = () => {
     setWsMenuOpen(false);
     setLibraryOpen(true);
@@ -980,83 +996,13 @@ export default function Sidebar({
                 </button>
               ))}
               <div className="menu-sep" />
+              {/* One entry instead of the sixteen that used to stand here. A
+                  menu is a list of actions you take now; most of what was in it
+                  are settings you look at and compare, which is a different
+                  shape and now has its own dialog. */}
               {activeWs?.role === 'admin' && (
-                <button className="menu-item" onClick={() => { setWsMenuOpen(false); void renameWorkspace(); }}>
-                  <Pencil size={15} /> {t('Rename workspace')}
-                </button>
-              )}
-              {activeWs?.role === 'admin' && (
-                <button className="menu-item" onClick={() => { setWsMenuOpen(false); setWsImageOpen(true); }}>
-                  <Image size={15} /> {t('Workspace picture')}
-                </button>
-              )}
-              {currentWs && (
-                <button className="menu-item" onClick={() => { setWsMenuOpen(false); setMembersOpen(true); }}>
-                  <Users size={15} /> {t('Members')}
-                </button>
-              )}
-              {currentWs && (
-                <button
-                  className="menu-item"
-                  title={t('Every uploaded file in this workspace, with the page carrying it')}
-                  onClick={() => { setWsMenuOpen(false); setFilesFor({}); }}
-                >
-                  <Paperclip size={15} /> {t('Files')}
-                </button>
-              )}
-              {currentWs && (
-                <button
-                  className={'menu-item' + (activeWs?.rulesProposal ? ' has-pending-dot' : '')}
-                  title={
-                    activeWs?.rulesProposal
-                      ? t('A rules proposal is waiting for review')
-                      : t('Conventions everyone — especially agents — follows in this workspace')
-                  }
-                  onClick={() => { setWsMenuOpen(false); setRulesOpen(true); }}
-                >
-                  <ScrollText size={15} /> {t('Workspace rules')}
-                </button>
-              )}
-              {user.orgRole === 'owner' && activeWs && !activeWs.personal && (
-                <button
-                  className="menu-item"
-                  title={t('Every newly created account automatically becomes a member of this workspace')}
-                  onClick={() => { setWsMenuOpen(false); void toggleAutoJoin(); }}
-                >
-                  <Users size={15} />
-                  {activeWs.autoJoin ? t('Stop opening it to everyone') : t('Open to every new user')}
-                </button>
-              )}
-              {activeWs?.role === 'admin' && (
-                <button
-                  className="menu-item"
-                  title={t('Who looked in as the instance owner — and why')}
-                  onClick={() => { setWsMenuOpen(false); setBgLogOpen(true); }}
-                >
-                  <ShieldAlert size={15} /> {t('Emergency access log')}
-                </button>
-              )}
-              {currentWs && (
-                <button
-                  className="menu-item"
-                  title={t('Native archive: pages, collections, files and tags — importable one-to-one into another instance')}
-                  onClick={() => { setWsMenuOpen(false); api.download(`/api/workspaces/${currentWs}/export`); }}
-                >
-                  <Download size={15} /> {t('Export workspace')}
-                </button>
-              )}
-              {currentWs && (
-                <button
-                  className="menu-item"
-                  title={t('Just this workspace’s content, as Markdown files')}
-                  onClick={() => { setWsMenuOpen(false); api.download(`/api/export?workspace=${currentWs}`); }}
-                >
-                  <FileText size={15} /> {t('Export as Markdown')}
-                </button>
-              )}
-              {canCreateWorkspace && (
-                <button className="menu-item" onClick={() => { setWsMenuOpen(false); wsImportRef.current?.click(); }}>
-                  <Upload size={15} /> {t('Import workspace…')}
+                <button className="menu-item" onClick={() => { setWsMenuOpen(false); setWsSettingsOpen(true); }}>
+                  <Settings2 size={15} /> {t('Workspace settings')}
                 </button>
               )}
               {canCreateWorkspace && (
@@ -1073,14 +1019,9 @@ export default function Sidebar({
                   <ShieldAlert size={15} /> {t('With nobody in charge…')}
                 </button>
               )}
-              {activeWs?.role === 'admin' && workspaces.length > 1 && (
-                <button
-                  className="menu-item danger"
-                  onClick={() => { setWsMenuOpen(false); void deleteWorkspace(); }}
-                >
-                  <Trash2 size={15} /> {t('Delete workspace')}
-                </button>
-              )}
+              {/* Deleting lives in the settings dialog now, next to everything else
+                  about this workspace — offering it in two places invites the
+                  accident. */}
             </div>
           )}
           <input
@@ -1199,7 +1140,10 @@ export default function Sidebar({
           {!notesMode && (
             <SidebarSection
               id="docs"
-              label={t('Documents')}
+              // In mixed mode this is the ONLY section, and it holds databases
+              // too — calling it "Documents" would be a lie. "Pages" is the
+              // honest word: in this product a database IS a page.
+              label={mixed ? t('Pages') : t('Documents')}
               icon={<FileText size={17} />}
               count={allDocs.length}
               createTitle={t('New page')}
@@ -1212,6 +1156,10 @@ export default function Sidebar({
               )}
             </SidebarSection>
           )}
+          {/* Hidden in mixed mode: one tree means one tree. Leaving it would
+              show every database twice, which is how "one pile" turns into two
+              piles that disagree. */}
+          {!mixed && (
           <SidebarSection
             id="dbs"
             label={t('Collections')}
@@ -1226,6 +1174,7 @@ export default function Sidebar({
               <div className="sb-empty">{t('No collection yet')}</div>
             )}
           </SidebarSection>
+          )}
         </div>
       )}
       {/* The ＋ of the Templates section means "start from a template" — which
@@ -1360,6 +1309,21 @@ export default function Sidebar({
         )}
         {strandedOpen && (
           <StrandedWorkspaces onClose={() => setStrandedOpen(false)} onChanged={onWorkspacesChanged} />
+        )}
+        {wsSettingsOpen && activeWs && (
+          <WorkspaceSettings
+            ws={activeWs}
+            isOwner={user.orgRole === 'owner'}
+            onChanged={onWorkspacesChanged}
+            onOpenMembers={() => { setWsSettingsOpen(false); setMembersOpen(true); }}
+            onOpenRules={() => { setWsSettingsOpen(false); setRulesOpen(true); }}
+            onOpenFiles={() => { setWsSettingsOpen(false); setFilesFor({}); }}
+            onOpenBreakGlass={() => { setWsSettingsOpen(false); setBgLogOpen(true); }}
+            onOpenImage={() => { setWsSettingsOpen(false); setWsImageOpen(true); }}
+            onDelete={() => { setWsSettingsOpen(false); void deleteWorkspace(); }}
+            onImport={() => { setWsSettingsOpen(false); wsImportRef.current?.click(); }}
+            onClose={() => setWsSettingsOpen(false)}
+          />
         )}
         {libraryOpen && (
           <BlueprintLibrary

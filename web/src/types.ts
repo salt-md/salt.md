@@ -34,6 +34,10 @@ export interface Workspace {
   /** Working conventions the admin wrote down — agents get them over MCP, members read them here. */
   rules?: string;
   /** A pending rules draft (usually from an agent) — inert until an admin applies it. */
+  // Empty means the default in both cases — 'open' and 'split'. There is no
+  // third state, so nothing has to handle one.
+  agentAccess?: string;
+  treeMode?: string;
   rulesProposal?: string;
   rulesProposalBy?: string;
   rulesProposalAt?: string;

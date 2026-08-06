@@ -472,7 +472,17 @@ export const api = {
       method: 'DELETE',
       body: JSON.stringify({ confirm }),
     }),
-  updateWorkspace: (id: string, patch: Partial<{ name: string; icon: string; image: string; autoJoin: boolean }>) =>
+  updateWorkspace: (
+    id: string,
+    patch: Partial<{
+      name: string;
+      icon: string;
+      image: string;
+      autoJoin: boolean;
+      agentAccess: string;
+      treeMode: string;
+    }>,
+  ) =>
     req<{ ok: boolean }>(`/api/workspaces/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   // Rules go through their own endpoint: the server refuses API tokens on it
   // (sessionOnly) — agents follow the rules, they never write them. They may

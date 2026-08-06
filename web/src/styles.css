@@ -8622,3 +8622,130 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- workspace settings -------------------------------------------------------
+   Sections with headings rather than one long list. The switches are readable
+   at rest — the point of moving them out of a menu was that you can SEE what a
+   workspace is set to without opening anything. */
+
+.dialog.ws-dialog {
+  width: min(560px, 96vw);
+}
+
+.ws-body {
+  max-height: 64vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.ws-section {
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 20px 0 8px;
+}
+
+.ws-section:first-child {
+  margin-top: 4px;
+}
+
+.ws-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 10px;
+  border-radius: 9px;
+}
+
+.ws-row:hover {
+  background: var(--hover);
+}
+
+.ws-row-ic {
+  display: flex;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.ws-row.danger .ws-row-label,
+.ws-row.danger .ws-row-ic {
+  color: var(--danger);
+}
+
+.ws-row-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ws-row-label {
+  font-size: 13.5px;
+}
+
+.ws-row-hint,
+.ws-choice-hint {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 1px;
+}
+
+.ws-setting {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  margin: 8px 0;
+}
+
+.ws-setting-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.ws-setting-head svg {
+  color: var(--muted);
+}
+
+.ws-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 6px 0;
+  font-size: 13.5px;
+}
+
+.ws-choice input {
+  margin-top: 3px;
+  flex: none;
+}
+
+.ws-choice-label {
+  display: block;
+}
+
+.ws-choice.active .ws-choice-label {
+  font-weight: 600;
+}
+
+/* A plain on/off setting, in the same shape as the radio choices above it so a
+   section reads as one thing rather than as three widgets. */
+.ws-switch {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 9px 10px;
+  font-size: 13.5px;
+}
+
+.ws-switch input {
+  margin-top: 3px;
+  flex: none;
+}
