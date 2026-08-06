@@ -545,6 +545,32 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
+**Production runs `1.6.12`** (2026-08-06 14:57), on his word ("dann kannst du
+deployen"): the whole fixed path in one go, **24 commits in one release** — the
+cadence rule working rather than a tag per fix.
+
+The big ones: agents can sign in with OAuth instead of carrying a permanent key,
+and a workspace decides per workspace what a credential may do there
+(open / signed-in only / no agents). `note()` — a raw trail of dated,
+**append-only** notes beside the edited version of a page, with the check-out of
+`working_on` leaving its last note behind as one. A **downloadable skill** the
+instance generates for itself, whose first instruction is to write a short block
+into the repository's CLAUDE.md/AGENTS.md — because rules were being forgotten
+for where they were kept, not for carelessness. Files dropped from the desktop
+land on the page instead of the browser navigating away and throwing the
+application out. Plus fail2ban, the workspace settings dialog, the mixed sidebar
+tree, live updates for trash/restore/schema, and the last four database gaps.
+
+Two checksum proofs, one on each side of the swap: the running binary matched
+the published `v1.6.11` asset exactly before (`9c1192a5…`) and the `v1.6.12`
+asset after (`3c662cc9…`). Verified by behaviour on top: `/api/skill` and
+`/api/pages/{id}/notes` answer `401` where an unknown path falls through to the
+SPA with `200`. Four startup lines, no search-index rebuild, 478 MB of data,
+648 files. Backup:
+`/root/salt-backups/salt-data-20260806-145747-vor-1.6.12.tar.gz` (402M, gzip
+verified); `/opt/salt/salt.bak-1.6.11` sits beside it and its checksum is the
+published one too. 23G free.
+
 **Production runs `1.6.11`** (2026-08-04 18:44), on his word ("du kannst pushen
 und auf produktiv deployen"): the whole fixed path in one go, **13 commits in
 one release** — which is the cadence rule working rather than a tag per fix.
