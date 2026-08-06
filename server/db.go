@@ -190,6 +190,17 @@ CREATE TABLE IF NOT EXISTS page_notes (
 	created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_page_notes_page ON page_notes(page_id, created_at);
+-- Signing in to the desktop app through the real browser (desktop_auth.go).
+-- One row per sign-in in flight, alive for five minutes. The code is stored
+-- HASHED, like every other credential here: a dump of this table must not be a
+-- set of usable sign-ins. The challenge is stored in the clear on purpose —
+-- it is a digest, and its whole job is to be compared against one.
+CREATE TABLE IF NOT EXISTS desktop_auth (
+	challenge TEXT NOT NULL,
+	code_hash TEXT PRIMARY KEY,
+	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+	created_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS favorites (
 	user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 	page_id TEXT NOT NULL REFERENCES pages(id) ON DELETE CASCADE,

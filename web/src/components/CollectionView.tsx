@@ -1503,6 +1503,14 @@ function BoardView({
                   if (consumeClick()) return;
                   onNavigate(r.id);
                 }}
+                // Right-click opens the card's own menu, the same one behind
+                // the ⋯. On a board the card IS the object in front of you, and
+                // aiming at a small mark in its corner to reach "open" or
+                // "trash" is the slow way round.
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setMoveMenu(`${col.id}:${r.id}`);
+                }}
               >
                 <div className="board-card-top">
                   <div className="board-card-title">

@@ -194,7 +194,16 @@ function DbRows({
         const isOpen = ctx.expanded.has(r.id);
         return (
           <div key={r.id}>
-            <div className="tree-db-row" style={pad} onClick={() => ctx.onNavigate(r.id)}>
+            <div
+              className="tree-db-row"
+              style={pad}
+              onClick={() => ctx.onNavigate(r.id)}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                ctx.setAddFor(null);
+                ctx.setMenuFor(r.id);
+              }}
+            >
               {kids.length > 0 ? (
                 <button
                   className="chevron"
@@ -593,6 +602,14 @@ function TreeItem({
         onDrop={(e) => ctx.drop(p, e)}
         onDragEnd={ctx.dragEnd}
         onClick={(e) => (e.metaKey || e.ctrlKey ? ctx.onOpenInNewTab(p.id) : ctx.onNavigate(p.id))}
+        // The whole row answers a right-click with the same menu the ⋯ offers.
+        // Hunting for a three-dot button that only appears on hover is the
+        // slowest way to reach an action everybody knows is there.
+        onContextMenu={(e) => {
+          e.preventDefault();
+          ctx.setAddFor(null);
+          ctx.setMenuFor(p.id);
+        }}
         onAuxClick={(e) => {
           if (e.button === 1) {
             e.preventDefault();

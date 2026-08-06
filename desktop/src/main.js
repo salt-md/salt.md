@@ -2,6 +2,7 @@ const { app, BrowserWindow, shell, Menu, dialog, ipcMain, session } = require('e
 const path = require('node:path');
 const fs = require('node:fs');
 const { normalizeURL } = require('./serverURL');
+const crypto = require('node:crypto');
 
 // Salt.md in its own window.
 //
@@ -25,6 +26,10 @@ const { normalizeURL } = require('./serverURL');
 //  3. A SERVER THAT IS DOWN GETS A PAGE, NOT A CRASH. The failure everybody
 //     hits first is a laptop opening the app on a train, and Chromium's own
 //     error page is a dead end with no way back to the settings.
+
+// The scheme the browser uses to hand control back. Registered at startup; if
+// the system refuses, the app falls back to signing in inside its own window.
+const desktopScheme = 'salt';
 
 const store = path.join(app.getPath('userData'), 'settings.json');
 
@@ -68,6 +73,69 @@ function closeAuthWindow() {
   authOpen = false;
   clearTimeout(authTimer);
   authTimer = null;
+}
+
+
+// ---- signing in through the real browser ----------------------------------
+//
+// The app used to show the provider's sign-in page in its own window. That
+// works, and it is the wrong answer: in your own browser you can SEE the
+// address bar and check that your password is going to the provider and not to
+// a window an application drew. It also reuses the browser session you already
+// have, and passkeys work there.
+//
+// The hand-back is the hard part. salt:// is not a private channel — any
+// program may register for it. So the code that comes back is useless alone:
+// the app keeps a secret (the verifier), sends only its digest to the server at
+// the start, and must present the secret to redeem the code. Whoever intercepts
+// the code cannot use it. See server/desktop_auth.go for the other half.
+
+let pendingVerifier = null;
+
+function startBrowserSignIn() {
+  const server = readSettings().server;
+  if (!server) return;
+  pendingVerifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(pendingVerifier).digest('base64url');
+  shell.openExternal(server + '/desktop/login?challenge=' + encodeURIComponent(challenge));
+}
+
+/** Handles salt://auth?code=… — the browser handing control back. */
+async function finishBrowserSignIn(rawURL) {
+  let code = '';
+  try {
+    code = new URL(rawURL).searchParams.get('code') || '';
+  } catch {
+    return;
+  }
+  const server = readSettings().server;
+  // A code without a verifier is not ours: either this arrived out of nowhere,
+  // or the app restarted mid-flow and the secret is gone. Both mean start again
+  // rather than send a bare code to the server.
+  if (!code || !server || !pendingVerifier) return;
+  const verifier = pendingVerifier;
+  pendingVerifier = null;
+
+  try {
+    // Through the WINDOW's session, so the cookie it returns is the one the
+    // window will use. A fetch from anywhere else would land the session in a
+    // jar nobody reads.
+    const res = await session.defaultSession.fetch(server + '/api/desktop/exchange', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, verifier }),
+    });
+    if (!res.ok) throw new Error('exchange failed: ' + res.status);
+    if (win && !win.isDestroyed()) {
+      win.loadURL(server);
+      win.show();
+      win.focus();
+    }
+  } catch (e) {
+    if (win && !win.isDestroyed()) {
+      showUnreachable(server, 'Sign-in could not be completed: ' + (e.message ?? e));
+    }
+  }
 }
 
 let win = null;
@@ -139,7 +207,16 @@ function createWindow() {
     if (!server) return;
     if (url.startsWith('file://')) return; // our own connect / error pages
 
+    // A sign-in starting: OUT to the real browser rather than in this window.
+    // The embedded flow is kept as a fallback only for the case where the
+    // protocol could not be registered — otherwise somebody whose machine
+    // refuses salt:// would have no way in at all.
     if (isAuthStart(server, url)) {
+      if (protocolRegistered) {
+        event.preventDefault();
+        startBrowserSignIn();
+        return;
+      }
       openAuthWindow();
       return;
     }
@@ -153,6 +230,16 @@ function createWindow() {
 
     event.preventDefault();
     if (/^https?:/i.test(url)) shell.openExternal(url);
+  });
+
+  // Salt.md draws its own context menus now (right-click a page, a row, a
+  // card). Chromium's default menu would open on top of them — "Back",
+  // "Reload", "Inspect" over the menu somebody actually wanted. Suppressed
+  // except where there is text to act on, because "Copy" and the spelling
+  // suggestions are the one case the browser does better than we would.
+  win.webContents.on('context-menu', (event, params) => {
+    const editable = params.isEditable || params.selectionText.trim() !== '';
+    if (!editable) event.preventDefault();
   });
 
   // RULE 3: a server that cannot be reached gets an explanation and a way back.
@@ -215,6 +302,10 @@ function buildMenu() {
       label: 'File',
       submenu: [
         {
+          label: 'Sign in with your browser',
+          click: () => startBrowserSignIn(),
+        },
+        {
           label: 'Change server…',
           click: () => win.loadFile(path.join(__dirname, 'connect.html')),
         },
@@ -266,7 +357,31 @@ function buildMenu() {
 
 // ---- start -----------------------------------------------------------------
 
+// macOS delivers the URL as an event; Windows and Linux relaunch the binary
+// with it in argv and the first instance has to pick it out.
+let protocolRegistered = false;
+
+app.on('open-url', (event, url) => {
+  event.preventDefault();
+  void finishBrowserSignIn(url);
+});
+
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv) => {
+    const hit = argv.find((a) => a.startsWith(desktopScheme + '://'));
+    if (hit) void finishBrowserSignIn(hit);
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+  });
+}
+
 app.whenReady().then(() => {
+  protocolRegistered = app.setAsDefaultProtocolClient(desktopScheme);
+
   // Identity providers refuse to show a sign-in page to anything whose user
   // agent says "Electron" — Google answers `disallowed_useragent` outright.
   // The objection is to hidden webviews that can read what somebody types; this

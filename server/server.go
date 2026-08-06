@@ -298,6 +298,13 @@ func New(dataDir string, dist fs.FS) (*Server, error) {
 	// to content, and the agent whose trail it is must not be able to drop it.
 	m.HandleFunc("DELETE /api/pages/{id}/notes", s.auth(s.sessionOnly(s.handleClearNotes)))
 
+	// Signing in to the desktop app through the real browser (desktop_auth.go).
+	// The first two are OUTSIDE the auth middleware on purpose: the person
+	// arriving may not be signed in yet, which is the ordinary case.
+	m.HandleFunc("GET /desktop/login", s.handleDesktopLogin)
+	m.HandleFunc("POST /desktop/approve", s.handleDesktopApprove)
+	m.HandleFunc("POST /api/desktop/exchange", s.handleDesktopExchange)
+
 	// The agent skill, generated for this instance (see skill.go).
 	m.HandleFunc("GET /api/skill", s.auth(s.handleSkill))
 
