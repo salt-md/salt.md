@@ -6,10 +6,11 @@ import { PageIcon } from '../pageIcon';
 import { compare, formatMoment } from '../format';
 import { plural, t } from '../i18n';
 import { tagColorClass } from '../tags';
-import { Clock, FileText, Library, Lock, Star, Table2, Users, Workflow } from 'lucide-react';
+import { Clock, FileText, Library, Lock, Share2, Star, Table2, Users, Workflow } from 'lucide-react';
+import GraphView from './GraphView';
 
 type SortKey = 'title' | 'in' | 'out' | 'updated';
-type Mode = 'recent' | 'favorites' | 'shared' | 'private' | 'all' | 'tree';
+type Mode = 'recent' | 'favorites' | 'shared' | 'private' | 'all' | 'tree' | 'graph';
 
 // The library: every page of this instance (documents + databases, database rows
 // excluded), the way a shelf is browsed rather than a list is read — by what was
@@ -32,6 +33,7 @@ function tabs(): { id: Mode; label: string; icon: React.ReactNode }[] {
     { id: 'shared', label: t('Shared'), icon: <Users size={14} /> },
     { id: 'private', label: t('Private'), icon: <Lock size={14} /> },
     { id: 'all', label: t('All pages'), icon: <Library size={14} /> },
+    { id: 'graph', label: t('Graph'), icon: <Share2 size={14} /> },
     { id: 'tree', label: t('Tree · agent view'), icon: <Workflow size={14} /> },
   ];
 }
@@ -240,7 +242,9 @@ export default function IndexView({
               onClick={() => setMode(tab.id)}
             >
               {tab.icon} {tab.label}
-              {tab.id !== 'tree' && <span className="index-mode-count">{counts[tab.id]}</span>}
+              {tab.id !== 'tree' && tab.id !== 'graph' && (
+                <span className="index-mode-count">{counts[tab.id]}</span>
+              )}
             </button>
           ))}
         </div>
@@ -251,7 +255,7 @@ export default function IndexView({
           onChange={(e) => setQuery(e.target.value)}
           aria-label={t('Filter pages')}
         />
-        {mode !== 'tree' && (
+        {mode !== 'tree' && mode !== 'graph' && (
           <select className="prop-select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label={t('Sort')}>
             <option value="title">{mode === 'recent' ? t('Last opened') : t('Name (A–Z)')}</option>
             <option value="updated">{t('Recently changed')}</option>
@@ -262,12 +266,14 @@ export default function IndexView({
         {/* plural(), not t(): the catalog holds "{n} pages" as plural FORMS, so
             t() would hand back the key and the count read "7 pages" in German. */}
         <span className="index-stat">
-          {plural(rows.length, '{n} page', '{n} pages')}
+          {mode === 'graph' ? '' : plural(rows.length, '{n} page', '{n} pages')}
           {mode === 'all' && ` · ${t('{n} without links', { n: orphans })}`}
         </span>
       </div>
 
-      {mode !== 'tree' ? (
+      {mode === 'graph' ? (
+        <GraphView pages={live} edges={edges} onNavigate={onNavigate} />
+      ) : mode !== 'tree' ? (
         <div className="table-wrap">
           <table className="db-table index-table">
             <thead>

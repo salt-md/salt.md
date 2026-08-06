@@ -206,6 +206,7 @@
   "Download": "Herunterladen",
   "Download backup (.tar.gz)": "Backup herunterladen (.tar.gz)",
   "Download skill": "Skill herunterladen",
+  "Drag a dot, scroll to zoom, click to open": "Punkt ziehen, scrollen zum Zoomen, klicken zum Öffnen",
   "Drop to add to this page": "Loslassen, um es dieser Seite hinzuzufügen",
   "Duplicate": "Duplizieren",
   "Each one brings its databases, views and house rules — and no data. You fill it.": "Jede bringt ihre Datenbanken, Ansichten und Hausregeln mit — und keine Daten. Die füllst du.",
@@ -255,6 +256,7 @@
   "General": "Allgemein",
   "Google: in the Cloud Console also enable the Gmail API (APIs & Services → Library) and move the OAuth app to “In production”, or the connection expires after 7 days.": "Google: In der Cloud Console zusätzlich die Gmail API aktivieren (APIs & Services → Library) und die OAuth-App auf „In Produktion“ stellen, sonst läuft die Verbindung nach 7 Tagen ab.",
   "Grant access?": "Zugriff erlauben?",
+  "Graph": "Graph",
   "Gray": "Grau",
   "Green": "Grün",
   "Group": "Gruppieren",
@@ -611,6 +613,7 @@
   "Show comments": "Kommentare einblenden",
   "Show resolved": "Erledigte anzeigen",
   "Show structure": "Struktur anzeigen",
+  "Show where pages are filed": "Zeigen, wo Seiten einsortiert sind",
   "Show {n} resolved": "{n} erledigte anzeigen",
   "Shown": "Angezeigt",
   "Shown in the switcher and on cards": "Zu sehen im Umschalter und auf Karten",
@@ -911,6 +914,10 @@
     "other": "{n} Dateien hinzugefügt"
   },
   "{n} filled": "{n} gefüllt",
+  "{n} links": {
+    "one": "{n} Verknüpfung",
+    "other": "{n} Verknüpfungen"
+  },
   "{n} members": {
     "one": "{n} Mitglied",
     "other": "{n} Mitglieder"
