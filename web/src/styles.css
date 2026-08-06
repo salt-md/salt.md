@@ -8571,3 +8571,54 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
 .consent-ws {
   align-items: flex-start;
 }
+
+/* The two ways an agent gets in. Side by side rather than a dropdown, because
+   the choice has a consequence worth reading — the line under each label is the
+   actual decision, not decoration. */
+.agent-how {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 14px 0 12px;
+}
+
+.agent-how-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--card);
+}
+
+.agent-how-opt svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+}
+
+.agent-how-opt.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.agent-how-opt.active svg {
+  color: var(--accent);
+}
+
+.agent-how-sub {
+  display: block;
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+@media (max-width: 560px) {
+  .agent-how {
+    grid-template-columns: 1fr;
+  }
+}

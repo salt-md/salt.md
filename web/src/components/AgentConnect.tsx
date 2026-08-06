@@ -4,7 +4,7 @@ import Portal from './Portal';
 import { useExclusiveModal } from '../modal';
 import { toast } from '../toast';
 import type { Workspace } from '../types';
-import { Bot, Check, Copy } from 'lucide-react';
+import { Bot, Check, Copy, ShieldCheck, KeyRound } from 'lucide-react';
 import { t } from '../i18n';
 
 // "Connect an agent" (wave 44): Salt.md is AI-native — every agent talks to the
@@ -21,13 +21,19 @@ interface AgentDef {
 
 const TOKEN_PH = '<YOUR-TOKEN>';
 
-// One link for everything: the token sits inside the URL (…/mcp/<token>). That
-// also works for clients with nothing but a URL field, which cannot set headers
-// (claude.ai / desktop connectors, ChatGPT, …).
-const mcpURL = (url: string, token: string) => `${url}/mcp/${token}`;
+// TWO WAYS IN, and the same snippet shape for both — the only difference is
+// whether the address carries a token.
+//
+//   …/mcp            the client signs in: it finds the authorization server on
+//                    its own (the 401 says where), you approve once in the
+//                    browser, and nothing secret is ever in the address.
+//   …/mcp/<token>    the token IS the address. For clients with nothing but a
+//                    URL field and no sign-in support.
+//
+// An empty token means the first. Deliberately one function rather than two, so
+// no snippet can drift into a shape the other never got.
+const mcpURL = (url: string, token: string) => (token ? `${url}/mcp/${token}` : `${url}/mcp`);
 
-// A generic mcpServers block — no fiddling with headers, thanks to the token
-// living in the URL.
 const mcpJSON = (url: string, token: string) =>
   JSON.stringify({ mcpServers: { salt: { url: mcpURL(url, token) } } }, null, 2);
 
@@ -140,6 +146,11 @@ export default function AgentConnectModal({
   const [busy, setBusy] = useState(false);
   const [agent, setAgent] = useState<AgentDef>(AGENTS[0]);
   const [copied, setCopied] = useState(false);
+  // Which of the two ways the snippet shows. Sign-in first, because it is the
+  // one that puts nothing secret into an address — but the token way stays a
+  // click away rather than being argued for, since plenty of clients still
+  // cannot do anything else.
+  const [how, setHow] = useState<'signin' | 'token'>('signin');
 
   // Prefer the configured public address (Domain/Tunnel) over whatever address
   // this browser happens to use — cloud agents must reach the URL from outside.
@@ -167,7 +178,7 @@ export default function AgentConnectModal({
     }
   };
 
-  const snippet = agent.snippet(url, effToken);
+  const snippet = agent.snippet(url, how === 'signin' ? '' : effToken);
   const copy = () => {
     void navigator.clipboard?.writeText(snippet);
     setCopied(true);
@@ -184,10 +195,43 @@ export default function AgentConnectModal({
           </h2>
           <p className="dialog-hint">
             {t(
-              'Salt.md is AI-native: the built-in MCP server lets any agent read, write and search pages and maintain collections. One link is all it takes — the token sits inside the URL, so there is no header configuration any more. Treat the link like a password.',
+              'Salt.md is AI-native: the built-in MCP server lets any agent read, write and search pages and maintain collections. There are two ways in — signing in, or a token that lives in the address.',
             )}
           </p>
 
+          {/* WHICH way in. Deliberately not a per-client capability table: which
+              agent speaks OAuth changes month to month, and a table that is
+              wrong is worse than none. What is true regardless: a client that
+              can sign in discovers it from the plain address by itself, and one
+              that cannot will ask for a token instead. So the advice is "try
+              this one first", which is also self-correcting. */}
+          <div className="agent-how">
+            <button
+              className={'agent-how-opt' + (how === 'signin' ? ' active' : '')}
+              onClick={() => setHow('signin')}
+            >
+              <ShieldCheck size={15} />
+              <span>
+                {t('Sign in')}
+                <span className="agent-how-sub">{t('Nothing secret in the address. Expires and can be ended.')}</span>
+              </span>
+            </button>
+            <button
+              className={'agent-how-opt' + (how === 'token' ? ' active' : '')}
+              onClick={() => setHow('token')}
+            >
+              <KeyRound size={15} />
+              <span>
+                {t('Token in the address')}
+                <span className="agent-how-sub">{t('For clients that only have a URL field. Treat it like a password.')}</span>
+              </span>
+            </button>
+          </div>
+
+          {/* Only for the token way. With sign-in, the scope and the workspaces
+              are chosen on the consent screen instead — two places offering the
+              same decision would leave people wondering which one counts. */}
+          {how === 'token' && (
           <div className="agent-token">
             {token ? (
               <div className="agent-token-fresh">
@@ -218,6 +262,7 @@ export default function AgentConnectModal({
               </>
             )}
           </div>
+          )}
 
           <div className="agent-grid">
             {AGENTS.map((a) => (
@@ -244,10 +289,16 @@ export default function AgentConnectModal({
             </pre>
           </div>
 
-          {effToken === TOKEN_PH && (
+          {how === 'signin' ? (
             <p className="dialog-hint settings-hint">
-              {t('Create a token above (or paste one) — it is filled into the snippet automatically.')}
+              {t('Paste this and the client sends you here to approve it — you pick the workspaces then. If it asks for a token instead, it cannot sign in yet: use the other way.')}
             </p>
+          ) : (
+            effToken === TOKEN_PH && (
+              <p className="dialog-hint settings-hint">
+                {t('Create a token above (or paste one) — it is filled into the snippet automatically.')}
+              </p>
+            )
           )}
           {url.startsWith('http://') && !/^http:\/\/(localhost|127\.)/.test(url) && (
             <p className="dialog-hint settings-hint pa-warn">
