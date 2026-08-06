@@ -41,6 +41,35 @@ function writeSettings(next) {
   fs.writeFileSync(store, JSON.stringify(next, null, 2));
 }
 
+
+// ---- the sign-in window --------------------------------------------------
+//
+// "Open" is a five-minute door, not a mode. If a person abandons a sign-in — a
+// forgotten password, a provider that hangs — the window must not be left able
+// to navigate anywhere for the rest of the session.
+
+let authOpen = false;
+let authTimer = null;
+
+/** True for the instance's own routes that BEGIN a round trip to a provider:
+ *  signing in, and an admin connecting a mailbox. */
+function isAuthStart(server, url) {
+  return url.startsWith(server + '/api/oauth/') ||
+         url.startsWith(server + '/api/admin/mail-oauth/');
+}
+
+function openAuthWindow() {
+  authOpen = true;
+  clearTimeout(authTimer);
+  authTimer = setTimeout(closeAuthWindow, 5 * 60 * 1000);
+}
+
+function closeAuthWindow() {
+  authOpen = false;
+  clearTimeout(authTimer);
+  authTimer = null;
+}
+
 let win = null;
 
 function createWindow() {
@@ -78,16 +107,50 @@ function createWindow() {
 
   // RULE 1, part one: a link that wants a new window is an outside link.
   win.webContents.setWindowOpenHandler(({ url }) => {
+    // Some providers open the consent step in a popup. Mid-flow that popup is
+    // part of signing in, so it belongs in this window rather than in the
+    // browser — where it would finish the flow in the wrong program.
+    if (authOpen && /^https?:/i.test(url)) {
+      win.loadURL(url);
+      return { action: 'deny' };
+    }
     if (/^https?:/i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
 
-  // RULE 1, part two: navigation inside the window may not leave the instance.
+  // RULE 1, part two: navigation inside the window may not leave the instance —
+  // EXCEPT while a sign-in is running.
+  //
+  // Signing in with Microsoft or Google is a round trip: your instance sends the
+  // browser to the provider, the provider sends it back. The naive version of
+  // this rule breaks it in the middle — it sees login.microsoftonline.com,
+  // decides that is not your instance, and hands the rest of the flow to the
+  // real browser. The person then signs in successfully in the WRONG program:
+  // the session cookie lands in the browser and the app sits on the login page
+  // forever, which is exactly what it looked like.
+  //
+  // The gate is the FLOW, not a list of provider hostnames. A list would have to
+  // name every identity provider, every asset domain they redirect through, and
+  // every one they add later — and it would still refuse anybody running their
+  // own. Instead: passing through one of the instance's own OAuth routes opens
+  // the door, and coming back to the instance closes it again.
   win.webContents.on('will-navigate', (event, url) => {
     const server = readSettings().server;
     if (!server) return;
-    if (url.startsWith(server)) return;
     if (url.startsWith('file://')) return; // our own connect / error pages
+
+    if (isAuthStart(server, url)) {
+      openAuthWindow();
+      return;
+    }
+    if (url.startsWith(server)) {
+      // Back home. Anything after this is ordinary navigation again.
+      if (!url.startsWith(server + '/api/oauth/') &&
+          !url.startsWith(server + '/api/admin/mail-oauth/')) closeAuthWindow();
+      return;
+    }
+    if (authOpen) return; // mid-flow at the provider: let it through
+
     event.preventDefault();
     if (/^https?:/i.test(url)) shell.openExternal(url);
   });
@@ -204,6 +267,18 @@ function buildMenu() {
 // ---- start -----------------------------------------------------------------
 
 app.whenReady().then(() => {
+  // Identity providers refuse to show a sign-in page to anything whose user
+  // agent says "Electron" — Google answers `disallowed_useragent` outright.
+  // The objection is to hidden webviews that can read what somebody types; this
+  // is a visible window with no script of ours in it, so the honest description
+  // is a browser. Dropping the two Electron tokens says exactly that.
+  const ua = session.defaultSession
+    .getUserAgent()
+    .replace(/ Electron\/[\d.]+/, '')
+    .replace(/ salt-desktop\/[\d.]+/i, '')
+    .replace(/ Salt\.md\/[\d.]+/i, '');
+  session.defaultSession.setUserAgent(ua);
+
   // The renderer loads a REMOTE page, so it is treated as one: no permission is
   // granted by default. Notifications and clipboard reads are the ones a
   // workspace might plausibly ask for; both can be added deliberately later.
