@@ -545,6 +545,50 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
+**Production runs `1.6.13`** (2026-08-06 16:01), on his word ("ja bring es
+live"): a regression, a picture and two handles.
+
+The regression was mine, shipped in 1.6.12 and reported the same afternoon:
+in **mixed** tree mode a database filed under a document vanished from the
+sidebar while the page count went on counting it. The split-mode filter kept
+running where there is no second section to show it. The rule now lives alone in
+`web/src/treeMode.ts` with `check-treemode.mjs` in the gate — the same decision
+had gone wrong twice, in opposite directions, and neither time did anything
+fail, because a tree that quietly omits a page still looks like a tree.
+
+Then the **graph** (a tab in the library): every page a dot, every connection a
+line, canvas and no library, ~40 lines of force simulation. Two edge kinds kept
+apart — where a page is FILED (thin, the sidebar says it too) and where a page
+MENTIONS another (bright, the thing no tree can show). Coloured by ROOT, not by
+workspace: by workspace was the obvious choice and useless in the common case,
+where everything lives in one and the whole picture came out one shade of green.
+Colours go to the biggest family first so the house green lands on what the
+instance is about.
+
+Plus a **workspace picker** in the library — it was the only screen in the
+product that spanned all workspaces at once, while the sidebar has always been
+scoped. Filtered in ONE place that the shelves, the tab counts, the tree view
+and the graph all read from. And the library's controls got a frame; chasing
+that surfaced an inherited `width: 100%` from the table-cell classes, which had
+been breaking that bar into three rows invisibly.
+
+One skill fix worth knowing: it wrote its address with `publicBase`, which falls
+back to the Host header — downloading the skill from `http://192.168.x.x` would
+have put THAT in the file, unreachable for a cloud agent. It uses
+`publicShareBase` now, the same resolver the connect dialog shows.
+
+The Release workflow failed once on GitHub's own infrastructure ("Failed to
+resolve action download info: Service Unavailable") and was green on a plain
+rerun — worth recognising, since it looks nothing like a code failure.
+
+Checksums on both sides again: `3c662cc9…` (published `v1.6.12`) before,
+`7919f22a…` (published `v1.6.13`) after. Verified by behaviour: `/api/graph` and
+`/api/skill` answer `401` where an unknown path falls through with `200`, and
+`.graph-canvas`, `.index-ws` and `.tree-actions:has(.menu)` are in the served
+CSS. Four startup lines, no index rebuild. Backup:
+`/root/salt-backups/salt-data-20260806-160119-vor-1.6.13.tar.gz` (402M, gzip
+verified); `/opt/salt/salt.bak-1.6.12` sits beside it. 23G free.
+
 **Production runs `1.6.12`** (2026-08-06 14:57), on his word ("dann kannst du
 deployen"): the whole fixed path in one go, **24 commits in one release** — the
 cadence rule working rather than a tag per fix.
