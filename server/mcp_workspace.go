@@ -115,10 +115,17 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 // out there would be an injection surface with a server voice.
 func (s *Server) mcpGetWorkspace(u *user, wsID string) (string, string, error) {
 	if wsID == "" {
-		wsID = s.userDefaultWorkspace(u.ID)
+		wsID = s.defaultWorkspaceFor(u)
 	}
-	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
+	if wsID == "" || !s.isMember(u.ID, wsID) {
 		return "", "", fmt.Errorf("workspace %q not found", wsID)
+	}
+	// "Not found" for something that exists and is theirs, merely out of this
+	// connection's reach, sends an agent looking for a typo. Saying which of
+	// the two it is costs nothing — the caller already knows the workspace
+	// exists, it is their own account — and it tells them what to do instead.
+	if !u.tokenCanReach(wsID) {
+		return "", "", fmt.Errorf("workspace %q is outside what this connection was granted — ask for it to be added, or name one it can reach", wsID)
 	}
 	var name, rules, proposal string
 	if err := s.db.QueryRow(`SELECT name, rules, rules_proposal FROM workspaces WHERE id = ?`, wsID).Scan(&name, &rules, &proposal); err != nil {
@@ -204,7 +211,7 @@ func (s *Server) mcpProposeWorkspaceRules(u *user, wsID, rules string) (string, 
 		return "", fmt.Errorf("this API token is read-only; proposing rules requires a write token")
 	}
 	if wsID == "" {
-		wsID = s.userDefaultWorkspace(u.ID)
+		wsID = s.defaultWorkspaceFor(u)
 	}
 	if wsID == "" || !s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID) {
 		return "", fmt.Errorf("workspace %q not found", wsID)

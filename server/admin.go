@@ -383,7 +383,7 @@ func (s *Server) handleCreateInvite(w http.ResponseWriter, r *http.Request) {
 	}
 	ws := body.WorkspaceID
 	if ws == "" {
-		ws = s.userDefaultWorkspace(u.ID)
+		ws = s.defaultWorkspaceFor(u)
 	}
 	if !s.isWorkspaceAdmin(u.ID, ws) {
 		httpError(w, 403, "workspace admin only")

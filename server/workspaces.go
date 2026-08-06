@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -79,6 +80,39 @@ func (s *Server) migrateWorkspaces() error {
 
 // defaultWorkspace returns the workspace a new page from this user should land
 // in (their first membership). Empty string if the user has none.
+// defaultWorkspaceFor picks a workspace the CALLER can actually reach — which
+// is not the same as the account's default.
+//
+// The bug it fixes was reported from a real connection: somebody granted an
+// agent ONE workspace, and the agent's very first call failed with
+// `workspace "…" not found`. The id in that message was a workspace it had
+// never been given: every "no workspace named, use the default" path asked the
+// ACCOUNT for its default and then checked the credential against it. For a
+// narrowed credential that check fails by construction, and the message names
+// an id nobody recognises.
+//
+// Belongs here rather than at each call site: there are a dozen of those, and
+// the next one added would be written the same way.
+func (s *Server) defaultWorkspaceFor(u *user) string {
+	if u == nil {
+		return ""
+	}
+	if ws := s.userDefaultWorkspace(u.ID); ws != "" && u.tokenCanReach(ws) {
+		return ws
+	}
+	// Narrowed, and the account's default is outside it: take the first granted
+	// one they are still a member of. Sorted, so the answer does not depend on
+	// the order somebody happened to tick boxes in.
+	granted := append([]string(nil), u.TokenWorkspaces...)
+	sort.Strings(granted)
+	for _, w := range granted {
+		if s.isMember(u.ID, w) {
+			return w
+		}
+	}
+	return ""
+}
+
 func (s *Server) userDefaultWorkspace(userID string) string {
 	var ws string
 	s.db.QueryRow(`SELECT workspace_id FROM workspace_members WHERE user_id = ? ORDER BY workspace_id LIMIT 1`, userID).Scan(&ws)

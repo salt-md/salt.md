@@ -501,3 +501,62 @@ func TestANarrowedCredentialCannotCreateAWorkspace(t *testing.T) {
 		t.Fatalf("an unrestricted token was refused too: %d %s", rec.Code, rec.Body.String())
 	}
 }
+
+// Reported from a real connection: one workspace was granted, and the agent's
+// very first call answered `workspace "…" not found` — naming an id it had
+// never been given. Every "no workspace named, use the default" path asked the
+// ACCOUNT for its default and then checked the credential against it, which for
+// a narrowed credential fails by construction.
+func TestTheDefaultWorkspaceIsOneTheCallerCanReach(t *testing.T) {
+	s := testServer(t)
+	uid, cookie := signedIn(t, s, "default@example.test")
+	u := &user{ID: uid}
+
+	// Two workspaces. The account's default is whichever sorts first, so grant
+	// the OTHER one — that is the situation that broke.
+	a := s.firstWorkspaceOf(t, uid)
+	b := makeWorkspace(t, s, uid)
+	acct := s.userDefaultWorkspace(uid)
+	granted := a
+	if acct == a {
+		granted = b
+	}
+	if s.userDefaultWorkspace(uid) == granted {
+		t.Skip("the account default happens to be the granted one — nothing to prove")
+	}
+	_ = u
+
+	redirect := "https://claude.ai/cb"
+	client := oauthClientFixture(t, s, redirect)
+	code := approve(t, s, cookie, client, redirect, pkce("v"), "write", []string{granted})
+	_, out := tokenCall(s, url.Values{
+		"grant_type": {"authorization_code"}, "code": {code},
+		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"v"},
+	})
+	access, _ := out["access_token"].(string)
+	agent := s.userForAccessToken(access, "1.2.3.4")
+	if agent == nil {
+		t.Fatal("no user for the access token")
+	}
+
+	if got := s.defaultWorkspaceFor(agent); got != granted {
+		t.Errorf("the default for this connection is %q, but only %q was granted", got, granted)
+	}
+	// And the tool that reads it now works on the first call, with no arguments.
+	if _, _, err := s.mcpGetWorkspace(agent, ""); err != nil {
+		t.Errorf("get_workspace with no argument failed for a narrowed connection: %v", err)
+	}
+	// Naming one outside the grant still fails — but says WHY, so an agent does
+	// not go hunting for a typo.
+	other := a
+	if granted == a {
+		other = b
+	}
+	_, _, err := s.mcpGetWorkspace(agent, other)
+	if err == nil {
+		t.Fatal("a workspace outside the grant was readable")
+	}
+	if !strings.Contains(err.Error(), "outside what this connection was granted") {
+		t.Errorf("the refusal reads like a missing workspace: %v", err)
+	}
+}

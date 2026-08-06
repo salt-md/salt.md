@@ -117,7 +117,7 @@ func (s *Server) handleImportZip(w http.ResponseWriter, r *http.Request) {
 
 	// Root parent: optional form value, else top level of the default workspace.
 	var rootParent *string
-	workspaceID := s.userDefaultWorkspace(u.ID)
+	workspaceID := s.defaultWorkspaceFor(u)
 	if pid := r.FormValue("parentId"); pid != "" {
 		if !s.canWriteReq(r, pid) {
 			httpError(w, 403, "forbidden")

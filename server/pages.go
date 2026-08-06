@@ -629,7 +629,7 @@ func (s *Server) handleReindexSiblings(w http.ResponseWriter, r *http.Request) {
 	} else {
 		wsFilter = strings.TrimSpace(body.WorkspaceID)
 		if wsFilter == "" {
-			wsFilter = s.userDefaultWorkspace(me.ID)
+			wsFilter = s.defaultWorkspaceFor(me)
 		}
 		if !s.isMember(me.ID, wsFilter) || !s.tokenReachesWorkspace(r, wsFilter) {
 			httpError(w, 404, "workspace not found")

@@ -453,7 +453,7 @@ func (s *Server) mcpSetTagColor(u *user, wsID, tag, color string) (string, error
 // permission is mandatory — read access is not enough to create.
 func (s *Server) mcpCreateWorkspaceTarget(u *user, wsID string) (string, error) {
 	if wsID == "" {
-		wsID = s.userDefaultWorkspace(u.ID)
+		wsID = s.defaultWorkspaceFor(u)
 		if wsID == "" {
 			return "", fmt.Errorf("no workspace available")
 		}

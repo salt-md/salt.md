@@ -295,7 +295,7 @@ func (s *Server) subtreeIDs(root string) map[string]bool {
 // tidy a customer file without walking the tree page by page.
 func (s *Server) mcpListFiles(u *user, wsID, under string) (string, error) {
 	if wsID == "" && under == "" {
-		wsID = s.userDefaultWorkspace(u.ID)
+		wsID = s.defaultWorkspaceFor(u)
 	}
 	if wsID != "" && (!s.isMember(u.ID, wsID) || !u.tokenCanReach(wsID)) {
 		return "", fmt.Errorf("workspace %q not found", wsID)
