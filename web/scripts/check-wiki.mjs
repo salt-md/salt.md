@@ -127,7 +127,9 @@ for (const [file, text] of pages) {
 // The name class is covered by a written rule instead — see README.md — and by
 // the fact that examples here have to be obviously invented.
 
-const ALLOWED_HOSTS = /^(example\.(com|org|net)|localhost|github\.com|raw\.githubusercontent\.com|ghcr\.io|your-instance)$/;
+// Subdomains of the documentation domains count too — `salt.example.com` is
+// exactly the invented example this rule wants people to use.
+const ALLOWED_HOSTS = /^(([a-z0-9-]+\.)*example\.(com|org|net)|localhost|github\.com|raw\.githubusercontent\.com|ghcr\.io|your-instance)$/;
 // Reserved for documentation (RFC 5737) plus the loopback address.
 // 169.254.169.254 is the cloud metadata endpoint — a well-known constant that
 // the webhook page names precisely because deliveries must never reach it. It
@@ -151,6 +153,40 @@ for (const [file, text] of pages) {
       errors.push(`${file}: links to ${host} — is that ours, or somebody's real instance?`);
     }
   }
+}
+
+// ---- 7: coverage, as a NOTE rather than a gate ----------------------------
+//
+// "Does the wiki cover the whole system?" is answerable, roughly: every family
+// of routes the server exposes should be findable somewhere in the wiki.
+//
+// Roughly, because the match is by word and documentation says "two-factor"
+// where a route says "2fa". A fuzzy rule must not fail a build — a check that
+// cries wolf gets switched off, and this one is worth keeping. So it reports.
+//
+// It answered a real question once: asked whether the wiki covered everything,
+// this printed thirteen unmentioned families in one second, of which three
+// (favourites, the audit log, the health endpoint) were genuinely missing.
+
+const SAID_DIFFERENTLY = {
+  '2fa': 'two-factor', 'comment-counts': 'comment', 'import-zip': 'archive',
+  library: 'blueprint', logout: 'sign', oauth: 'sign in with',
+  'reindex-siblings': 'rebuild', signup: 'register', 'signup-policy': 'register',
+  'tag-colors': 'colour', me: 'account', 'public-base': 'public base',
+  presence: 'working_on', ics: 'calendar', favorites: 'favourite',
+};
+const lower = all.toLowerCase();
+const families = [...new Set(
+  [...server.matchAll(/m\.HandleFunc\("(?:[A-Z]+ )?(\/api\/[^"{]*)/g)]
+    .map((m) => m[1].split('/')[2]).filter(Boolean),
+)].sort();
+const uncovered = families.filter((f) =>
+  !lower.includes(f) && !lower.includes(f.replace(/-/g, ' ')) &&
+  !lower.includes(SAID_DIFFERENTLY[f] ?? '\u0000'));
+if (uncovered.length) {
+  notes.push(`${uncovered.length} of ${families.length} route families are never mentioned: ${uncovered.join(', ')}`);
+} else {
+  notes.push(`all ${families.length} route families are mentioned somewhere`);
 }
 
 // ---- report ----------------------------------------------------------------

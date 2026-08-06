@@ -121,6 +121,21 @@ clean copy is possible.
 Skipping versions is fine. An instance can migrate across several releases in one
 start.
 
+## Monitoring
+
+```
+GET /api/health
+{"status":"ok","version":"v1.6.13"}
+```
+
+It **pings the database**, so it distinguishes a live-but-broken instance from a
+healthy one — a process that is up but cannot read its own data answers `503`
+with `{"status":"unavailable"}`. That is the difference between a useful probe
+and one that only proves a port is open.
+
+Point your orchestrator, your uptime monitor or your Docker health check at it.
+It needs no credential.
+
 ## Verifying an update landed
 
 Do not trust the version string; a mislabelled build reads exactly like a correct

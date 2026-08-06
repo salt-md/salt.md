@@ -24,6 +24,7 @@ mentioned must be a real route. Documentation that drifts fails the build.
 | building a database | [Collections](collections.md) → [Properties](properties.md) → [Views](views.md) |
 | an AI agent, or connecting one | [Agents](agents.md) |
 | running the server | [Self-hosting](self-hosting.md), [Administration](administration.md) |
+| setting up SSO, mail or a domain | [Single sign-on](sso.md), [Sending email](mail.md), [Reaching it from outside](domain.md) |
 
 ## Everything
 
@@ -37,6 +38,7 @@ mentioned must be a real route. Documentation that drifts fails the build.
 - [Views](views.md) — table, board, calendar, gallery, list, timeline, form
 - [Search](search.md) — what is indexed, and why German words find each other
 - [Files](files.md) — uploads, the file index, PDFs in search
+- [History and audit](history-and-audit.md) — four records, four questions
 
 **Working together**
 
@@ -51,8 +53,11 @@ mentioned must be a real route. Documentation that drifts fails the build.
 
 **Running it**
 
-- [Self-hosting](self-hosting.md) — install, update, environment, backup
-- [Administration](administration.md) — instance settings, users, mail, domain
+- [Self-hosting](self-hosting.md) — install, update, environment, backup, monitoring
+- [Administration](administration.md) — instance settings, users, signup policy
+- [Reaching it from outside](domain.md) — Cloudflare Tunnel, Caddy, your own proxy
+- [Single sign-on](sso.md) — Microsoft 365 and Google, and the one failure that wastes an afternoon
+- [Sending email](mail.md) — a connected account, or SMTP
 - [Troubleshooting](troubleshooting.md) — the traps, and what they look like
 
 ## What Salt.md is not

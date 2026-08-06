@@ -58,6 +58,17 @@ The `+` beside a page in the sidebar asks what to put inside: a **page** or a
 **collection**. Both work anywhere, including under a database row — a dossier
 under a deal is an ordinary thing to build.
 
+## Favourites
+
+The star in the topbar pins a page to the top of your sidebar. Favourites are
+**per person** — starring something does not put it on anybody else's sidebar —
+and they can be dragged into the order you want.
+
+Use them for the handful of pages you open every day. Everything else is faster
+to reach with `⌘K`.
+
+Over MCP: `update_page(favorite: true)`.
+
 ## Tags
 
 Lightweight labels, Obsidian-style. Up to 30 per page, 40 characters each,
