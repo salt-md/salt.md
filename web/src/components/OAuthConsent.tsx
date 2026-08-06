@@ -31,6 +31,9 @@ export default function OAuthConsent() {
   const method = params.get('code_challenge_method') ?? '';
   const state = params.get('state') ?? '';
   const resource = params.get('resource') ?? '';
+  // Already narrowed by the server, which hands this screen a single value.
+  // Parsing the space-separated list a second time here is how two parsers end
+  // up disagreeing about what was granted.
   const scope = params.get('scope') === 'write' ? 'write' : 'read';
 
   const [info, setInfo] = useState<RequestInfo | null>(null);

@@ -327,3 +327,57 @@ func TestRegistrationRefusesDangerousRedirects(t *testing.T) {
 		}
 	}
 }
+
+// The bug a real client found in minutes: `scope` is a SPACE-SEPARATED LIST
+// (RFC 6749 §3.3), and comparing the whole string against the two we know
+// rejected every connector that asks for more than one thing. Claude's sent
+// several tokens and got invalid_scope before the consent screen ever appeared.
+func TestScopeIsAListAndUnknownEntriesAreIgnored(t *testing.T) {
+	cases := map[string]string{
+		"":                     "read",
+		"read":                 "read",
+		"write":                "write",
+		"read write":           "write", // the case that was broken
+		"write read":           "write",
+		"mcp:read mcp:write":   "read",  // nothing we know → the weaker one
+		"offline_access write": "write", // unknown alongside known
+		"claudeai":             "read",
+		"  read   write  ":     "write", // ragged spacing is still a list
+	}
+	for in, want := range cases {
+		if got := effectiveScope(in); got != want {
+			t.Errorf("scope %q → %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A client asking for a scope we do not have must get LESS, never more, and
+// never an error page: a dead end here means the connector cannot be set up at
+// all, which is what happened.
+func TestAnUnknownScopeStillReachesTheConsentScreen(t *testing.T) {
+	s := testServer(t)
+	_, cookie := signedIn(t, s, "scope@example.test")
+	redirect := "https://claude.ai/cb"
+	client := oauthClientFixture(t, s, redirect)
+
+	r := httptest.NewRequest("GET", "/oauth/authorize?response_type=code&client_id="+client+
+		"&redirect_uri="+url.QueryEscape(redirect)+
+		"&code_challenge=abc&code_challenge_method=S256&scope="+url.QueryEscape("claudeai offline_access"), nil)
+	r.Header.Set("Cookie", cookie)
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, r)
+
+	loc := rec.Header().Get("Location")
+	if strings.Contains(loc, "error=") {
+		t.Fatalf("an unknown scope was refused instead of narrowed: %s", loc)
+	}
+	if !strings.HasPrefix(loc, "/oauth/consent?") {
+		t.Fatalf("did not reach the consent screen: %s", loc)
+	}
+	// And the screen is handed the NARROWED scope, so it shows what will really
+	// be granted rather than what was asked for.
+	q, _ := url.ParseQuery(strings.TrimPrefix(loc, "/oauth/consent?"))
+	if q.Get("scope") != "read" {
+		t.Errorf("the consent screen was handed scope %q", q.Get("scope"))
+	}
+}

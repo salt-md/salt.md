@@ -58,9 +58,29 @@ const (
 	oauthCodeLength = 32
 )
 
-// oauthScopes are the only two that exist, and they mirror an API token's:
-// this is the same permission model, reached a different way.
-var oauthScopes = map[string]bool{"read": true, "write": true}
+// The only two scopes that exist mirror an API token's: this is the same
+// permission model, reached a different way.
+//
+// effectiveScope reads what a client ASKED for and answers what it gets.
+//
+// `scope` is a SPACE-SEPARATED LIST (RFC 6749 §3.3), not one value. Comparing
+// the whole string against the two we know rejected every real client:
+// Claude's connector sends several tokens at once and got invalid_scope before
+// the consent screen ever appeared.
+//
+// Unknown tokens are IGNORED rather than refused, which the RFC explicitly
+// allows. A client asking for something we do not have should get less, not a
+// dead end — and less is the safe direction. Asking for nothing we recognise
+// therefore lands on "read", the weaker of the two, never on "write".
+func effectiveScope(requested string) string {
+	out := "read"
+	for _, tok := range strings.Fields(requested) {
+		if tok == "write" {
+			out = "write"
+		}
+	}
+	return out
+}
 
 func randomToken(n int) string {
 	b := make([]byte, n)
@@ -249,24 +269,27 @@ func (s *Server) handleOAuthAuthorize(w http.ResponseWriter, r *http.Request) {
 		fail("invalid_request", "code_challenge with code_challenge_method=S256 is required")
 		return
 	}
-	scope := q.Get("scope")
-	if scope == "" {
-		scope = "read"
-	}
-	if !oauthScopes[scope] {
-		fail("invalid_scope", "scope must be read or write")
-		return
-	}
+	// Normalised HERE and passed on, so the browser never has to take the list
+	// apart a second time — two parsers for one string is how they end up
+	// disagreeing.
+	forward := q
+	forward.Set("scope", effectiveScope(q.Get("scope")))
 
 	// Rule 5. A session, not a token. Unauthenticated: send them to sign in and
 	// come back to exactly this request.
-	u := requestUser(r)
+	//
+	// s.currentUser, NOT requestUser: this route deliberately hangs outside the
+	// auth middleware (a client arrives here unauthenticated by design), and
+	// requestUser only reads what that middleware put in the context — so it
+	// was nil even for somebody signed in, and everybody got bounced to the
+	// login screen they did not need.
+	u := s.currentUser(r)
 	if u == nil || u.TokenScope != "" {
-		to := "/oauth/consent?" + r.URL.RawQuery
+		to := "/oauth/consent?" + forward.Encode()
 		http.Redirect(w, r, "/login?next="+url.QueryEscape(to), http.StatusFound)
 		return
 	}
-	http.Redirect(w, r, "/oauth/consent?"+r.URL.RawQuery, http.StatusFound)
+	http.Redirect(w, r, "/oauth/consent?"+forward.Encode(), http.StatusFound)
 }
 
 // handleOAuthApprove is the consent screen's answer: the human said yes, to
@@ -295,9 +318,7 @@ func (s *Server) handleOAuthApprove(w http.ResponseWriter, r *http.Request) {
 		httpErrorCode(w, 400, "pkce_required", "code_challenge with S256 is required")
 		return
 	}
-	if !oauthScopes[body.Scope] {
-		body.Scope = "read"
-	}
+	body.Scope = effectiveScope(body.Scope)
 	// Only workspaces this person is actually in. The consent screen shows their
 	// own list, but the answer comes from a browser and is therefore editable —
 	// so it is checked here rather than trusted.
