@@ -323,7 +323,11 @@ button {
   position: relative;
 }
 
-.tree-item:hover .tree-actions {
+.tree-item:hover .tree-actions,
+/* An OPEN menu keeps its row's buttons on screen. Without this the menu lives
+   inside an element that is display:none the moment the pointer drifts off the
+   row — so it disappears mid-reach, while the state still says it is open. */
+.tree-actions:has(.menu) {
   display: inline-flex;
 }
 
@@ -372,6 +376,23 @@ button {
 
 .menu button.danger {
   color: var(--danger);
+}
+
+/* An entry that cannot fire right now — the first view has no "move left".
+   Greyed rather than hidden, so the pair keeps its place instead of the menu
+   changing height as you shuffle a view along. */
+.menu button:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+  cursor: default;
+}
+.menu button:disabled:hover {
+  background: none;
+}
+
+/* Two short words do not need a menu as wide as "Remove from favorites". */
+.add-menu {
+  min-width: 132px;
 }
 
 /* Overflow ("…") menu: secondary page actions grouped out of the topbar. */

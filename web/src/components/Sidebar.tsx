@@ -98,6 +98,10 @@ interface TreeCtx {
   // The capabilities were always there (onCreate takes a type, onMove takes a
   // null parent) — nothing offered them.
   onCreateChildDb: (id: string) => void;
+  // Which item's ＋ menu is open. Its own state rather than a flag on menuFor:
+  // both can be anchored to the same row and only one may ever be open.
+  addFor: string | null;
+  setAddFor: (id: string | null) => void;
   onMoveToTop: (id: string) => void;
   onShowFiles: (id: string, title: string) => void;
   setMenuFor: (id: string | null) => void;
@@ -210,20 +214,7 @@ function DbRows({
                   ＋ until now, so a page filed under a database could not be
                   duplicated, exported or thrown away from here at all — you had
                   to open it first and hope its own menu had what you wanted. */}
-              <span className="tree-actions" onClick={(e) => e.stopPropagation()}>
-                <button title={t('Add sub-page')} onClick={() => ctx.onCreateChild(r.id)}>
-                  +
-                </button>
-                <button
-                  title={t('More')}
-                  onClick={() => ctx.setMenuFor(ctx.menuFor === r.id ? null : r.id)}
-                >
-                  <MoreHorizontal size={13} />
-                </button>
-                {ctx.menuFor === r.id && (
-                  <PageMenu id={r.id} title={r.title} parentId={collectionId} workspaceId={workspaceId} ctx={ctx} />
-                )}
-              </span>
+              <RowActions id={r.id} title={r.title} parentId={collectionId} workspaceId={workspaceId} ctx={ctx} />
             </div>
             {isOpen && kids.map((k) => <TreeItem key={k.id} p={k} depth={depth + 1} ctx={ctx} section="dbs" />)}
           </div>
@@ -346,6 +337,82 @@ function FlatRow({
 // The row menu, as its own component because a database ROW needs exactly the
 // same one. Two copies would be two answers to "what can you do with a page",
 // and the row's copy would be the one that quietly falls behind.
+function RowActions({
+  id,
+  title,
+  parentId,
+  workspaceId,
+  ctx,
+}: {
+  id: string;
+  title: string;
+  parentId: string;
+  workspaceId?: string;
+  ctx: TreeCtx;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useMenuDismiss(ctx.menuFor === id, ref, () => ctx.setMenuFor(null));
+  useMenuDismiss(ctx.addFor === id, ref, () => ctx.setAddFor(null));
+  return (
+    <span className="tree-actions" onClick={(e) => e.stopPropagation()} ref={ref}>
+      <button
+        title={t('Add inside')}
+        onClick={() => {
+          ctx.setMenuFor(null);
+          ctx.setAddFor(ctx.addFor === id ? null : id);
+        }}
+      >
+        +
+      </button>
+      {ctx.addFor === id && <AddMenu id={id} ctx={ctx} />}
+      <button
+        title={t('More')}
+        onClick={() => {
+          ctx.setAddFor(null);
+          ctx.setMenuFor(ctx.menuFor === id ? null : id);
+        }}
+      >
+        <MoreHorizontal size={13} />
+      </button>
+      {ctx.menuFor === id && (
+        <PageMenu id={id} title={title} parentId={parentId} workspaceId={workspaceId} ctx={ctx} />
+      )}
+    </span>
+  );
+}
+
+// What the ＋ on a tree item or a database row offers.
+//
+// It used to create a document, silently, and the choice existed only in the ⋯
+// beside it — so "how do I put a database under this?" had an answer nobody
+// found. Now the ＋ asks, with the same two options the menu has.
+//
+// The section headers keep their direct ＋: under "Documents" and "Collections"
+// the section IS the answer, and asking there would be a question with one
+// sensible reply. Only where the type is genuinely open does it get asked.
+function AddMenu({ id, ctx }: { id: string; ctx: TreeCtx }) {
+  return (
+    <div className="menu add-menu">
+      <button
+        onClick={() => {
+          ctx.setAddFor(null);
+          ctx.onCreateChild(id);
+        }}
+      >
+        <FileText size={16} /> {t('Page')}
+      </button>
+      <button
+        onClick={() => {
+          ctx.setAddFor(null);
+          ctx.onCreateChildDb(id);
+        }}
+      >
+        <Table2 size={16} /> {t('Collection')}
+      </button>
+    </div>
+  );
+}
+
 function PageMenu({
   id,
   title,
@@ -499,6 +566,7 @@ function TreeItem({
   // Row context menu (⋯): close on outside click / Escape, not just mouse-leave.
   const actionsRef = useRef<HTMLSpanElement>(null);
   useMenuDismiss(ctx.menuFor === p.id, actionsRef, () => ctx.setMenuFor(null));
+  useMenuDismiss(ctx.addFor === p.id, actionsRef, () => ctx.setAddFor(null));
   return (
     <div>
       <div
@@ -540,12 +608,22 @@ function TreeItem({
         <span className="tree-icon"><PageIcon icon={p.icon} size={15} fallback={p.type === 'collection' ? <Table2 size={15} /> : <FileText size={15} />} /></span>
         <span className="tree-title">{p.title || 'Untitled'}</span>
         <span className="tree-actions" onClick={(e) => e.stopPropagation()} ref={actionsRef}>
-          <button title={t('Add sub-page')} onClick={() => ctx.onCreateChild(p.id)}>
+          <button
+            title={t('Add inside')}
+            onClick={() => {
+              ctx.setMenuFor(null);
+              ctx.setAddFor(ctx.addFor === p.id ? null : p.id);
+            }}
+          >
             +
           </button>
+          {ctx.addFor === p.id && <AddMenu id={p.id} ctx={ctx} />}
           <button
             title={t('More')}
-            onClick={() => ctx.setMenuFor(ctx.menuFor === p.id ? null : p.id)}
+            onClick={() => {
+              ctx.setAddFor(null);
+              ctx.setMenuFor(ctx.menuFor === p.id ? null : p.id);
+            }}
           >
             ⋯
           </button>
@@ -604,6 +682,7 @@ export default function Sidebar({
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
   const [trashOpen, setTrashOpen] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [addFor, setAddFor] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const dragId = useRef<string | null>(null);
   const favSet = useMemo(() => new Set(favorites), [favorites]);
@@ -772,6 +851,7 @@ export default function Sidebar({
     favorites: favSet,
     dropTarget,
     menuFor,
+    addFor,
     onNavigate,
     toggleExpand,
     onCreateChild: (id) => {
@@ -788,6 +868,7 @@ export default function Sidebar({
     },
     onShowFiles: (id, title) => setFilesFor({ under: id, title }),
     setMenuFor,
+    setAddFor,
     onTrash,
     onDuplicate,
     onToggleFavorite,

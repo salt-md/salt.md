@@ -5,7 +5,7 @@ import { useBoardDrag } from '../boardDrag';
 import { tagColorClass } from '../tags';
 import { compare, firstWeekday, formatMonth, toDayString, weekdayNames } from '../format';
 import { t } from '../i18n';
-import { promptText } from '../dialog';
+import { confirm, promptText } from '../dialog';
 import type {
   CollectionConfig,
   Filter,
@@ -61,6 +61,9 @@ import {
   MoreHorizontal,
   Pencil,
   Trash2,
+  SquareArrowOutUpRight,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
 
 // Small type glyph shown next to each property (Notion-style visibility panel).
@@ -347,6 +350,27 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
 
   // Setting the group property from a drag/preset respects the property type:
   // a multi-select stores an array, a select stores a scalar.
+  // Throwing a row away from the board. Asked for by name, because a card
+  // carries no undo affordance of its own and the trash is not visible from
+  // here — unlike the sidebar, where you can at least see what vanished.
+  //
+  // Nothing is destroyed: set_trashed is reversible, and the row list refreshes
+  // from the rows event the server sends, so a second screen loses the card too.
+  const trashRow = async (id: string, title: string) => {
+    const ok = await confirm(
+      t('Move “{title}” to the trash?', { title: title || t('Untitled') }),
+      { confirmText: t('Move to trash'), danger: true },
+    );
+    if (!ok) return;
+    try {
+      await api.trashPage(id);
+      await loadRows();
+      onPagesChanged();
+    } catch (e) {
+      toast((e as Error).message || t('Could not be moved to the trash'));
+    }
+  };
+
   const setGroupValue = async (rowId: string, propId: string, optId: string) => {
     const prop = schema.find((p) => p.id === propId);
     if (prop?.type === 'multiselect' || prop?.type === 'relation') {
@@ -386,6 +410,23 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
     const rest = config.views.filter((x) => x.id !== v.id);
     void saveConfig({ ...config, views: rest });
     if (v.id === viewId) setViewId(rest[0].id);
+  };
+
+  // Moving a view along the strip. The ＋ appends and nothing ever moved, so
+  // the order a collection ended up with was the order its views happened to be
+  // created in — and the one people look at most sat last.
+  //
+  // Two buttons rather than dragging: a tab strip is a short list, dragging it
+  // needs a drop cursor and a touch fallback, and the ⋯ that holds these is
+  // already the place the view is renamed and removed. Grey out at the ends
+  // instead of hiding, so the pair does not jump around as you shuffle.
+  const moveView = (v: ViewDef, delta: -1 | 1) => {
+    const at = config.views.findIndex((x) => x.id === v.id);
+    const to = at + delta;
+    if (at < 0 || to < 0 || to >= config.views.length) return;
+    const next = [...config.views];
+    [next[at], next[to]] = [next[to], next[at]];
+    void saveConfig({ ...config, views: next });
   };
 
   const addView = (type: ViewDef['type']) => {
@@ -555,6 +596,22 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
                   <Pencil size={15} /> {t('Rename view')}
                 </button>
                 {config.views.length > 1 && (
+                  <>
+                    <button
+                      disabled={config.views[0]?.id === view.id}
+                      onClick={() => moveView(view, -1)}
+                    >
+                      <ArrowLeft size={15} /> {t('Move left')}
+                    </button>
+                    <button
+                      disabled={config.views[config.views.length - 1]?.id === view.id}
+                      onClick={() => moveView(view, 1)}
+                    >
+                      <ArrowRight size={15} /> {t('Move right')}
+                    </button>
+                  </>
+                )}
+                {config.views.length > 1 && (
                   <button className="danger" onClick={() => removeView(view)}>
                     <Trash2 size={15} /> {t('Remove view')}
                   </button>
@@ -596,6 +653,7 @@ export default function CollectionView({ collectionId, pages, tagColors, onNavig
           onDrop={(rowId, groupBy, optId) => {
             void setGroupValue(rowId, groupBy, optId);
           }}
+          onTrashRow={trashRow}
           onAddInColumn={(groupBy, optId) =>
             void addRow(optId === UNSET ? {} : { [groupBy]: groupValueFor(schema, groupBy, optId) })
           }
@@ -1316,6 +1374,7 @@ function BoardView({
   onSetProp,
   onSetOptions,
   onDrop,
+  onTrashRow,
   onAddInColumn,
 }: {
   rows: Row[];
@@ -1327,6 +1386,7 @@ function BoardView({
   onSetProp: (rowId: string, propId: string, value: unknown) => void;
   onSetOptions: (propId: string, options: PropOption[]) => void;
   onDrop: (rowId: string, groupBy: string, optId: string) => void;
+  onTrashRow: (id: string, title: string) => Promise<void>;
   onAddInColumn: (groupBy: string, optId: string) => void;
 }) {
   // Keyed by "columnId:rowId" so a card that appears in multiple columns
@@ -1468,12 +1528,16 @@ function BoardView({
                         })}
                     />
                   </div>
-                  {/* Touch devices can't HTML5-drag: a move menu is the
-                      accessible way to change a card's column. */}
+                  {/* On a board the CARD is the object you have in front of
+                      you, and for a long time the only thing this could do was
+                      send it to another column — you could not open it from
+                      here and you certainly could not throw it away. Touch
+                      devices also cannot HTML5-drag, so the column list has to
+                      stay whatever else joins it. */}
                   <div className="card-move" onClick={(e) => e.stopPropagation()}>
                     <button
                       className="card-move-btn"
-                      title={t('Move to…')}
+                      title={t('More')}
                       onClick={() =>
                         setMoveMenu(moveMenu === `${col.id}:${r.id}` ? null : `${col.id}:${r.id}`)
                       }
@@ -1482,6 +1546,17 @@ function BoardView({
                     </button>
                     {moveMenu === `${col.id}:${r.id}` && (
                       <div className="menu card-move-menu">
+                        <button
+                          onClick={() => {
+                            setMoveMenu(null);
+                            onNavigate(r.id);
+                          }}
+                        >
+                          <SquareArrowOutUpRight size={15} /> {t('Open')}
+                        </button>
+                        {columns.filter((c) => !rowsFor(c.id).some((x) => x.id === r.id)).length > 0 && (
+                          <div className="menu-label">{t('Move to')}</div>
+                        )}
                         {columns
                           .filter((c) => !rowsFor(c.id).some((x) => x.id === r.id))
                           .map((c) => (
@@ -1495,6 +1570,15 @@ function BoardView({
                               <CornerUpRight size={15} /> {c.name}
                             </button>
                           ))}
+                        <button
+                          className="danger"
+                          onClick={() => {
+                            setMoveMenu(null);
+                            void onTrashRow(r.id, r.title);
+                          }}
+                        >
+                          <Trash2 size={15} /> {t('Move to trash')}
+                        </button>
                       </div>
                     )}
                   </div>
