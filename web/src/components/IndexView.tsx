@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { toast } from '../toast';
-import type { PageMeta } from '../types';
+import type { PageMeta, Workspace } from '../types';
 import { PageIcon } from '../pageIcon';
 import { compare, formatMoment } from '../format';
 import { plural, t } from '../i18n';
@@ -54,11 +54,15 @@ function recentIDs(): string[] {
 export default function IndexView({
   pages,
   favorites,
+  workspaces,
+  currentWs,
   onNavigate,
   onClose,
 }: {
   pages: PageMeta[];
   favorites: string[];
+  workspaces: Workspace[];
+  currentWs: string;
   onNavigate: (id: string) => void;
   onClose: () => void;
 }) {
@@ -70,6 +74,15 @@ export default function IndexView({
   // where it is empty and the library would greet you with nothing at all.
   const [mode, setMode] = useState<Mode>(recents.length ? 'recent' : 'all');
   const [people, setPeople] = useState<Map<string, string>>(new Map());
+  // Which workspace this shelf shows. It opens on the one you are working in,
+  // because that is what "my pages" means to somebody who has seven of them —
+  // and the sidebar has always been scoped that way, so a library showing
+  // everything was the odd one out. Everything is one pick away.
+  //
+  // Deliberately not remembered: it is a view filter like the sort order beside
+  // it, and a remembered filter is the thing people forget they set and then
+  // report as "half my pages are gone".
+  const [wsFilter, setWsFilter] = useState<string>(currentWs);
   const [spaces, setSpaces] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
@@ -101,7 +114,13 @@ export default function IndexView({
     return { outCount: out, inCount: inc };
   }, [edges]);
 
-  const live = useMemo(() => pages.filter((p) => !p.trashed), [pages]);
+  // One list feeds the shelves, the tab counts AND the graph, so the filter is
+  // applied once here rather than at each of the three — that is what keeps a
+  // count from disagreeing with what is under it.
+  const live = useMemo(
+    () => pages.filter((p) => !p.trashed && (!wsFilter || p.workspaceId === wsFilter)),
+    [pages, wsFilter],
+  );
 
   const rows = useMemo(() => {
     const q = query.toLowerCase();
@@ -248,6 +267,23 @@ export default function IndexView({
             </button>
           ))}
         </div>
+        {/* Only when there is a choice to make. One workspace and this is a
+            dropdown with a single entry, which is furniture. */}
+        {workspaces.length > 1 && (
+          <select
+            className="prop-select index-ws"
+            value={wsFilter}
+            onChange={(e) => setWsFilter(e.target.value)}
+            aria-label={t('Workspace')}
+          >
+            <option value="">{t('All workspaces')}</option>
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </select>
+        )}
         <input
           className="prop-input index-search"
           placeholder={t('Filter pages…')}

@@ -9084,3 +9084,10 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
     display: none;
   }
 }
+
+/* The workspace picker in the library. Capped, because a workspace called
+   "Dokumentation und Betrieb Rheinland" would otherwise push the search box off
+   a narrow screen — and the search box is the one people reach for. */
+.index-ws {
+  max-width: 190px;
+}

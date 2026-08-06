@@ -895,6 +895,8 @@ export default function App() {
           <IndexView
             pages={pages}
             favorites={favorites}
+            workspaces={workspaces}
+            currentWs={currentWs}
             onNavigate={(id) => {
               setIndexOpen(false);
               navigate(id);

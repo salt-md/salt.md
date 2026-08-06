@@ -387,7 +387,14 @@ func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
 		httpError(w, 404, "workspace not found")
 		return
 	}
-	docs := s.buildSkill(u, s.publicBase(r), ws)
+	// publicShareBase, not publicBase: this address is written into a repository
+	// and an agent will dial it from somewhere else entirely. The weaker
+	// resolver falls back to the Host header, so downloading the skill from
+	// http://192.168.1.50 would put THAT into the file — correct for the person
+	// standing on that network, useless for a cloud agent. This one knows the
+	// configured domain and the tunnel, and it is the same resolver the
+	// "Connect an agent" dialog shows, so the two can never disagree.
+	docs := s.buildSkill(u, s.publicShareBase(r), ws)
 
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", `attachment; filename="salt-md-skill.zip"`)
