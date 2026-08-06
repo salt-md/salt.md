@@ -70,8 +70,20 @@ func (s *Server) mcpWhoami(u *user) (string, error) {
 	return string(b), nil
 }
 
-// mcpListWorkspaces: which workspaces this token sees, and in which role. The
-// workspace used to hang off the token implicitly and was invisible.
+// mcpListWorkspaces: which workspaces this connection sees, and in which role.
+// The workspace used to hang off the token implicitly and was invisible.
+//
+// A NARROWED connection sees only what it was granted. This listed everything
+// and merely flagged each entry with in_token_scope — defensible while the
+// scope was a convenience, wrong the moment it is a boundary. It handed an
+// agent the name, the id and the role of every workspace on the account:
+// "Privat", "Sales", a customer's name. Names alone are information, and an
+// agent that was deliberately given ONE workspace should not come away with a
+// directory of the rest.
+//
+// What it still gets is a COUNT of what it was not given. That keeps the one
+// useful thing — "there is more here, ask to be added" — without naming any of
+// it. A count answers the question; a list answers a different one nobody asked.
 func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 	rows, err := s.db.Query(`SELECT w.id, w.name, m.role, w.rules != '' FROM workspaces w
 		JOIN workspace_members m ON m.workspace_id = w.id
@@ -90,17 +102,28 @@ func (s *Server) mcpListWorkspaces(u *user) (string, error) {
 		HasRules bool `json:"has_rules"`
 	}
 	out := []ws{}
+	withheld := 0
 	for rows.Next() {
 		var w ws
 		if err := rows.Scan(&w.ID, &w.Name, &w.Role, &w.HasRules); err != nil {
 			rows.Close()
 			return "", err
 		}
-		w.InScope = u.tokenCanReach(w.ID)
+		if !u.tokenCanReach(w.ID) {
+			withheld++
+			continue
+		}
+		w.InScope = true
 		out = append(out, w)
 	}
 	rows.Close()
-	b, err := json.Marshal(map[string]any{"workspaces": out})
+	res := map[string]any{"workspaces": out}
+	if withheld > 0 {
+		res["not_granted"] = withheld
+		res["note"] = "Further workspaces exist on this account that this connection was not granted. " +
+			"Their names are deliberately not listed. Ask the account holder to add one if you need it."
+	}
+	b, err := json.Marshal(res)
 	if err != nil {
 		return "", err
 	}

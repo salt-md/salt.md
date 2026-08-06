@@ -560,3 +560,75 @@ func TestTheDefaultWorkspaceIsOneTheCallerCanReach(t *testing.T) {
 		t.Errorf("the refusal reads like a missing workspace: %v", err)
 	}
 }
+
+// He spotted it from the outside: the agent could NAME every workspace on the
+// account and only failed when it tried to open one. "Privat", "Sales", a
+// customer's name — a list like that is information in itself, and an agent
+// deliberately given ONE workspace should not come away with a directory of the
+// rest. Every other enumeration in the MCP surface already scoped itself; this
+// one flagged instead of filtering.
+func TestANarrowedConnectionCannotEnumerateTheOtherWorkspaces(t *testing.T) {
+	s := testServer(t)
+	uid, cookie := signedIn(t, s, "leak@example.test")
+	granted := s.firstWorkspaceOf(t, uid)
+
+	secret := makeNamedWorkspace(t, s, uid, "Privat")
+	client2 := makeNamedWorkspace(t, s, uid, "Northwind")
+
+	redirect := "https://claude.ai/cb"
+	client := oauthClientFixture(t, s, redirect)
+	code := approve(t, s, cookie, client, redirect, pkce("v"), "write", []string{granted})
+	_, out := tokenCall(s, url.Values{
+		"grant_type": {"authorization_code"}, "code": {code},
+		"client_id": {client}, "redirect_uri": {redirect}, "code_verifier": {"v"},
+	})
+	agent := s.userForAccessToken(out["access_token"].(string), "1.2.3.4")
+
+	listed, err := s.mcpListWorkspaces(agent)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	for _, leaked := range []string{"Privat", "Northwind", secret, client2} {
+		if strings.Contains(listed, leaked) {
+			t.Errorf("a workspace outside the grant leaked into the list: %q\n%s", leaked, listed)
+		}
+	}
+	if !strings.Contains(listed, granted) {
+		t.Error("the granted workspace is missing from its own list")
+	}
+	// The useful half survives: it learns THAT there is more, without learning
+	// what. A count answers the question; a list answers one nobody asked.
+	if !strings.Contains(listed, "not_granted") {
+		t.Error("no hint that anything was withheld — the agent cannot know to ask")
+	}
+
+	// An UNRESTRICTED connection still sees everything: this must not turn into
+	// a blanket ban on knowing your own workspaces.
+	full := &user{ID: uid, Name: "Jeremia"}
+	all, err := s.mcpListWorkspaces(full)
+	if err != nil {
+		t.Fatalf("list (unrestricted): %v", err)
+	}
+	for _, want := range []string{"Privat", "Northwind"} {
+		if !strings.Contains(all, want) {
+			t.Errorf("an unrestricted connection lost sight of %q", want)
+		}
+	}
+	if strings.Contains(all, "not_granted") {
+		t.Error("an unrestricted connection was told something was withheld")
+	}
+}
+
+// makeNamedWorkspace is makeWorkspace with a name worth recognising in a leak.
+func makeNamedWorkspace(t *testing.T, s *Server, uid, name string) string {
+	t.Helper()
+	id := newID()
+	if _, err := s.db.Exec(`INSERT INTO workspaces (id, name, created_at, owner_id) VALUES (?, ?, ?, ?)`,
+		id, name, now(), uid); err != nil {
+		t.Fatalf("workspace %s: %v", name, err)
+	}
+	if _, err := s.db.Exec(`INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'admin')`, id, uid); err != nil {
+		t.Fatalf("member: %v", err)
+	}
+	return id
+}
