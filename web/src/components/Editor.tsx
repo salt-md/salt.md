@@ -38,7 +38,7 @@ import { usePeers, setPeers, clearPeers } from '../presence';
 import { tagColorClass, TAG_PALETTE } from '../tags';
 import { collectTags, suggestTags } from '../tagSuggest';
 import { useMenuDismiss } from '../modal';
-import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, MessageSquareOff, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2, Trash2, FilePlus2 } from 'lucide-react';
+import { Menu, Star, Lock, LockOpen, Globe, MessageSquare, History, MoreHorizontal, Printer, FileCode, FileText, Upload, AlignLeft, Check, Image as ImageIcon , Smile, PanelRight, Link2, Trash2, FilePlus2 } from 'lucide-react';
 import { blockTypeFor, carriesExternalFiles } from '../dropFiles';
 
 export interface EditorProps {
@@ -714,12 +714,16 @@ function PageHeader({
               {peers.length > 3 && <span className="presence-dot more">+{peers.length - 3}</span>}
             </div>
           )}
+          {/* One icon, marked active when the panel is open — the same shape
+              the structure button has. The struck-through variant read as
+              "comments are off" rather than "the panel is closed", which is a
+              different and alarming thing to say about a page. */}
           <button
-            className={'icon-btn topbar-wide-only' + (commentsOpen ? ' active' : '')}
+            className={'icon-btn topbar-wide-only' + (commentsOpen ? ' active-star' : '')}
             title={commentsOpen ? t('Hide comments') : t('Show comments')}
             onClick={() => onToggleComments(!commentsOpen)}
           >
-            {commentsOpen ? <MessageSquare size={17} /> : <MessageSquareOff size={17} />}
+            <MessageSquare size={17} />
             {openComments > 0 && <span className="badge-count">{openComments}</span>}
           </button>
           <button
@@ -858,7 +862,7 @@ function PageHeader({
                     onToggleComments(!commentsOpen);
                   }}
                 >
-                  {commentsOpen ? <MessageSquare size={15} /> : <MessageSquareOff size={15} />}{' '}
+                  <MessageSquare size={15} />{' '}
                   {commentsOpen ? t('Hide comments') : t('Show comments')}
                 </button>
                 <button

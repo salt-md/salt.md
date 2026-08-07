@@ -15,11 +15,12 @@
   --doc-pad: 56px;
   /* Width of the structure panel. Read by the panel AND by the padding that
      makes room for it, so the two can never drift apart. */
-  --structure-w: 248px;
-  /* Comments need more room than a tree of page titles: they are prose, and at
-     248px a normal sentence broke over four lines. Its own variable so the two
-     panels can differ without either being sized for the other. */
-  --comments-w: 340px;
+  /* The right-hand panels — structure and comments — share one width, one
+     header and one type scale. They sit in the same strip and only one is ever
+     open, so two sizes read as an inconsistency rather than as a distinction.
+     340 comes from the comments: at 248 a normal sentence broke over four
+     lines, and a tree of page titles is perfectly happy wider. */
+  --panel-w: 340px;
   --bg: #ffffff;
   --fg: #37352f;
   --muted: #787774;
@@ -1184,13 +1185,12 @@ button {
   top: var(--topbar-h);
   right: 0;
   bottom: 0;
-  width: var(--structure-w);
+  width: var(--panel-w);
   box-sizing: border-box;
   border-left: 1px solid var(--border);
   background: var(--bg);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 10px 10px 24px;
+  display: flex;
+  flex-direction: column;
   /* Above the sticky cover (6) and the sticky icon row (7). It used to be 5,
      and on a phone that showed: the panel floats over the page there, but the
      cover is painted over the panel, so the panel appeared to START below the
@@ -1202,21 +1202,31 @@ button {
 /* The document keeps its own centring and simply gets a narrower stage, so
    opening the panel shifts the text instead of covering it. */
 .editor-page.with-structure .page-body {
-  padding-right: var(--structure-w);
-}
-/* The two panels are different widths, so the document has to give way by the
-   right one — otherwise the wider panel lies over the text it is about. */
-.editor-page.with-structure:has(.comments-panel) .page-body {
-  padding-right: var(--comments-w);
+  padding-right: var(--panel-w);
 }
 
+/* Same header as the comments panel, down to the padding: a title in the
+   page's own colour with a close button, not a muted caption. Two panels in one
+   strip should look like two views of one thing. */
 .structure-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  color: var(--muted);
-  padding: 0 4px 8px;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  padding: 12px 12px 10px 16px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.structure-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 10px 10px 24px;
 }
 
 .structure-section + .structure-section {
@@ -1226,7 +1236,7 @@ button {
 }
 
 .structure-label {
-  font-size: 11px;
+  font-size: 11.5px;
   color: var(--muted);
   padding: 0 4px 4px;
 }
@@ -1243,7 +1253,7 @@ button {
 
 .structure-above .structure-item {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .structure-above .structure-item:hover {
@@ -1298,7 +1308,7 @@ button {
   cursor: pointer;
   text-align: left;
   font: inherit;
-  font-size: 13px;
+  font-size: 13.5px;
   color: var(--fg);
   padding: 4px 6px 4px 8px;
   border-radius: 6px;
@@ -7173,7 +7183,7 @@ a,
   top: var(--topbar-h);
   right: 0;
   bottom: 0;
-  width: var(--comments-w);
+  width: var(--panel-w);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;

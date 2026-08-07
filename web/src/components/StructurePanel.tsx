@@ -147,120 +147,126 @@ export default function StructurePanel({
         </button>
       </div>
 
-      {/* Where this page sits, before what sits under it. Shown only when
-          there is somewhere to go: on a top-level page the section would be an
-          empty box saying nothing. */}
-      {above.length > 0 && (
-        <div className="structure-section structure-above">
-          {above.map((p, i) => (
-            <button
-              key={p.id}
-              className="structure-item"
-              style={{ paddingLeft: 8 + i * 10 }}
-              onClick={() => onNavigate(p.id)}
-              title={p.title || t('Untitled')}
-            >
-              <span className="structure-icon">
-                <PageIcon
-                  icon={p.icon}
-                  size={14}
-                  fallback={p.type === 'collection' ? <Table2 size={14} /> : <FileText size={14} />}
-                />
-              </span>
-              <span className="structure-text">{p.title || t('Untitled')}</span>
-            </button>
-          ))}
-          {/* The current page closes the chain, so the panel shows a position
-              and not just a list of strangers. Not a button: you are here. */}
-          <div className="structure-item structure-here" style={{ paddingLeft: 8 + above.length * 10 }}>
-            <span className="structure-icon">
-              <CornerDownRight size={13} />
-            </span>
-            <span className="structure-text">{t('This page')}</span>
-          </div>
-        </div>
-      )}
+      {/* The head holds still and only this scrolls — the same shape as the
+          comments panel, which is the other thing that can stand here. */}
+      <div className="structure-scroll">
 
-      {/* A database's rows ARE its sub-pages, but they live in the table and
-          are deliberately kept out of the page tree. Showing an empty
-          "0 sub-pages" next to a table full of rows would read as a bug, so
-          the section stays out entirely — the files below still count. */}
-      {!isCollection && (
-        <Section label={t('Sub-pages')} count={pages.length}>
-          {pages.length === 0 && <div className="structure-empty">{t('No sub-pages')}</div>}
-          {pages.map(({ page, depth }) => (
-            <button
-              key={page.id}
-              className="structure-item"
-              style={{ paddingLeft: 8 + Math.min(depth, 4) * 14 }}
-              onClick={() => onNavigate(page.id)}
-              title={page.title || t('Untitled')}
-            >
-              {/* Depth reads as a turn, not as blank space: indentation alone
-                  is ambiguous once a title wraps or a list gets long. */}
-              <span className="structure-icon">
-                {depth > 0 ? (
-                  <CornerDownRight size={13} />
-                ) : (
+        {/* Where this page sits, before what sits under it. Shown only when
+            there is somewhere to go: on a top-level page the section would be an
+            empty box saying nothing. */}
+        {above.length > 0 && (
+          <div className="structure-section structure-above">
+            {above.map((p, i) => (
+              <button
+                key={p.id}
+                className="structure-item"
+                style={{ paddingLeft: 8 + i * 10 }}
+                onClick={() => onNavigate(p.id)}
+                title={p.title || t('Untitled')}
+              >
+                <span className="structure-icon">
                   <PageIcon
-                    icon={page.icon}
+                    icon={p.icon}
                     size={14}
-                    fallback={page.type === 'collection' ? <Table2 size={14} /> : <FileText size={14} />}
+                    fallback={p.type === 'collection' ? <Table2 size={14} /> : <FileText size={14} />}
                   />
-                )}
+                </span>
+                <span className="structure-text">{p.title || t('Untitled')}</span>
+              </button>
+            ))}
+            {/* The current page closes the chain, so the panel shows a position
+                and not just a list of strangers. Not a button: you are here. */}
+            <div className="structure-item structure-here" style={{ paddingLeft: 8 + above.length * 10 }}>
+              <span className="structure-icon">
+                <CornerDownRight size={13} />
               </span>
-              <span className="structure-text">{page.title || t('Untitled')}</span>
+              <span className="structure-text">{t('This page')}</span>
+            </div>
+          </div>
+        )}
+
+        {/* A database's rows ARE its sub-pages, but they live in the table and
+            are deliberately kept out of the page tree. Showing an empty
+            "0 sub-pages" next to a table full of rows would read as a bug, so
+            the section stays out entirely — the files below still count. */}
+        {!isCollection && (
+          <Section label={t('Sub-pages')} count={pages.length}>
+            {pages.length === 0 && <div className="structure-empty">{t('No sub-pages')}</div>}
+            {pages.map(({ page, depth }) => (
+              <button
+                key={page.id}
+                className="structure-item"
+                style={{ paddingLeft: 8 + Math.min(depth, 4) * 14 }}
+                onClick={() => onNavigate(page.id)}
+                title={page.title || t('Untitled')}
+              >
+                {/* Depth reads as a turn, not as blank space: indentation alone
+                    is ambiguous once a title wraps or a list gets long. */}
+                <span className="structure-icon">
+                  {depth > 0 ? (
+                    <CornerDownRight size={13} />
+                  ) : (
+                    <PageIcon
+                      icon={page.icon}
+                      size={14}
+                      fallback={page.type === 'collection' ? <Table2 size={14} /> : <FileText size={14} />}
+                    />
+                  )}
+                </span>
+                <span className="structure-text">{page.title || t('Untitled')}</span>
+              </button>
+            ))}
+          </Section>
+        )}
+
+        <Section label={t('Files')} count={files.length}>
+          {files.length === 0 && <div className="structure-empty">{t('No files')}</div>}
+          {files.map((f) => {
+            const ext = f.ext.replace('.', '').toLowerCase();
+            return (
+              <button
+                key={f.name}
+                className="structure-item structure-file"
+                onClick={() => openFile(f)}
+                title={f.pageId === pageId ? f.displayName : `${f.displayName} — ${f.pageTitle}`}
+              >
+                <span className={'structure-icon structure-ext ' + (EXT_CLASS[ext] ?? '')}>
+                  {ext.slice(0, 4) || '?'}
+                </span>
+                <span className="structure-text">
+                  {f.displayName || f.name}
+                  {/* Two files can carry the same name and differ only in which
+                      sub-page they hang off — "real.pdf" twice over tells the
+                      reader nothing. The source page is named whenever it is not
+                      the document already on screen. */}
+                  {f.pageId !== pageId && f.pageTitle && (
+                    <span className="structure-from">{f.pageTitle}</span>
+                  )}
+                </span>
+                <span className="structure-size">{formatBytes(f.size)}</span>
+              </button>
+            );
+          })}
+        </Section>
+
+        <Section label={t('Linked from')} count={links.length}>
+          {links.length === 0 && <div className="structure-empty">{t('Nothing links here')}</div>}
+          {links.map((l) => (
+            <button
+              key={l.id}
+              className="structure-item"
+              onClick={() => onNavigate(l.id)}
+              title={l.title || t('Untitled')}
+            >
+              <span className="structure-icon">
+                <Link2 size={14} />
+              </span>
+              <span className="structure-text">{l.title || t('Untitled')}</span>
             </button>
           ))}
         </Section>
-      )}
 
-      <Section label={t('Files')} count={files.length}>
-        {files.length === 0 && <div className="structure-empty">{t('No files')}</div>}
-        {files.map((f) => {
-          const ext = f.ext.replace('.', '').toLowerCase();
-          return (
-            <button
-              key={f.name}
-              className="structure-item structure-file"
-              onClick={() => openFile(f)}
-              title={f.pageId === pageId ? f.displayName : `${f.displayName} — ${f.pageTitle}`}
-            >
-              <span className={'structure-icon structure-ext ' + (EXT_CLASS[ext] ?? '')}>
-                {ext.slice(0, 4) || '?'}
-              </span>
-              <span className="structure-text">
-                {f.displayName || f.name}
-                {/* Two files can carry the same name and differ only in which
-                    sub-page they hang off — "real.pdf" twice over tells the
-                    reader nothing. The source page is named whenever it is not
-                    the document already on screen. */}
-                {f.pageId !== pageId && f.pageTitle && (
-                  <span className="structure-from">{f.pageTitle}</span>
-                )}
-              </span>
-              <span className="structure-size">{formatBytes(f.size)}</span>
-            </button>
-          );
-        })}
-      </Section>
-
-      <Section label={t('Linked from')} count={links.length}>
-        {links.length === 0 && <div className="structure-empty">{t('Nothing links here')}</div>}
-        {links.map((l) => (
-          <button
-            key={l.id}
-            className="structure-item"
-            onClick={() => onNavigate(l.id)}
-            title={l.title || t('Untitled')}
-          >
-            <span className="structure-icon">
-              <Link2 size={14} />
-            </span>
-            <span className="structure-text">{l.title || t('Untitled')}</span>
-          </button>
-        ))}
-      </Section>
+      </div>
 
       {preview && (
         <FilePreview name={preview.name} url={preview.url} onClose={() => setPreview(null)} />
