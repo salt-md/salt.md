@@ -18,9 +18,10 @@
 // class of error this catches — a name that quietly stopped existing — is the
 // one that makes a reader stop trusting the rest.
 
-import { readdirSync, readFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '../..');
@@ -187,6 +188,93 @@ if (uncovered.length) {
   notes.push(`${uncovered.length} of ${families.length} route families are never mentioned: ${uncovered.join(', ')}`);
 } else {
   notes.push(`all ${families.length} route families are mentioned somewhere`);
+}
+
+// ---- 8: screenshots, and knowing when one has started lying ---------------
+//
+// A picture is a claim, and it is the claim nobody re-reads. It cannot be
+// checked for truth — but it CAN be tied to the code it shows, and then the one
+// question that matters is answerable mechanically: has that code changed since
+// the picture was taken?
+//
+// So wiki/screenshots.json records, per shot, which source files it shows and
+// the commit it was taken at. A page references a shot by its id and nothing
+// else, which is what makes swapping one a matter of replacing a file.
+//
+// Retake with: node scripts/shoot-wiki.mjs <id>
+
+const manifestPath = join(repo, 'wiki/screenshots.json');
+let manifest = null;
+try {
+  manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+} catch {
+  notes.push('wiki/screenshots.json is missing or unreadable — no screenshots checked');
+}
+
+if (manifest) {
+  const byId = new Map(manifest.shots.map((s) => [s.id, s]));
+
+  // Referenced but not described, and described but never referenced. Both are
+  // the same failure as an undocumented tool: a name with nothing behind it.
+  const referenced = new Set();
+  for (const [file, text] of pages) {
+    for (const m of text.matchAll(/!\[[^\]]*\]\(img\/([a-z0-9-]+)\.png\)/g)) {
+      const id = m[1];
+      referenced.add(id);
+      const shot = byId.get(id);
+      if (!shot) errors.push(`${file}: shows img/${id}.png, which screenshots.json does not describe`);
+      else if (shot.page !== file) errors.push(`${file}: shows ${id}, which screenshots.json files under ${shot.page}`);
+    }
+  }
+
+  for (const s of manifest.shots) {
+    if (!pages.has(s.page)) errors.push(`screenshots.json: ${s.id} names ${s.page}, which is not a wiki page`);
+    for (const suffix of ['', '-dark']) {
+      if (!existsSync(join(repo, `wiki/img/${s.id}${suffix}.png`)))
+        errors.push(`screenshots.json: ${s.id} has no ${suffix ? 'dark' : 'light'} image — run scripts/shoot-wiki.mjs ${s.id}`);
+    }
+    for (const f of s.shows ?? []) {
+      if (!existsSync(join(repo, f))) errors.push(`screenshots.json: ${s.id} says it shows ${f}, which does not exist`);
+    }
+    if (!s.takenAt) errors.push(`screenshots.json: ${s.id} was never taken — run scripts/shoot-wiki.mjs ${s.id}`);
+  }
+
+  const unused = manifest.shots.filter((s) => !referenced.has(s.id)).map((s) => s.id);
+  if (unused.length) notes.push(`${unused.length} screenshot(s) taken but never shown: ${unused.join(', ')}`);
+
+  // The staleness question. It needs git history, which the Docker image does
+  // not have — the build there copies source, not a repository. A check that
+  // cannot run must say so and step aside, never fail: breaking the image over
+  // a missing .git is exactly the shape of bug that took a release once.
+  let git = true;
+  try {
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: repo, stdio: 'pipe' });
+  } catch {
+    git = false;
+    notes.push('no git history here — screenshot staleness not checked');
+  }
+  if (git) {
+    const stale = [];
+    for (const s of manifest.shots) {
+      if (!s.takenAt || !(s.shows ?? []).length) continue;
+      let changed = '';
+      try {
+        changed = execFileSync('git', ['log', '--oneline', `${s.takenAt}..HEAD`, '--', ...s.shows],
+          { cwd: repo, stdio: 'pipe' }).toString().trim();
+      } catch {
+        continue; // the stamped commit is not in this clone — nothing to compare against
+      }
+      if (changed) stale.push(`${s.id} (${changed.split('\n').length} commit(s) since)`);
+    }
+    if (stale.length) {
+      errors.push(
+        `${stale.length} screenshot(s) show code that has changed since they were taken: ${stale.join(', ')}\n` +
+        `        retake them: node scripts/shoot-wiki.mjs ${stale.map((s) => s.split(' ')[0]).join(' ')}`,
+      );
+    } else if (manifest.shots.length) {
+      notes.push(`all ${manifest.shots.length} screenshots are current`);
+    }
+  }
 }
 
 // ---- report ----------------------------------------------------------------
