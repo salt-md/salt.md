@@ -63,6 +63,14 @@
         "deb"
       ],
       "category": "Office"
-    }
+    },
+    "protocols": [
+      {
+        "name": "salt.md",
+        "schemes": [
+          "salt"
+        ]
+      }
+    ]
   }
 }

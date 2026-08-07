@@ -445,7 +445,7 @@ function buildMenu() {
               message: 'salt.md',
               detail:
                 `Version ${app.getVersion()}\n\n` +
-                'This app is a window onto a Salt.md server you run. ' +
+                'This app is a window onto a salt.md server you run. ' +
                 'Your data lives on that server, not here.\n\n' +
                 `Connected to: ${readSettings().server || 'nothing yet'}`,
             }),
@@ -481,7 +481,17 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 app.whenReady().then(() => {
-  protocolRegistered = app.setAsDefaultProtocolClient(desktopScheme);
+  // The scheme is claimed by CFBundleURLTypes in the packaged app, so macOS
+  // knows about it from the moment it is installed — no run required.
+  //
+  // A DEVELOPMENT run must never claim it. `npx electron .` would register the
+  // Electron binary in node_modules as the handler, which then answers salt://
+  // with its own welcome screen and leaves the installed app unreachable. That
+  // is not hypothetical: it happened, and it looked exactly like the rename had
+  // broken the sign-in.
+  protocolRegistered = app.isPackaged
+    ? app.setAsDefaultProtocolClient(desktopScheme)
+    : false;
 
   // Identity providers refuse to show a sign-in page to anything whose user
   // agent says "Electron" — Google answers `disallowed_useragent` outright.

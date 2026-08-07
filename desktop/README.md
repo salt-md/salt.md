@@ -123,3 +123,25 @@ server version. This works against instances released before the app existed.
 The connect screen offers **Back to my workspace** whenever a server is already
 configured — opening the settings and finding no way out is the complaint this
 whole thing answers, and repeating it one level down would be worse.
+
+## The `salt://` scheme
+
+Claimed by `CFBundleURLTypes` in the packaged app, so macOS knows about it from
+the moment it is installed — no run required.
+
+**A development run must never claim it.** `npx electron .` used to register the
+Electron binary under `node_modules` as the handler, which then answered
+`salt://` with its own welcome screen and left the installed app unreachable.
+`app.isPackaged` now gates the runtime registration.
+
+If the handler ever ends up pointing somewhere wrong, LaunchServices is the
+place to look and to fix it:
+
+```sh
+LS=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+$LS -u /path/to/the/wrong.app     # forget it
+$LS -f -R /Applications/salt.md.app
+```
+
+Stale copies matter too: a deleted bundle stays in that database, and one
+carrying the same bundle id can win the scheme from the real app.
