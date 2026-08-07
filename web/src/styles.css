@@ -7162,24 +7162,18 @@ a,
   margin-top: 6px;
 }
 
-/* The dividing line, and the one case that does not want it.
+/* Both lines, always — and the exception that had to go.
 
-   Panel and page are both white, so without the line there is nothing between
-   them. But a cover already ends exactly at the panel's edge, in its own
-   colour, and does that work better than a hairline can — putting a line there
-   too draws a frame around something that was flowing. So THAT line goes when
-   the page has a cover, asked of the DOM rather than threaded through as a
-   prop — .has-cover is already on .page-body and is already the answer to
-   exactly this question, so there is no second flag that can drift.
+   For a while the vertical line was dropped on a page WITH a cover, because
+   the cover ends exactly at the panel's edge in its own colour and does that
+   work better than a hairline can. True, but only for the 200px the cover is
+   tall. Below it the page is white again, the panel is white, and with no line
+   between them the two became one blank area with a compose box floating in
+   the middle of it.
 
-   The line across the top stays in both cases, and it is the one that makes
-   the left one work at all: alone, the vertical stroke began in mid-air under
-   the icon row. A cover changes nothing about that, because a cover sits
-   BESIDE the panel — above it there is only the icon row, either way. */
-.editor-page:has(.page-body.has-cover) .structure-panel,
-.editor-page:has(.page-body.has-cover) .comments-panel {
-  border-left: 0;
-}
+   The complaint that started all this was the TOP edge, not the left one, and
+   the line across the top fixes that on its own. So the exception had no job
+   left, only a side effect. */
 
 /* ---- Comments as a panel (CommentsPanel) ----
    Beside the document, not under it. The fourth shape and the first one that
