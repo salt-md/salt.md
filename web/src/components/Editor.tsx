@@ -126,10 +126,20 @@ export default function Editor(props: EditorProps) {
   }
   if (!page) return <div className="editor-loading" />;
 
+  // A database carries no comments — its ROWS do, and each of those is a page
+  // with its own panel. Suppressing the panel alone was not enough: the button
+  // stayed, which is a promise the page cannot keep, and the column it holds
+  // open stayed with it, so the table rendered 340px narrow beside nothing.
+  const canComment = page.type !== 'collection';
+
   // The content renders INSIDE PageHeader's .page-body scroller so cover,
   // title and content scroll away together (only the topbar stays fixed).
   return (
-    <div className={'editor-page' + (structureOpen || commentsOpen ? ' with-structure' : '')}>
+    <div
+      className={
+        'editor-page' + (structureOpen || (commentsOpen && canComment) ? ' with-structure' : '')
+      }
+    >
       <PageHeader
         page={page}
         {...props}
@@ -165,7 +175,7 @@ export default function Editor(props: EditorProps) {
           />
         )}
       </PageHeader>
-      {commentsOpen && page.type !== 'collection' && (
+      {commentsOpen && canComment && (
         <CommentsPanel
           pageId={page.id}
           myUserId={props.user.id}
@@ -438,10 +448,14 @@ function PageHeader({
   useMenuDismiss(overflowOpen, overflowWrapRef, () => setOverflowOpen(false));
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openComments, setOpenComments] = useState(0);
+  // Same rule as in Editor, and it has to be asked here too: this is where the
+  // button, the menu entries and the count live.
+  const canComment = page.type !== 'collection';
   const peers = usePeers(pageId);
   // The counter in the header should be right before anybody has scrolled
   // down — you should SEE that comments exist without going to look.
   useEffect(() => {
+    if (!canComment) return;
     let alive = true;
     const count = () =>
       api
@@ -457,7 +471,7 @@ function PageHeader({
       alive = false;
       window.removeEventListener(COMMENTS_CHANGED, count);
     };
-  }, [pageId]);
+  }, [pageId, canComment]);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [coverMenuOpen, setCoverMenuOpen] = useState(false);
   const coverInput = useRef<HTMLInputElement>(null);
@@ -718,6 +732,7 @@ function PageHeader({
               the structure button has. The struck-through variant read as
               "comments are off" rather than "the panel is closed", which is a
               different and alarming thing to say about a page. */}
+          {canComment && (
           <button
             className={'icon-btn topbar-wide-only' + (commentsOpen ? ' active-star' : '')}
             title={commentsOpen ? t('Hide comments') : t('Show comments')}
@@ -726,6 +741,7 @@ function PageHeader({
             <MessageSquare size={17} />
             {openComments > 0 && <span className="badge-count">{openComments}</span>}
           </button>
+          )}
           <button
             className={'icon-btn' + (structureOpen ? ' active-star' : '')}
             title={structureOpen ? t('Hide structure') : t('Show structure')}
@@ -830,6 +846,7 @@ function PageHeader({
                     <AlignLeft size={15} /> {t('Remove description')}
                   </button>
                 )}
+                {canComment && (
                 <button
                   className="menu-item"
                   onClick={() => {
@@ -841,6 +858,7 @@ function PageHeader({
                 >
                   <MessageSquare size={15} /> {t('To the comments')}
                 </button>
+                )}
                 <button
                   className="menu-item"
                   onClick={() => {
@@ -855,6 +873,7 @@ function PageHeader({
                     busier than its content. The three that step aside come back
                     here, so nothing becomes unreachable. */}
                 <div className="menu-sep narrow-only" />
+                {canComment && (
                 <button
                   className="menu-item narrow-only"
                   onClick={() => {
@@ -865,6 +884,7 @@ function PageHeader({
                   <MessageSquare size={15} />{' '}
                   {commentsOpen ? t('Hide comments') : t('Show comments')}
                 </button>
+                )}
                 <button
                   className="menu-item narrow-only"
                   onClick={() => {

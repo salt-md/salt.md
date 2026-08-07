@@ -13,8 +13,6 @@
      That is exactly what made the page look unfinished. */
   --doc-width: 940px;
   --doc-pad: 56px;
-  /* Width of the structure panel. Read by the panel AND by the padding that
-     makes room for it, so the two can never drift apart. */
   /* The right-hand panels — structure and comments — share one width, one
      header and one type scale. They sit in the same strip and only one is ever
      open, so two sizes read as an inconsistency rather than as a distinction.
@@ -1186,7 +1184,15 @@ button {
   bottom: 0;
   width: var(--panel-w);
   box-sizing: border-box;
-  background: var(--bg);
+  /* The same surface as the sidebar on the other side, and for the same
+     reason: this is chrome, not document. It also settles the top edge, which
+     used to look unfinished on a page with no cover — a border begins where
+     its box begins, and above these panels there is only the topbar, which
+     carries no line of its own, so the line simply appeared in mid-air. A
+     surface has no such problem: where it starts IS the edge, and the border
+     now meets that corner instead of nothing. */
+  background: var(--sidebar-bg);
+  border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   /* Above the sticky cover (6) and the sticky icon row (7). It used to be 5,
@@ -7161,24 +7167,6 @@ a,
   margin-top: 6px;
 }
 
-/* The dividing line of both panels, and why it is not a border.
-
-   A border begins where the box begins, and above these boxes there is only
-   the topbar, which carries no line of its own — so on a page WITHOUT a cover
-   the line just appeared in mid-air. On a page with one it never showed: the
-   cover's colour ends exactly there and does the same work, fluidly. So the
-   line fades in over the height of the head, and the corner it makes with the
-   head's own border is its first pixel at full strength. */
-.structure-panel::before,
-.comments-panel::before {
-  content: '';
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 1px;
-  background: linear-gradient(to bottom, transparent, var(--border) 42px);
-  pointer-events: none;
-}
-
 /* ---- Comments as a panel (CommentsPanel) ----
    Beside the document, not under it. The fourth shape and the first one that
    came from watching people use it: his colleagues live in comments and said
@@ -7195,7 +7183,15 @@ a,
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  background: var(--bg);
+  /* The same surface as the sidebar on the other side, and for the same
+     reason: this is chrome, not document. It also settles the top edge, which
+     used to look unfinished on a page with no cover — a border begins where
+     its box begins, and above these panels there is only the topbar, which
+     carries no line of its own, so the line simply appeared in mid-air. A
+     surface has no such problem: where it starts IS the edge, and the border
+     now meets that corner instead of nothing. */
+  background: var(--sidebar-bg);
+  border-left: 1px solid var(--border);
   z-index: 5;
 }
 
