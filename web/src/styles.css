@@ -7167,18 +7167,18 @@ a,
    Panel and page are both white, so without the line there is nothing between
    them. But a cover already ends exactly at the panel's edge, in its own
    colour, and does that work better than a hairline can — putting a line there
-   too draws a frame around something that was flowing. So both lines go when
+   too draws a frame around something that was flowing. So THAT line goes when
    the page has a cover, asked of the DOM rather than threaded through as a
    prop — .has-cover is already on .page-body and is already the answer to
    exactly this question, so there is no second flag that can drift.
 
-   The top line is what makes the left one work at all. Alone it started in
-   mid-air under the icon row; with a corner to begin at it reads as the edge
-   of a panel instead of a stray stroke. */
+   The line across the top stays in both cases, and it is the one that makes
+   the left one work at all: alone, the vertical stroke began in mid-air under
+   the icon row. A cover changes nothing about that, because a cover sits
+   BESIDE the panel — above it there is only the icon row, either way. */
 .editor-page:has(.page-body.has-cover) .structure-panel,
 .editor-page:has(.page-body.has-cover) .comments-panel {
   border-left: 0;
-  border-top: 0;
 }
 
 /* ---- Comments as a panel (CommentsPanel) ----
