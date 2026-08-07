@@ -102,3 +102,24 @@ Where the name actually appears:
 The only way to change the last row is to name the bundle `salt.app`, and then
 those two surfaces say "salt" — which drops the half of the name that says what
 the product is. Left as it is on purpose.
+
+## Changing the server afterwards
+
+Two ways, and the second is the one that matters:
+
+- **Settings…** in the app menu (⌘,)
+- **On the sign-in screen**, a quiet line at the bottom: *Connected to
+  example.com · Change*
+
+The second exists because that is the moment somebody realises they are at the
+wrong instance — staring at a login they cannot use. It appears only there;
+on a signed-in workspace it would be permanent furniture for something you need
+about twice.
+
+It is injected by the preload rather than built into Salt.md's own login page,
+for the same reason the window CSS is: the app must not require a matching
+server version. This works against instances released before the app existed.
+
+The connect screen offers **Back to my workspace** whenever a server is already
+configured — opening the settings and finding no way out is the complaint this
+whole thing answers, and repeating it one level down would be worse.

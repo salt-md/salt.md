@@ -318,6 +318,14 @@ function route() {
   else win.loadFile(path.join(__dirname, 'connect.html'));
 }
 
+/** The connect screen, opened deliberately rather than because nothing is set
+ *  yet. It is told so, so it can offer a way back instead of looking like a
+ *  fresh start with no escape. */
+function openConnect() {
+  if (!win || win.isDestroyed()) return;
+  win.loadFile(path.join(__dirname, 'connect.html'), { query: { change: '1' } });
+}
+
 function showUnreachable(url, description) {
   win.loadFile(path.join(__dirname, 'connect.html'), {
     query: { error: description || 'unreachable', url: url || '' },
@@ -346,6 +354,19 @@ ipcMain.handle('salt:setServer', async (_e, input) => {
   }
 });
 
+// Back to the workspace without changing anything. Only reachable when a
+// server is already configured — otherwise there is nothing to go back to.
+ipcMain.handle('salt:openConnect', () => {
+  openConnect();
+  return true;
+});
+
+ipcMain.handle('salt:cancel', () => {
+  const server = readSettings().server;
+  if (server && win && !win.isDestroyed()) win.loadURL(server);
+  return !!server;
+});
+
 ipcMain.handle('salt:forget', () => {
   const { server, ...rest } = readSettings();
   writeSettings(rest);
@@ -358,7 +379,27 @@ ipcMain.handle('salt:forget', () => {
 function buildMenu() {
   const isMac = process.platform === 'darwin';
   const template = [
-    ...(isMac ? [{ role: 'appMenu' }] : []),
+    // The app menu is spelled out rather than taken from the `appMenu` role,
+    // for one entry: Settings. Changing the server used to sit under File as
+    // "Change server…", where nobody found it — he had set an address and
+    // concluded there was no way back. ⌘, in the app menu is where a Mac user
+    // looks, and it costs nothing to be there.
+    ...(isMac
+      ? [{
+          label: app.name,
+          submenu: [
+            { role: 'about' },
+            { type: 'separator' },
+            { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => openConnect() },
+            { type: 'separator' },
+            { role: 'services' },
+            { type: 'separator' },
+            { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' },
+            { type: 'separator' },
+            { role: 'quit' },
+          ],
+        }]
+      : []),
     {
       label: 'File',
       submenu: [
@@ -366,10 +407,9 @@ function buildMenu() {
           label: 'Sign in with your browser',
           click: () => startBrowserSignIn(),
         },
-        {
-          label: 'Change server…',
-          click: () => win.loadFile(path.join(__dirname, 'connect.html')),
-        },
+        ...(isMac
+          ? []
+          : [{ label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: () => openConnect() }]),
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' },
       ],

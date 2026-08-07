@@ -51,6 +51,12 @@
   .msg { margin-top: 14px; font-size: 13px; min-height: 34px; color: var(--muted); }
   .msg.bad { color: #c4554d; }
   .hint { margin-top: 20px; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .back {
+    display: inline-block; margin-top: 16px;
+    color: var(--muted); font-size: 13px; text-decoration: none;
+    -webkit-app-region: no-drag;
+  }
+  .back:hover { color: var(--fg); }
   code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 </style>
 </head>
@@ -63,6 +69,11 @@
     <input id="url" type="text" placeholder="salt.example.com" autocomplete="off" spellcheck="false" autofocus>
     <button id="go">Connect</button>
     <div class="msg" id="msg"></div>
+
+    <!-- Only when there is somewhere to go back TO. Opening the settings and
+         finding no way out is the complaint this whole screen just answered;
+         repeating it one level down would be worse. -->
+    <a id="back" class="back" href="#" hidden>Back to my workspace</a>
 
     <p class="hint">
       No server yet? Salt.md is one binary you run yourself —<br>
@@ -88,9 +99,18 @@
     say('Could not reach ' + (target ? new URL(target).origin : 'the server') + '. Is it running?', true);
   }
 
-  // Prefill whatever is configured, so "Change server" is an edit and not
-  // retyping an address from memory.
-  window.salt.getServer().then((s) => { if (s) $url.value = s; });
+  // Prefill whatever is configured, so changing the server is an edit and not
+  // retyping an address from memory — and offer the way back out.
+  const $back = document.getElementById('back');
+  window.salt.getServer().then((s) => {
+    if (!s) return;
+    $url.value = s;
+    $back.hidden = false;
+  });
+  $back.addEventListener('click', (e) => {
+    e.preventDefault();
+    void window.salt.cancel();
+  });
 
   const connect = async () => {
     const value = $url.value.trim();

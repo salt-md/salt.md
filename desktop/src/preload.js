@@ -11,8 +11,85 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('salt', {
   getServer: () => ipcRenderer.invoke('salt:getServer'),
   setServer: (url) => ipcRenderer.invoke('salt:setServer', url),
+  cancel: () => ipcRenderer.invoke('salt:cancel'),
   forget: () => ipcRenderer.invoke('salt:forget'),
 });
+
+// ---- "which instance is this?" on the sign-in screen ----------------------
+//
+// Setting the address is easy to do and was hard to undo: he pointed the app at
+// an instance and found no way back. It went into the app menu under Settings
+// first, which is where a Mac user looks — and his answer was that the sign-in
+// screen is the better place, which is right. That is the exact moment somebody
+// realises they are at the wrong instance: staring at a login they cannot use.
+//
+// Only there. On a signed-in workspace this would be permanent clutter for
+// something you need about twice.
+//
+// The line is injected rather than built into Salt.md's own login page for the
+// reason the window CSS taught: the app must not need a matching server. This
+// works against every version, including ones released before the app existed.
+
+const SWITCH_ID = 'salt-desktop-switch';
+const SWITCH_CSS = `
+#${SWITCH_ID} {
+  position: fixed; left: 0; right: 0; bottom: 22px;
+  display: flex; justify-content: center; gap: 7px; align-items: baseline;
+  font: 12.5px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  color: rgba(120,119,116,0.95); z-index: 2147483000;
+  -webkit-app-region: no-drag; pointer-events: auto;
+}
+#${SWITCH_ID} b { font-weight: 600; color: inherit; }
+#${SWITCH_ID} button {
+  font: inherit; color: inherit; background: none; border: 0; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+#${SWITCH_ID} button:hover { color: #37352f; }
+@media (prefers-color-scheme: dark) { #${SWITCH_ID} button:hover { color: #d4d4d4; } }
+`;
+
+async function syncSwitchLine() {
+  const onLogin = !!document.querySelector('.login-card, .login-wrap');
+  const existing = document.getElementById(SWITCH_ID);
+  if (!onLogin) {
+    existing?.remove();
+    return;
+  }
+  if (existing) return;
+
+  const server = await ipcRenderer.invoke('salt:getServer');
+  if (!server || !document.querySelector('.login-card, .login-wrap')) return;
+  if (document.getElementById(SWITCH_ID)) return;
+
+  const style = document.createElement('style');
+  style.textContent = SWITCH_CSS;
+  const bar = document.createElement('div');
+  bar.id = SWITCH_ID;
+  const label = document.createElement('span');
+  // Host only: the scheme and port are noise here, and the question this
+  // answers is "which instance am I looking at".
+  let host = server;
+  try { host = new URL(server).host; } catch { /* keep the raw value */ }
+  label.innerHTML = 'Connected to <b></b>';
+  label.querySelector('b').textContent = host;
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.textContent = 'Change';
+  btn.addEventListener('click', () => void ipcRenderer.invoke('salt:openConnect'));
+  bar.append(label, btn);
+  (document.body || document.documentElement).append(style, bar);
+}
+
+// The sign-in screen is rendered by the app AFTER the page loads, and it comes
+// and goes as somebody signs in and out — so this watches rather than checking
+// once. Cheap: it only looks for one selector.
+const watch = () => {
+  void syncSwitchLine();
+  new MutationObserver(() => void syncSwitchLine())
+    .observe(document.documentElement, { childList: true, subtree: true });
+};
+if (document.body) watch();
+else document.addEventListener('DOMContentLoaded', watch);
 
 // The window has no title bar on macOS — the traffic lights are drawn INSIDE
 // it, over whatever the page puts in its top-left corner. With the sidebar open
