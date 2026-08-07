@@ -545,6 +545,34 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
+**Production runs `1.6.15`** (2026-08-07 08:12), on his word ("push live" /
+"und auf prod ausrollen"): comments as a side panel, the two right-hand panels
+made one thing, and a database no longer offers a comment button it cannot
+honour.
+
+**Always `wget -O`, and never trust a `sha256sum -c` you did not aim.** This
+deploy briefly put **1.6.10** on production and reported success on the way.
+`wget` does not overwrite: `/tmp/salt-linux-amd64` from the 1.6.10 deploy (Aug
+2) was still there, so the download landed as `salt-linux-amd64.1` — and
+`SHA256SUMS.txt` did exactly the same. The verification then compared the OLD
+binary against the OLD sums and said `OK`, which is the part worth remembering:
+a checksum check passes just as happily on a matched pair of stale files. It
+was caught by comparing the INSTALLED binary against the checksum read from
+GitHub *locally*, which is the check that cannot be fooled this way — do that
+one, on both sides of every swap. Damage was none: an older binary sees a newer
+schema and simply ignores the columns it does not know (migrations only run
+forward), so the log was three lines with no rebuild, and the volume backup had
+already been taken before the wrong start. Download into a fresh per-version
+directory now.
+
+Checksums on both sides: `ff93f2e4…` (published `v1.6.14`) before,
+`0da9a08a…` (published `v1.6.15`) after. Verified by behaviour: `.trail-wrap`,
+`--panel-w: 340px`, `.structure-scroll` and the panels' `border-top` all in the
+served CSS. Four startup lines, no index rebuild, 649 files, 480 MB of data.
+Backup: `/root/salt-backups/salt-data-20260807-081122-vor-1.6.15.tar.gz`
+(385M); `/opt/salt/salt.bak-1.6.14` sits beside it and its checksum is the
+published one too. 22G free.
+
 **Production runs `1.6.14`** (2026-08-07 05:57), on his word ("ja push auf
 prod"): documentation for people, a desktop app, and a sign-in that goes
 through the real browser.
