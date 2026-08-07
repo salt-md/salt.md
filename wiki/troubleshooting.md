@@ -5,6 +5,7 @@ them. Every entry names a symptom first, because that is all you have when
 something goes wrong. If you know which area you are in, the other pages go
 deeper: [Agent access](agent-access.md), [Sharing](sharing.md),
 [Search](search.md), [Files](files.md), [Single sign-on](sso.md),
+[Trash and recovery](trash-and-recovery.md),
 [Self-hosting](self-hosting.md).
 
 ## How Salt.md tells you something failed
@@ -14,16 +15,23 @@ Three places, and it is worth knowing which one you are looking at.
 - **Toasts** — a line at the bottom of the window, prefixed with ⚠, gone after
   four seconds. This is the app's only feedback for a failed save, a failed
   upload or a failed background call. If you looked away, you missed it.
-- **The line above the sign-in form** — everything that goes wrong while
-  signing in, including failures handed back by Google or Microsoft.
+- **The line just above the Sign in button** — everything that goes wrong while
+  signing in, including failures handed back by Google or Microsoft. It is
+  inside the form, below the email, password and 2FA fields, so a short window
+  can hide it under the fold.
 - **The text an agent gets back** — over MCP a failure comes back as the tool's
   result, marked as an error, in English.
 
-**Every server message carries a machine-readable code as well as an English
-sentence.** The browser shows the sentence in your language; a script, `curl` or
-an agent sees the English. The code is the stable part: it does not change when
-the wording does, and it is what to quote when asking for help. The table at the
-end of this page lists the ones you are most likely to meet.
+**Many server messages carry a machine-readable code beside the English
+sentence — and many do not.** Where there is a code, the browser renders the
+sentence in your language while a script, `curl` or an agent sees the English;
+the code is the stable part, because it does not change when the wording does,
+and it is the thing to quote when asking for help. Sign-in, permissions,
+workspace membership, emergency access and mail carry codes. A great many other
+failures — a malformed upload, a page that cannot be read, a refused token —
+arrive as a plain English sentence and nothing else. If the message in front of
+you has no code, quote the sentence; the table at the end of this page lists the
+codes you are most likely to meet.
 
 **"Not found" often means "not allowed".** A page you may not read and a page
 that does not exist answer identically, on purpose — otherwise guessing ids
@@ -79,13 +87,20 @@ The trap is a reverse proxy. Without **Run behind a reverse proxy (trust
 `X-Forwarded-For`)** switched on, every request appears to come from the proxy,
 so the whole organisation shares one bucket and a single person retyping their
 password locks out everybody. The switch is on **Instance settings → Domain &
-proxy**, and the same tab's **Your IP (as the server sees it)** tells you at a
-glance whether it is working — it shows *proxy headers active* when the header
-is being trusted.
+proxy**. Whether it is taking effect is shown on a different tab:
+**Instance settings → Maintenance**, in the **Instance** panel, the row **Your
+IP (as the server sees it)** reads *proxy headers active* when the header is
+being trusted.
 
 Only switch it on when there really is a proxy in front. Without one, the header
 is set by whoever is calling and an attacker can invent a new address per
 attempt.
+
+Every rejected credential also leaves one line in the server's own log, naming
+the address and the kind of credential — never the email and never the token.
+That line is what a jail like fail2ban reads. It is not in the
+[activity log](history-and-audit.md), which is about who did what after signing
+in.
 
 ### Signing in with Google or Microsoft fails
 
@@ -94,17 +109,24 @@ people out and is not obviously an SSO problem:
 
 **"This address belongs to an account that has not confirmed it."** — code
 `oauth_email_squatter`. An account holds that address but it does not count as
-confirmed. Changing your own email address in the profile is what un-confirms
-it, and **changing it again does not restore it**: an address edited from inside
-the account stays unconfirmed. Sign in with a password instead. The same message
+confirmed. Editing the address on an account is what un-confirms it — your own
+in your profile, or somebody else's if you are the instance owner — and
+**changing it back does not restore it**: an address edited after the account
+existed stays unconfirmed. Sign in with a password instead. The same message
 also appears for a deactivated account.
 
 ### Signed out for no reason
 
 Sessions last as long as **Sign-in session length (days)** on the **General**
-tab — 90 days by default, 1 to 365 allowed. Beyond expiry, a session ends when
-you sign out, when an admin deactivates the account, or when the server's
-database is replaced under it.
+tab — 90 days by default, 1 to 365 allowed.
+
+Beyond expiry, a session ends when you sign out, when an admin deactivates the
+account, when the server's database is replaced under it, and — the one nobody
+expects — **when the account's password is changed**. A password change deletes
+every session and every API token that account had. The browser where the change
+was made is handed a fresh cookie straight away, so the person who changed it
+stays signed in while every other device and every agent is thrown out. That is
+exactly the shape of "I was signed out everywhere except here".
 
 Any request that comes back unauthorised sends the whole interface back to the
 sign-in screen at once. That is deliberate: an expired session used to mean an
@@ -123,24 +145,37 @@ dialog and give it `/mcp/<token>`.
 
 ### "missing or invalid API token"
 
-The credential is absent, mistyped, revoked, or belongs to a deactivated
-account. Note that **wrong tokens are throttled by address**: about twenty bad
-attempts in quick succession from one address make the server stop looking
-tokens up at all for a moment, and during that moment a *correct* token is
-refused too. It refills within seconds. A working token never feeds the limit.
+The credential is absent, mistyped, revoked, belongs to a deactivated account,
+or was wiped when that account's password was changed — a password change
+deletes every API token the account had, so an agent that worked yesterday can
+stop without anybody revoking anything by hand.
 
-### A cloud agent cannot reach the instance
+Note that **wrong tokens are throttled by address**: about twenty bad attempts
+in quick succession from one address make the server stop looking tokens up at
+all for a moment, and during that moment a *correct* token is refused too. It
+refills within seconds. A working token never feeds the limit.
 
-The **Connect an agent** dialog says so itself when the address is a plain
-`http://` LAN address:
+### Checking, and cutting off, what is connected
 
-> ⚠ Cloud agents (claude.ai, say) cannot reach `http://192.0.2.10:8420` — make
-> the instance public for that (Instance settings → Domain & proxy) and connect
-> through the public URL. Local CLIs on the same network work directly.
+Two different things can hold access to your account, and they are listed in
+different places.
 
-Give the instance a public address — a Cloudflare tunnel, built-in HTTPS, or
-your own proxy — and set **Public base URL** so every generated link uses it.
-See [Reaching your instance from outside](domain.md).
+**API tokens** — the menu under your name, **API tokens**. Each row shows the
+token's name, whether it is *read-only* or *read-write*, which workspaces it
+reaches (or *all workspaces*), when it was last used, and **the address it was
+last used from**. That last one is the whole defence for a token that travels
+inside a URL like `/mcp/<token>`: such a token cannot be kept secret, so the
+protection is noticing. An address nobody recognises is a question worth asking,
+and the answer is the ✕ (**Revoke**) button at the end of the row. Revoking is
+immediate and cannot be undone — issue a new token instead.
+
+**OAuth grants** — an agent that signed in through the browser instead of
+pasting a token holds a grant rather than a token, and it will not appear in the
+token list. There is no dialog for these yet; they are read and removed over the
+API, signed in with a browser session: `GET /api/oauth/grants` lists them (the
+client's name, the scope, the workspaces, when and from where it was last used)
+and `DELETE /api/oauth/grants/{id}` disconnects one. That deletes the grant and
+every access token minted from it at once.
 
 ### A workspace is missing from the agent's list
 
@@ -178,12 +213,25 @@ credential may reach, and what is deliberately closed to agents. See
 error rather than a transport failure, so a well-behaved agent can simply wait
 and retry.
 
-### "request is 84 MB — the limit is 68 MB"
+### "request is … MB — the limit is … MB"
 
 An MCP request is refused before it is read, by its declared size. Base64
-inflates a file by a third, so the ceiling for a tool call is the instance's
-upload limit plus that overhead. The message says what to do instead: use the
-HTTP upload at `/api/upload` for a file that big.
+inflates a file by a third, so the ceiling for a whole tool call is the
+instance's upload limit plus that overhead plus a megabyte for the JSON around
+it — with the default 50 MB upload limit, 67 MB. The message says what to do
+instead: use the HTTP upload at `/api/upload` for a file that big.
+
+A file that fits inside the request but is still over the upload limit gets a
+different sentence from `upload_file` itself — *"file is … MB — the limit is …
+MB"* — naming both the file and the limit as it currently stands.
+
+### The agent said it was importing and nothing appeared
+
+An import started with `import_url` runs as a job, and the tool that answers
+"how far has it got" is `get_import_status`: it reports how many records are
+written, whether it has finished, and any errors along the way. Poll it every
+few seconds rather than re-running the import — a second import writes the
+records a second time. See [Import and export](import-export.md).
 
 ### The agent insists a tool does not exist
 
@@ -197,14 +245,18 @@ the client is stale.
 
 ### "This link is invalid or has expired"
 
-A visitor gets a plain page with that sentence. Four things produce it:
+A visitor gets a plain page with that sentence. Three things produce it:
 
 - the link was revoked with **Stop sharing**;
 - its expiry passed — an expired link is deleted the first time it is opened;
-- the page was moved to the trash, or deleted;
 - **the page was shared again**. There is only ever one live read link per page.
   Changing the expiry or setting a password mints a new token and kills the old
   one, so a link already sent out stops working.
+
+A page that has been moved to the trash or deleted gives a shorter page — just
+*Not found*, with no sentence about the link. The link itself is still live, so
+restoring the page brings it back. See
+[Trash and recovery](trash-and-recovery.md).
 
 ### The link points at an address nobody outside can open
 
@@ -212,15 +264,29 @@ A share link is built from the instance's external address: an explicit **Public
 base URL** first, then the built-in HTTPS domain, then a running Cloudflare
 tunnel, and only if none of those exist, whatever address your own browser
 happens to be using. If the link you copied contains a LAN address, none of the
-first three is configured. See [Reaching your instance from outside](domain.md).
+first three is configured.
+
+If you are relying on the built-in tunnel, its state is on **Instance settings →
+Domain & proxy**, above the manual proxy section: *Tunnel starting…* while it
+comes up, *Publicly reachable:* with the URL once it is up (with **Copy** beside
+it), or *Tunnel error* carrying the reason it failed. **Stop** takes it down and
+**Reset** clears an error so it can be started again. A quick tunnel gets a new
+URL every time it starts, so every link generated under the old one is dead.
+See [Reaching your instance from outside](domain.md).
 
 ### Images and attachments do not show for a visitor
 
 A shared page renders as standalone HTML with no sign-in required, but the files
 it references are served from a path that **does** require one. A visitor
 without an account therefore sees the text and layout of the page and broken
-images where the pictures are. Where the pictures matter, export the page
-instead of sharing it. See [Import and export](import-export.md).
+images where the pictures are.
+
+Exporting the single page does not solve this: both the HTML and the Markdown
+export write the same file addresses the shared page writes, and neither packs
+the bytes. The one export that carries the uploaded files with it is
+**Workspace settings → Export workspace** (*Native archive — importable one to
+one*), which puts the files inside the archive. See
+[Import and export](import-export.md).
 
 ### A password-protected page keeps saying "Wrong password."
 
@@ -230,9 +296,12 @@ with it.
 
 ### "Form not found" on a public form
 
-The link resolves, but the collection has no `form` view any more, or the
-collection is in the trash. A form link needs a form view on that collection to
-render — add one and the same link works again. See [Forms](forms.md).
+The page says *This link is not valid or has been switched off*, and it is one
+screen for several causes: the token is unknown or was revoked, the collection
+is in the trash, the page behind the link is not a collection, or the collection
+has no `form` view any more. A form link needs a live form view on that
+collection to render — add one and the same link works again. See
+[Forms](forms.md).
 
 ### A collection shared to the web shows a plain text table
 
@@ -246,8 +315,10 @@ header, so search engines are asked not to list them. See
 Work through this in order.
 
 1. **Is the page in the trash?** Trashed pages are removed from the index
-   immediately, including everything under them. Restoring puts them back at
-   once.
+   immediately, including everything under them. The **Trash** section sits at
+   the bottom of the sidebar with a count beside it; the ↺ button on a row puts
+   the page back, index and all. See
+   [Trash and recovery](trash-and-recovery.md).
 2. **Is it private to somebody else?** Search checks the workspace first and
    then every single hit again. The second check is what hides other people's
    private pages inside a workspace you are in.
@@ -275,16 +346,27 @@ is fixed**. The instance's own limit — **Max. file size per upload (MB)** on t
 does not raise what the browser will attempt. Files over 50 MB have to go
 through an agent or the API (`/api/upload`) instead.
 
+This is also the one message with a code the server never sends. The browser
+mints `file_too_large` itself for its own cap, so an agent or a `curl` user will
+never see that code come back — do not go looking for it in a response.
+
+### "file too large — max 50 MB"
+
+The server's own refusal, a 413, naming the instance limit as it currently
+stands. The file was larger than **Max. file size per upload (MB)**. Raise the
+setting, or send a smaller file.
+
 ### "The file is too large for this instance."
 
-This one comes from the server, or from a proxy in front of it. Two causes:
+This one appears when the refusal did **not** come from Salt.md: the browser
+falls back to this sentence when the 413 it received is not the server's JSON.
+In practice that means a reverse proxy in front, refusing with its own HTML
+error page.
 
-- the instance limit is set lower than the file;
-- **a reverse proxy has its own body limit.** The nginx configuration Salt.md
-  generates writes `client_max_body_size` from the limit as it stood when you
-  copied it. Raise the limit later and the proxy still refuses at the old size —
-  and it answers with its own HTML error page, which is why this message is a
-  fallback rather than the server's own words.
+The usual cause is a stale body limit. The nginx configuration Salt.md generates
+writes `client_max_body_size` from the upload limit as it stood when you copied
+it. Raise the limit in Salt.md later and the proxy still refuses at the old
+size — and Salt.md never sees the request at all.
 
 ### "Upload failed" or "…" was not uploaded
 
@@ -306,6 +388,33 @@ disk. It is rebuilt from scratch at startup whenever a release changes how it is
 built, and the startup log says so. There is no button for it — being derived is
 what makes the rebuild safe, not something you have to ask for.
 
+## Mail that never arrives
+
+Invitations, and anything else the instance sends, go out through SMTP or
+through a connected Google or Microsoft mailbox. Before hunting anywhere else,
+press **Send test mail** — it is on **Instance settings → Email**, once beside
+the connected provider and once above the SMTP fields. It sends to *your own*
+address, so a success toast (*Test mail sent to … ✓*) proves the whole path in
+one click.
+
+A failure comes back in the same toast, and it is the most useful text you will
+get: where the provider wrote the reason, that reason travels with the message
+rather than being flattened into "sending failed". Two codes are worth knowing:
+`mail_not_configured` means nothing is set up at all, and `mail_refresh_failed`
+means the connected mailbox needs connecting again — **Disconnect**, then
+connect it a second time. See [Email](mail.md).
+
+## Webhooks that stopped firing
+
+Every configured webhook is listed on **Instance settings → Webhooks** with its
+address, the events it is subscribed to, and its last result: *last call:
+`<status>` · `<time>`*, or *not called yet* if it has never fired.
+
+That line answers the question directly. *Not called yet* on a hook you expected
+to be busy means the events never matched, not that delivery failed. A status in
+the 400s or 500s means the receiving end refused it. See
+[Webhooks](webhooks.md).
+
 ## "A new version is available — reload the page"
 
 The server was updated while your tab was open. The message arrives twice over:
@@ -320,9 +429,9 @@ browser problem; the two are stamped from one value on purpose. See
 
 **If the interface stays old across reloads**, the browser is holding a cached
 copy of the document that names the previous build's files. The document itself
-is served as `no-cache`, so this should resolve on the next load; a hard reload
-forces it. The service worker keeps only the app shell — no API responses, no
-files, no shared pages — so nothing you see as *data* can be stale that way.
+is served as `no-cache`, so this resolves on the next load; a hard reload forces
+it. The service worker keeps only the app shell — no API responses, no files, no
+shared pages — so nothing you see as *data* can be stale that way.
 
 ## Live editing
 
@@ -338,6 +447,17 @@ whole body with `write_content`, an import, or the page being trashed. An edit
 typed in the same second can be lost. `working_on` exists so a person can see an
 agent coming. See [Working at the same time](collaboration.md).
 
+**Getting the old text back.** Every path that replaces a page body saves the
+state from before as a version first — an agent's rewrite, an import, and a
+restore itself, which means restoring is reversible too. Open **⋯ → Version
+history** on the page, pick the entry you want and press **Restore**; you are
+asked to confirm, and the current state is saved as a version before it is
+replaced. An agent does the same through `revisions`. Two limits worth knowing:
+at most one snapshot is taken per page every two minutes, so a burst of rewrites
+leaves one version from before the burst rather than one per write, and only the
+newest 50 versions of a page are kept. See
+[History and audit](history-and-audit.md).
+
 **"Page content not saved."** The debounced save failed. It is retried on the
 next change and when the editor closes; the live document in the browser is
 unaffected. Repeated occurrences mean the server is refusing writes — check
@@ -352,6 +472,40 @@ which is what to quote in a report. Nothing is lost — the data is on the serve
 the very first request failed. The server is down, or the address is wrong, or a
 proxy is between you and it and is not forwarding. `/api/health` answers
 `{"status":"ok"}` and the version when the server is alive, without a sign-in.
+
+## Getting into a workspace you are not in
+
+The instance owner can open a workspace they are not a member of, but only
+through the front door. In **Manage users**, select your own account, find the
+workspace under **Workspace access**, and press **Emergency access**. It asks
+why, and the reason is mandatory: under 10 characters it is refused with
+`reason_too_short`. Access is read-only, expires after two hours, and can be
+ended early.
+
+The record is not hidden. Anyone running that workspace sees it under
+**Workspace settings → Emergency access log** — who looked in, when, until when,
+and the reason in their own words, with **End it now** while it is still
+running. It also lands in the [activity log](history-and-audit.md).
+
+Two refusals belong to this route. `no_self_grant` — you cannot simply give
+yourself a role in a workspace; emergency access is the logged way in.
+`personal_no_break_glass` — a personal space cannot be looked into at all, in
+an emergency or otherwise, because it belongs to exactly one account. See
+[Permissions](permissions.md).
+
+## Before reporting anything: the numbers
+
+**Instance settings → Maintenance** has an **Instance** panel, and it is the
+fastest answer to most "what have you actually got" questions: the version, the
+Go version and operating system, uptime, how many users and workspaces, how many
+pages and how many of those are trashed, the size of the database, the size of
+the uploads, the data directory on disk, and the address the server sees you
+coming from. Quote that panel rather than guessing.
+
+The same tab has **Download backup (.tar.gz)** — the whole database as a
+consistent snapshot plus every upload, in one file, without a shell on the
+machine. Only the instance owner may take it (`owner_only_backup`), because it
+contains every workspace.
 
 ## When the server itself is the problem
 
@@ -377,9 +531,19 @@ a running instance.
 
 **The process gets killed under load.** A container with no memory limit is
 treated as a small machine on purpose, because the host's figure is not a
-promise about what the container will be given. Set `--memory=` on the container
-or `SALT_MEMORY_MB` to tell it the truth. Getting this wrong only ever changes
-how much text reaches the search index, never whether an upload succeeds.
+promise about what the container will be given. That reading does two things: it
+sizes what gets indexed, and it tells the garbage collector where the ceiling
+is. Set `--memory=` on the container or `SALT_MEMORY_MB` to tell it the truth,
+and note which direction is dangerous — reading **too high** is, because the
+collector then aims at memory the container will never get and the kernel
+arrives first. Reading too low costs indexing and nothing else: the file is
+still stored, listed and downloadable.
+
+**Pages imported from Notion carry a repeated preamble.** With the server
+stopped, `salt fix-notion-rows` strips the "# title + Property: value" block
+that Notion writes into every database row and reports how many bodies it
+cleaned. It takes the sole database connection, so it will not run alongside a
+live instance.
 
 **Do not ask the binary for its version with a flag.** `salt version` prints it.
 An unrecognised flag is not a subcommand, so the binary starts a second server
@@ -392,7 +556,9 @@ you changed.
 
 ## Error codes you may meet
 
-The code is the same in every language; the sentence is what you see in yours.
+These are codes the server sends. The code is the same in every language; the
+sentence is what you see in yours. Messages outside this table generally carry
+no code at all — quote their English sentence instead.
 
 | Code | What it means |
 | --- | --- |
@@ -402,13 +568,12 @@ The code is the same in every language; the sentence is what you see in yours.
 | `account_disabled` | The account was deactivated; sessions and tokens are already gone |
 | `signup_not_allowed` | Self-registration is off for that address; ask for an invitation |
 | `oauth_email_squatter` | An account holds the address but it counts as unconfirmed — or it is deactivated |
-| `oauth_expired` / `oauth_bad_state` | The sign-in round trip did not stay on one address ([SSO](sso.md)) |
+| `oauth_expired` / `oauth_bad_state` | The sign-in was not carried through: the round trip took longer than ten minutes, or what came back did not match what was sent ([SSO](sso.md)) |
 | `session_required` | Administration; a credential of any kind is refused, browser sign-in only |
 | `owner_only` | Reserved to the instance owner |
 | `owner_only_backup` | Only the owner may download an instance backup — it contains every workspace |
 | `owner_only_credentials` | Only the owner may change another account's password or email |
 | `workspace_scoped` | A credential tied to particular workspaces cannot create new ones |
-| `file_too_large` | Over the upload limit — see above for which of the two limits bit |
 | `last_admin` / `last_admin_other` | The last admin of a workspace cannot be removed; appoint another first |
 | `no_self_grant` | You cannot grant yourself access to a workspace; emergency access is the logged route |
 | `personal_no_break_glass` | A personal space cannot be looked into, even in an emergency |
@@ -428,6 +593,10 @@ beats a broken one.
 - [Sharing](sharing.md) — public links, passwords, expiry, forms
 - [Search](search.md) — what is indexed and when
 - [Files](files.md) — uploads, limits, the file index
+- [Trash and recovery](trash-and-recovery.md) — restoring a page, deleting for good
+- [History and audit](history-and-audit.md) — versions, the activity log
 - [Single sign-on](sso.md) — the full table of provider failures
+- [Email](mail.md) — SMTP, connected mailboxes, the test message
+- [Webhooks](webhooks.md) — what fires, what is delivered, what is signed
 - [Self-hosting](self-hosting.md) — the startup log, backups, updating
 - [Working at the same time](collaboration.md) — losing and regaining the connection
