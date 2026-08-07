@@ -23,20 +23,37 @@ Everything is reached from the sidebar.
 | **Workspaces with nobody in charge** | the workspace name at the top → **With nobody in charge…** | the owner |
 | **Workspace members** (invitations) | the workspace name at the top → **Workspace settings** → **Members** | admins of that workspace |
 
-Administrative *changes* need a browser sign-in. An API token, whatever its
-scope, is turned away with *"This action requires signing in through a browser —
-an API token is not enough."* That is deliberate: a token is a second key to
-content, not an administration pass. See
+Administration needs a browser sign-in — not only changes. Creating or deleting
+an account, deactivating one, inviting somebody, editing the settings, but also
+*reading* the account list, the access overview, the clean-up view and the
+backup all turn an API token away with *"This action requires signing in
+through a browser — an API token is not enough."* That is deliberate: a token is
+a second key to content, not an administration pass. The one exception is that
+an admin's token can **read** the instance settings and the instance snapshot
+(`/api/settings`, `/api/admin/info`); changing them cannot be done with it. See
 [Permissions](permissions.md#sessions-and-api-tokens).
+
+## Where the owner comes from
+
+There is no step that appoints one. A fresh instance shows **Create the first
+(admin) account for this workspace.** instead of a sign-in form, and whoever
+completes it becomes the instance admin **and** the owner in one go — both roles
+on the same person, until they are handed on. The same step creates a shared
+workspace called **Workspace**, makes that account its workspace admin, and
+marks it **Open to every new user**, which is why every later account lands
+there as well. Setup runs exactly once; a second attempt is answered with *setup
+already completed*. The screen itself is in
+[Getting started](getting-started.md).
 
 ## Instance settings
 
 Six tabs — **General**, **Access**, **Email**, **Domain & proxy**, **Webhooks**,
 **Maintenance** — and one pair of buttons at the bottom, **Cancel** and **Save**.
 **Save** writes the fields of every tab at once, so you can change the instance
-name and the signup policy in one pass. Three things do **not** wait for Save
-because they act immediately: starting or stopping a tunnel, connecting or
-disconnecting a mail account, and sending a test mail.
+name and the signup policy in one pass. Some controls do **not** wait for Save
+because they act the moment you press them: starting or stopping a tunnel,
+connecting or disconnecting a mail account, sending a test mail, and adding or
+removing a webhook. **Cancel** therefore does not undo those.
 
 ### General
 
@@ -51,10 +68,12 @@ disconnecting a mail account, and sending a test mail.
 ![Instance settings: the name and logo everyone sees.](img/admin-general.png)
 
 **The instance name** replaces the wordmark on the sign-in page, becomes the
-browser tab title, and names the instance on the approval screen an agent sees
-when it signs in ([Agent access](agent-access.md)). Left empty, the sign-in page
-says *salt.md*. The placeholder in the field is *e.g. Acme Notes* — pick your
-own name, not that one.
+browser tab title *of that page*, and names the instance on the approval screen
+an agent sees when it signs in ([Agent access](agent-access.md)). It is not the
+title of the application in general: once you are inside, the tab reads
+*Salt.md* again, because the name is fetched by the sign-in screen and nothing
+else sets it. Left empty, the sign-in page says *salt.md*. The placeholder in
+the field is *e.g. Acme Notes* — pick your own name, not that one.
 
 There is **no instance logo**. The Salt.md mark above the sign-in heading is
 fixed; the picture you can change is per workspace, in
@@ -68,7 +87,11 @@ Cloudflare tunnel or the built-in HTTPS domain running, links fall back to those
 and the field can stay empty. See [Reaching it from outside](domain.md).
 
 **The upload cap** is enforced per file, in the browser upload and over MCP
-alike; a larger file is refused with *"file too large — max 50 MB"*.
+alike, but the two say it differently. The browser refusal reads *"file too
+large — max 50 MB"*. An agent is told *"file is 84 MB — the limit is 50 MB;
+upload it through the browser (/api/upload) or raise max_upload_mb in the
+settings"* — worth knowing if somebody quotes a message at you. See
+[Files](files.md).
 
 **The trash setting** is swept by a background pass every 30 minutes: pages
 trashed longer ago than the limit are deleted for good. `0` disables the sweep
@@ -102,11 +125,13 @@ The policy governs [single sign-on](sso.md) too. Under **By invitation only**, a
 Google or Microsoft button signs *existing* accounts in and creates none: an
 unknown address gets *"no account for … — registration here is by invitation"*.
 
-Whichever way an account comes into being — self-registration, SSO, an
-invitation, or created by an admin — it lands in exactly two places: **its own
-personal space**, named after the person, and **every workspace marked "Open to
-every new user"**. Nothing else. An account created by an admin does not inherit
-that admin's workspaces.
+However an account comes into being — self-registration, SSO, an invitation, or
+created by an admin — it always gets the same two things: **its own personal
+space**, named after the person, and membership of **every workspace marked
+"Open to every new user"**. On top of that, an invitation joins the workspace it
+was written for, in the invited role, and an account created by an admin joins
+whatever was ticked under **Workspace access** in the create dialog. Nothing
+else, and in particular nothing is inherited from the admin who created it.
 
 **Users may create their own workspaces** — a checkbox, on by default. Off, only
 admins create workspaces, and everyone else gets *"creating workspaces is
@@ -122,16 +147,48 @@ mistake that costs an afternoon, is in [Single sign-on](sso.md).
 
 ### Email
 
-Either connect a Google or Microsoft mailbox with one click, or fill in SMTP
-host, port, user, password and sender. **Send test mail** sends to *your own*
-address and reports the result. Details, including why mail is a convenience and
+Two ways, and the tab shows both at once.
+
+**Sending through Google / Microsoft — no SMTP** is one click: **Connect with
+Google** or **Connect with Microsoft**. The buttons use the OAuth app you set up
+on the **Access** tab — without a stored client ID and secret they are greyed
+out and say *Set up Google OAuth on the Access tab first*. In the provider's
+sign-in window you may pick any mailbox at all, including a dedicated sending
+address; it does not have to be the account you sign in with. Once connected the
+row reads **Connected: sends as** … and offers **Send test mail** and
+**Disconnect**, plus a field **Override the sender address (optional, alias)**
+for sending under an alias of that mailbox. One trap is called out in the
+dialog: a Google OAuth app left in "testing" makes the connection expire after
+7 days — move it to *In production* and enable the Gmail API.
+
+**Or the classic way: SMTP** — host, port, user, password and **Sender (From)**.
+A stored password shows as *•••••• (unchanged)*; leaving the field empty keeps it.
+
+**Send test mail** sends to *your own* address and reports the result in a toast
+(*Test mail sent to … ✓*). Details, including why mail is a convenience and
 never a dependency, are in [Sending email](mail.md).
 
 ### Domain & proxy
 
-A quick Cloudflare tunnel, a permanent one with your own domain, built-in
-Let's Encrypt HTTPS, or generated Caddy / cloudflared / nginx snippets for a
-proxy you run yourself. Also **Run behind a reverse proxy (trust
+Four routes to a public address, in the order the tab lists them:
+
+1. **Start quick tunnel** — one click, no account, a temporary
+   `trycloudflare.com` address that changes on every start. cloudflared is
+   downloaded automatically the first time.
+2. A permanent **Cloudflare Tunnel**: paste the token from the Cloudflare
+   dashboard and press **Connect**. Salt.md keeps it running across restarts.
+3. Built-in HTTPS: a domain field plus an **Active** switch. Salt.md fetches its
+   own Let's Encrypt certificate and listens on 80 and 443, so no proxy is
+   needed. Restart after saving.
+4. Your own reverse proxy: set **Internal address of the instance (upstream)**
+   and copy one of the three generated blocks — **Caddy (automatic HTTPS)**,
+   **Cloudflare Tunnel (no open port needed)** or **nginx**. The domain in them
+   comes from the public base URL on the General tab.
+
+While a tunnel runs, its status line carries the address and a **Stop** button;
+after a failure the line shows the error and a **Reset**.
+
+Above the generated blocks sits **Run behind a reverse proxy (trust
 `X-Forwarded-For`)**, which decides whether the instance believes proxy headers
 about who a visitor is. Leave it off without a proxy — with it on, anybody could
 claim any address and walk past the sign-in rate limit. See
@@ -140,8 +197,18 @@ claim any address and walk past the sign-in rate limit. See
 ### Webhooks
 
 Call an address of your choosing when a page is created, changed or thrown away.
-The message names the page and never carries its content. See
-[Webhooks](webhooks.md).
+The message names the page and never carries its content.
+
+Enter the **Address to call**, tick which of the three events you want under
+**When should we call?** (`page.created`, `page.updated`, `page.trashed`) and
+press **Add**. The signing secret appears once, under *Copy this secret now — it
+is shown only once.* — your receiver uses it to check the `X-Salt-Signature`
+header. Dismiss it with **I have it** and it is gone.
+
+Under **Configured**, each hook shows its address, its events and either
+*not called yet* or a *last call:* line with the HTTP status the receiver
+answered and when — with **Remove** beside it. Both **Add** and **Remove** take
+effect immediately, without **Save**. See [Webhooks](webhooks.md).
 
 ### Maintenance
 
@@ -155,9 +222,16 @@ the admin flag.
 Restoring, and taking backups on a schedule, happen on the server:
 
 ```
-./salt restore backup.tar.gz     # replaces the data directory's contents
 ./salt backup                    # writes salt-backup.tar.gz — put this in cron
+./salt restore backup.tar.gz     # unpacks the archive into the data directory
 ```
+
+`salt backup` is safe against a running instance. `salt restore` is not a wipe:
+it unpacks the archive over whatever is in the data directory, so anything the
+archive does not contain stays behind. And it refuses outright if a database is
+already there — *"…/salt.db already exists; set SALT_RESTORE_FORCE=1 to
+overwrite"*. Restore into an empty directory, or set that variable deliberately.
+The full procedure is in [Self-hosting](self-hosting.md).
 
 Below the button, **Instance** shows a live snapshot:
 
@@ -200,9 +274,11 @@ What the recipient sees at `/invite/<token>`:
   (minimum 8 characters). Accepting creates the account, joins it to the
   workspace with the invited role, and signs them in.
 - **Not signed in, but the address already has an account** — the same form asks
-  for the real password, and for the six-digit code if that account uses
-  two-factor sign-in. This is a sign-in, so it is treated as one: a leaked
-  invitation link can never take over an existing account.
+  for the real password. If that account uses
+  [two-factor sign-in](account.md#two-factor-sign-in), a **2FA code** field
+  appears after the first attempt, not before it. This is a sign-in, so it is
+  treated as one: a leaked invitation link can never take over an existing
+  account.
 - **Already signed in** — a one-click **Join**. If the invitation was addressed
   to a different account, joining is refused and they are asked to sign out
   first.
@@ -214,12 +290,30 @@ member with a higher role keeps it.
 Only a workspace admin of the target workspace may create the invitation, owner
 or not.
 
+### The rest of the Members dialog
+
+Inviting is the bottom half of it. The list above does three more things:
+
+- **Change a role.** Beside every other member sits a dropdown — **Admin**,
+  **Member**, **Viewer** — and picking one applies at once. The last admin
+  cannot be demoted (*"cannot demote the last admin"*).
+- **Remove somebody**, with the ✕ button, after a *Remove <name>?* confirmation.
+- **Leave the workspace yourself** — the same ✕ on your own row, labelled
+  **Leave**. Non-admins can do this and nothing else here.
+
+Leaving or removing asks a second time when private pages would be left behind:
+*"This person has n private page(s) here. They stay in the workspace and will
+only be visible to its admins afterwards."* — the point being that the pages do
+not travel with the person. See [Workspaces](workspaces.md) and
+[Permissions](permissions.md).
+
 ## Manage users
 
-The left pane lists every account with a **Search…** box above it. Badges mark
-them: *deactivated*, *owner*, *admin*. Pick one and the right pane shows the
-detail; press **+ User** to create one instead. Everything that can happen to an
-account in its lifetime is on that right-hand pane.
+The left pane lists every account with a **Search…** box above it, which matches
+**name and email address** — useful when several people share a first name.
+Badges mark them: *deactivated*, *owner*, *admin*. Pick one and the right pane
+shows the detail; press **+ User** to create one instead. Everything that can
+happen to an account in its lifetime is on that right-hand pane.
 
 ![Managing accounts: roles, deactivating, deleting and handing work over.](img/admin-users.png)
 
@@ -239,10 +333,12 @@ are not entitled to grant is silently skipped rather than refused, so check the
 result if you were assigning outside your own workspaces.
 
 There is **no password-reset email** in Salt.md, and no field in this dialog for
-setting somebody else's password. Only the owner may change another account's
-password or email at all, and today only through the API
-(`PATCH /api/users/{id}`). For everyday cases the answer is an invitation or a
-new account.
+setting somebody else's password. What an admin can change about another account
+is its **name, colour and picture**; the **password and the email address** are
+the owner's alone — *"Only the owner can change another account's password or
+email. As an admin you can send an invitation."* Both go through the API
+(`PATCH /api/users/{id}`); the dialog offers neither. For everyday cases the
+answer is an invitation or a new account.
 
 ### The actions on an account
 
@@ -276,8 +372,16 @@ Under the actions, one row per workspace with four buttons: **No access**,
 On the owner's own row, a workspace they have no access to offers **Emergency
 access**. It asks for a reason (at least 10 characters), then grants **read**
 access for two hours, writes it to the [activity log](history-and-audit.md) and
-emails that workspace's admins, who can end it at any time. It is refused for
-personal spaces. See [Permissions](permissions.md#emergency-access).
+emails that workspace's admins. It is refused for personal spaces, and refused
+if you are already a member.
+
+A running grant is reviewed and ended in a second place: **Workspace settings →
+Emergency access log**, in the workspace concerned. It lists every grant with
+who took it, when, the reason they typed, and whether it is still running, with
+**End it now** beside a live one. The server accepts that from a workspace admin
+as well as from the owner, but the row is drawn in the dialog for the **instance
+owner** alone — a workspace admin learns of a grant by email and asks the owner
+to end it. See [Permissions](permissions.md#emergency-access).
 
 ## Deactivating an account
 
@@ -322,8 +426,12 @@ question. The lines you may see:
 - *Deactivating is usually enough — nothing is lost that way.*
 
 If that preview cannot be loaded, the dialog says so instead of looking
-harmless, and the server refuses the deletion outright — an empty plan reads
-exactly like "nothing hangs off this account".
+harmless: *"The consequences could not be loaded. If this person has a personal
+space, it will be deleted with all its pages beyond recovery."* Independently of
+that, the server takes stock a second time when the deletion actually runs, and
+refuses outright if that fails — an empty plan reads exactly like "nothing hangs
+off this account", and acting on one would strand every workspace the account
+was holding.
 
 Three deletions are refused: your own account, the last remaining admin, and the
 owner (*"hand the owner role to another account first"*).
@@ -347,6 +455,23 @@ was holding end at the handover.
 This is the only path out of the role. Without it, an owner who left the company
 could only be replaced by editing the database by hand.
 
+## What lands in the activity log
+
+Account administration is not silent. Every one of these writes a line into the
+[activity log](history-and-audit.md), naming who did it and to whom:
+
+| Entry | Written when |
+| --- | --- |
+| *deactivated the account:* | an account is deactivated |
+| *reactivated the account:* | it is switched back on |
+| *deleted the account:* | an account is deleted |
+| *handed the instance to:* | the owner role is passed on |
+| *took emergency access:* / *ended the emergency access:* | a grant starts or is ended early |
+| *adopted the ownerless workspace:* / *deleted the workspace:* | the clean-up view below |
+
+Open it from your name at the bottom of the sidebar → **Activity log**. It shows
+the most recent changes and marks whether a human or an agent made each one.
+
 ## Workspaces with nobody in charge
 
 Owner only, reached from the workspace switcher: **With nobody in charge…**. It
@@ -362,9 +487,13 @@ What you can do depends on which case it is:
 | no members left, personal space | **Delete** only, with *Orphaned personal space — clean up only, do not open.* | it belonged to one person; clearing it up is fair, reading it is not |
 | members remain, no admin | nothing here — *Still has members: make one of them an admin.* | the workspace belongs to the people in it |
 
-**Adopt** makes you its admin and owner. **Delete** asks you to type the
-workspace name back, then removes its pages, its search entries and the uploads
-nothing else references. Both are recorded in the activity log.
+**Adopt** makes you an admin of it — and its owner, if the workspace has no
+owner recorded any more. A workspace stranded because the account behind it was
+deleted still carries that account's id in the owner field, so adopting it
+leaves the field pointing at somebody who is gone; the admin membership is what
+gives you the workspace either way. **Delete** asks you to type the workspace
+name back, then removes its pages, its search entries and the uploads nothing
+else references. Both are recorded in the activity log.
 
 A personal space whose person is still a member never appears here, even while
 that account is deactivated — otherwise every departure would fill the list with
@@ -377,13 +506,21 @@ An empty list says *All clear — every workspace has someone in charge.*
 - **No per-page permissions.** Access is per workspace plus a private flag per
   page. See [Permissions](permissions.md).
 - **No multi-tenancy.** One instance is one organisation, with one owner.
-- **No administrative API.** The account routes, the settings, invitations and
-  the backup all refuse API tokens. If an agent could create accounts, a leaked
-  token would be an account factory. What agents *can* reach is in
+- **No administrative API.** The account routes, invitations, the backup and
+  every settings *change* refuse API tokens; so does reading the account list or
+  the access overview. Reading the settings and the instance snapshot is the one
+  thing an admin's token can still do. If an agent could create accounts, a
+  leaked token would be an account factory. What agents *can* reach is in
   [Agent access](agent-access.md).
 - **No reading of content by rank.** Being an instance admin grants no access to
   a workspace. The owner's route in is emergency access, which is time-limited,
   logged and announced to the people affected.
+- **No control over anybody's second factor.** Two-factor sign-in is strictly
+  self-service: every route acts on the account making the request, so neither
+  an admin nor the owner can switch it on, off or clear it for somebody who lost
+  their authenticator app — turning it off needs a current code from the app
+  itself. Nothing in the interface unlocks such an account. Setting yours up is
+  in [Your account](account.md#two-factor-sign-in).
 
 ## After an update
 

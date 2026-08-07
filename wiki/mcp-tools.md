@@ -16,7 +16,9 @@ the field.
 
 ## How a call works
 
-The endpoint is `/mcp` and accepts POST only. Two ways to authenticate:
+The endpoint is `/mcp` and accepts POST only. Anything else answers `405` with
+an `Allow: POST` header and the text `MCP endpoint accepts POST only`. Two ways
+to authenticate:
 
 | Form | When to use it |
 | --- | --- |
@@ -31,21 +33,44 @@ An unauthenticated call gets `401` with a `WWW-Authenticate` header pointing at
 can start an OAuth sign-in instead of asking a human for a permanent token —
 see [Agent access](agent-access.md).
 
-Methods answered: `initialize`, `ping`, `tools/list`, `tools/call`, and
-`notifications/*` (accepted, no body). JSON-RPC **batches** — a top-level array
-— are refused with "batch requests are not supported". Anything else comes back
-as "method not found".
+A **deactivated account** is turned away at the endpoint with `403 this account
+has been deactivated`, before any tool name is even read. That check sits here
+in its own right: this entry point does not run through the same wrapper the
+rest of the product uses, so without it a deactivated account would keep working
+over MCP while the browser turned it away.
 
-`initialize` returns the server name `Salt.md`, its version, and an
-instructions string that tells the agent one thing before its first call:
+Methods answered: `initialize`, `ping`, `tools/list`, `tools/call`, and
+`notifications/*` (accepted with `202`, no body). JSON-RPC **batches** — a
+top-level array — are refused with "batch requests are not supported". Anything
+else comes back as "method not found".
+
+`initialize` returns the server name `Salt.md`, its version, an `icons` array
+and an instructions string. The icons are this instance's logo — an embedded SVG
+that survives a strict content policy, plus an absolute link to the PNG for
+clients that dislike SVG — so a client can show the instance instead of a
+placeholder. The instructions tell the agent one thing before its first call:
 workspaces can carry rules, and it should read them.
 
 ### What a tool returns
 
 Every tool returns one block of text. Some return prose, most return JSON as
-text. A failure is not a JSON-RPC error — it comes back as a normal result with
-`isError` set and the message as its text. An agent therefore always gets a
-readable sentence, never a bare code.
+text. A tool that **refuses** does not produce a JSON-RPC error: it comes back
+as a normal result with `isError` set and the message as its text. So anything a
+tool itself rejects — a wrong id, a missing permission, a bad argument, the rate
+limit — arrives as a readable sentence.
+
+Failures that happen **before** a tool runs are ordinary JSON-RPC errors with a
+numeric code and no tool result:
+
+| Code | When |
+| --- | --- |
+| `-32700` | the body is not valid JSON, or arrived with no length and could not be read |
+| `-32600` | the body is over the limit, or it is a batch |
+| `-32601` | unknown method |
+| `-32602` | the `tools/call` parameters could not be parsed |
+
+A client that only ever looks at the tool result will see nothing at all for
+those four.
 
 ### Untrusted content
 
@@ -69,17 +94,19 @@ agent, or anyone holding its token, cannot rewrite its own guardrails.
 
 ## Permissions
 
-Three gates, all applied before a tool runs.
+Four gates. The first is at the door, the other three run before a tool.
 
-1. **Token scope.** A read-only token may call only the reading tools. A
+1. **The account.** A deactivated account is refused at `/mcp` itself, with
+   `403`, whatever the token says.
+2. **Token scope.** A read-only token may call only the reading tools. A
    writing call gets `this API token is read-only; "<tool>" requires a write
    token`. For `revisions` and `comments`, the *action* decides — reading a
    history is a read, restoring a revision is a write.
-2. **Workspace scope.** A token can be narrowed to particular workspaces. A page
+3. **Workspace scope.** A token can be narrowed to particular workspaces. A page
    outside them reads as not found, including as the destination of a move.
    A workspace can also refuse agents entirely, or accept only OAuth ones — see
    [Workspaces](workspaces.md).
-3. **Page permission.** The same checks the interface makes: workspace
+4. **Page permission.** The same checks the interface makes: workspace
    membership, role, and the private flag. MCP is not a side door.
 
 Failures are deliberately indistinct. `page "abc" not found` means the page does
@@ -94,6 +121,11 @@ settings, workspace membership and roles, and applying workspace rules. Those
 are powers over the instance rather than over content, and they need a signed-in
 browser.
 
+One more thing has no tool: **a page's raw trail cannot be read over MCP.** You
+can write to it (`note`, and the entry `working_on` leaves at check-out), but
+nothing hands it back. Reading it means the browser, or `GET
+/api/pages/{id}/notes` over the REST surface — see [API](api.md).
+
 ## Limits
 
 | Limit | Value |
@@ -104,14 +136,16 @@ browser.
 | Rows per `create_rows` call | 200 |
 | Rows per `query_rows` call | 500 |
 | Revisions per `revisions` call | 100 |
+| Revisions kept per page | 50, oldest dropped |
 | Workspace rules | 16000 characters |
 | A single note | 2000 characters, truncated silently |
 
 Over the rate limit you get `rate limit exceeded — too many requests, slow
-down`. Over the body limit the server refuses **before reading** — it checks
-Content-Length first — and tells you to use `/api/upload` instead.
+down` as an ordinary tool error. Over the body limit the server refuses
+**before reading** — it checks Content-Length first — and tells you to use
+`/api/upload` instead.
 
-### Two arguments no schema mentions
+### Three arguments no schema mentions
 
 Every writing tool accepts an `idempotency_key`. A retried call carrying the
 same key returns the first call's result instead of doing the work twice; the
@@ -120,6 +154,14 @@ client that validates strictly will strip it.
 
 `get_page` accepts `recursive` as a synonym for `include_children`, also
 undeclared.
+
+`comments` accepts a `resolved` boolean, and it **overrides what the action
+says**: `action: "resolve"` with `resolved: false` reopens the comment. If you
+pass the field at all, it is the field that decides.
+
+There is a fourth, the batch key "updates" on `set_properties`, described in
+that tool's section — it changes the shape of the call rather than adding a flag
+to it.
 
 ## The catalogue
 
@@ -175,9 +217,18 @@ What each returns:
 ignore it: pages, templates, workspaces and users always span everything the
 token reaches, and cover presets are constants.
 
-For files there is a wrinkle worth knowing: called with neither `workspace_id`
-nor `under`, the file list covers your **default workspace only**, not every
-workspace you can reach.
+Three things about the file list are worth knowing, because it is an **index**
+and not a live scan of the disk:
+
+- Called with neither `workspace_id` nor `under`, it covers your **default
+  workspace only**, not every workspace you can reach.
+- It is filtered by workspace, so a file that belongs to no workspace never
+  appears. That is every file uploaded without a `page_id`, and every workspace
+  logo and account avatar — those hang off a workspace record or an account, not
+  off a page.
+- A file whose block was deleted from its page stays in the list until the index
+  is rebuilt, because nothing removes a single entry. The file is still on disk;
+  the list is telling the truth about that, not about the page.
 
 Errors: `kind is required — use one of: …`; `unknown kind "x" — use one of: …`;
 `workspace "…" not found`.
@@ -218,9 +269,16 @@ A document comes back as `# Icon Title` followed by the body. A **database**
 comes back as a Markdown table of its rows: a Title column plus one column per
 property, with select option ids resolved to their names.
 
-`include_children` returns the whole sub-tree in one answer: each page as a
-heading one level deeper than its parent (capped at six), separated by `---`,
-with sub-pages you may not read silently skipped.
+`include_children` returns the whole sub-tree instead: each page as a heading
+one level deeper than its parent (capped at six), separated by `---`, with
+sub-pages you may not read silently skipped.
+
+**The two forms are not the same read**, and on a database the difference is
+large. The table above is what a plain `get_page` produces. With
+`include_children` the sub-tree export runs, which renders each page's own
+blocks — and a database page has none. You get an empty heading for the database
+followed by one `---` section per row. Ask for the table, or ask for the
+sub-tree; you cannot have both in one call.
 
 Errors: `page "…" not found`.
 
@@ -251,10 +309,10 @@ one of
 | **embed** | a database embedded in a page |
 
 `kinds` keeps only the kinds you name. The answer also carries **orphans** —
-pages with no connection at all — and `counts` for nodes, edges and orphans.
-The full node list is opt-in via `include_nodes`, because on a real instance it
-is thousands of entries and the question people actually ask is answered by the
-orphans.
+pages with no connection at all — a top-level `count` (the number of edges), and
+`counts` for nodes, edges and orphans. The full node list is opt-in via
+`include_nodes`, because on a real instance it is thousands of entries and the
+question people actually ask is answered by the orphans.
 
 Both ends of an edge must be visible to you, or the edge is dropped: otherwise
 it would reveal that a private page exists.
@@ -268,8 +326,12 @@ Who you are and what this connection may do. No parameters. Read-only.
 
 Returns `user_id`, `name`, `email`, `token_scope` ("read" or "write"),
 `can_write`, `workspace_scope` (either the list of workspace ids or
-"all workspaces you are a member of"), a `not_available_via_mcp` list, and a
-`before_you_start` reminder to check in with `working_on`.
+"all workspaces you are a member of"), a `not_available_via_mcp` list, a `note`,
+and a `before_you_start` reminder to check in with `working_on`.
+
+The `note` names the two boundaries agents most often walk into: `list` with
+kind="users" shows only the people you share a workspace with, and account
+administration needs a signed-in browser session.
 
 Call this first when a write fails. It separates "wrong id" from "not allowed"
 in one call.
@@ -337,10 +399,14 @@ uploaded path like `/files/abc123.jpg`. An external image URL is **refused** —
 every viewer of the page would otherwise fetch from that host, which is a beacon
 planted in somebody else's document.
 
-A Markdown link whose target is a page of this instance
-(`[Handbook](/p/<32-hex-id>)`, or the absolute URL `set_sharing` hands back)
-becomes a real page link — it shows up in `get_links` and in the graph. A plain
-link navigates but leaves the page an island.
+A Markdown link whose target is a page of this instance becomes a real page
+link — it shows up in `get_links` and in the graph. Two forms count: the bare
+path `/p/<32-hex-id>`, and an absolute URL ending in it,
+`https://salt.example.com/p/<32-hex-id>`. Nothing else does. In particular a
+**public share link is not a page link**: the address `set_sharing` hands back
+is `/public/<token>`, and pasted as a Markdown target it stays an ordinary link
+that navigates and leaves the page an island. Link to the page id, not to the
+share.
 
 `tags` are normalised the way the interface normalises them: a leading `#` is
 dropped, spaces become hyphens, duplicates removed.
@@ -353,8 +419,13 @@ Returns `Created page "Title" with id <id> (path: /p/<id>)`, or
 
 Errors: `title is required`; `parent page "…" not found`; `template "…" not
 found`; `page "…" is not a template`; the cover message above; `you are a viewer
-in that workspace and cannot create pages there`. If the page is created but its
-metadata or properties then fail, the error names the new id so nothing is lost.
+in that workspace and cannot create pages there`. A workspace-scoped token that
+cannot enter your default workspace gets its own message when it creates with no
+parent and no `workspace_id`: `this token cannot create top-level pages in the
+default workspace; pass workspace_id … or a parent_id inside an allowed
+workspace` — that one is worth reading rather than retrying, because retrying
+the same call cannot succeed. If the page is created but its metadata or
+properties then fail, the error names the new id so nothing is lost.
 
 ### update_page
 
@@ -398,9 +469,20 @@ Write Markdown into a page's body.
 | `mode` | string | no — `append` (default), `prepend`, `replace` |
 
 `append` is the default because it is the only one of the three that cannot
-destroy anything. `prepend` and `replace` **save the current state as a revision
-first**, so both are undoable through `revisions`; append does not, since it
-takes nothing away.
+destroy anything.
+
+All three leave a revision behind, but not the same one, and the difference is
+the whole point of the history:
+
+- `prepend` and `replace` save the page **before** overwriting it. That older
+  state is what `revisions` gives you back, so both are undoable.
+- `append` saves a revision **after** it has written. It records the new state,
+  not the old one, so it is a marker in the history and not an undo point. It
+  needs none: an append takes nothing away.
+
+Snapshots are throttled to one per page every two minutes, so a burst of writes
+leaves one revision rather than ten — and two `replace` calls a minute apart
+leave only the state from before the first.
 
 All three write past the realtime editor and then reset the live document.
 Anyone with the page open at that moment loses unsaved edits. That is why append
@@ -418,7 +500,14 @@ Errors: `unknown mode "x" — use append (the default), prepend or replace`;
 | --- | --- | --- |
 | `page_id` | string | yes |
 
-A deep copy of the page and its entire sub-tree, placed next to the original.
+A deep copy of the page and its sub-tree, placed next to the original.
+
+**It copies only the parts you may read.** A private sub-page belonging to
+somebody else is left out, and everything below it goes with it. That is not a
+rounding error to work around: without the rule, copying a tree turned "no
+access" into "mine", because the copy takes your name as its owner while the
+private flag stays on.
+
 Returns `Duplicated page → new id <id>`.
 
 ### set_trashed
@@ -452,6 +541,13 @@ becomes the template, the page stays an ordinary page, and later edits to the
 page do not change what the template offers. Returns `Saved page <id> as
 template <id> — the page itself is unchanged`. See [Templates](templates.md).
 
+It needs **write** permission on the page, not just read — a template is a new
+object made from somebody's content. Like `duplicate_page`, it copies only the
+parts of the sub-tree you may read.
+
+Errors: `page_id is required`; `page "…" not found`, which is also the answer
+for a page you may read but not write.
+
 ### upload_file
 
 | Parameter | Type | Required |
@@ -464,6 +560,13 @@ With a `page_id` the file is appended to that page as a block — an image block
 for `.png`, `.jpg`, `.jpeg`, `.gif` and `.webp`, a file block for everything
 else. A `.pdf` also gets its text extracted and indexed, so its contents become
 findable by `search`.
+
+**Without a `page_id` the upload still succeeds**, and that is the case to be
+careful with. The bytes are written and you get a `/files/…` address back, but
+the file belongs to no page and therefore to no workspace: nothing links to it,
+`list` with kind=`files` will never show it, and a PDF's text is not extracted,
+so `search` cannot find it either. It is reachable only by the address in the
+answer. Pass the page you mean it to live on unless you have a reason not to.
 
 The size is judged from the encoded length before anything is decoded, so an
 oversized upload is refused without a second copy being made of it. Returns
@@ -519,7 +622,11 @@ converted for you; stored raw they used to crash the page on opening. An id you
 do not give is derived from the name, so a property called "Due date" gets the
 id `due-date`.
 
-Omit the schema entirely and you get a default Status board.
+Omit the schema entirely and you get one property — a `Status` select with the
+options To do, In progress and Done — and **two** views: a Board grouped by
+`Status`, and a Table. Two views matter for what you can do next: `delete_view`
+refuses the last one, so with the default you can delete one of them and not
+the other.
 
 Returns `Created database "T" with id <id>`. Errors: `title is required`;
 `schema is not valid JSON`; `schema must be an array of property definitions…`;
@@ -590,12 +697,20 @@ filter titles with `search` instead. Operators:
 
 | Operator | Meaning |
 | --- | --- |
-| `is` | equal (the default) |
+| `is` | equal — the default when a `value` was given |
 | `is_not` | not equal; a missing value counts as not equal |
 | `contains` | substring, also inside list values |
-| `gt`, `lt` | greater / less than, numeric when both sides look numeric |
+| `gt`, `lt` | greater / less than; numeric only when **the value you pass** parses as a number, otherwise a text comparison |
 | `is_empty` | unset, empty string, or an empty list |
-| `is_not_empty` | anything else |
+| `is_not_empty` | anything else — and the default when `op` and `value` are both left out |
+
+Two of those defaults deserve a second look. Omitting `op` does not always mean
+`is`: with an empty `value` it means `is_not_empty`, so
+`{"property":"owner"}` asks "has an owner", not "owner is blank". And `gt`/`lt`
+decide numeric or text from the value **you** pass, never from what is stored:
+`{"property":"amount","op":"gt","value":"abc"}` compares text on a number
+column, and `{"property":"code","op":"gt","value":"5"}` reads a text column as
+numbers.
 
 `value` is always a string, even for a number. A select value written as its
 **name** is matched to its option id for you, so you can search with the same
@@ -605,11 +720,19 @@ word you wrote with.
 uses. `limit` defaults to 50; anything above 500 or below 1 falls back to 50
 rather than being clamped to the maximum.
 
+**Two mistakes fail soft here**, which is worth knowing because neither produces
+an error. A filter whose property id contains anything unusual is dropped and
+the rest of the query runs — so the answer is wider than you asked for, not
+empty. And a `sort` naming a property that is not in the schema falls back to
+the rows' own order. If a result looks unfiltered or unsorted, suspect the
+spelling before the data, and check the ids with `get_collection`.
+
 Returns `{rows, total, offset, limit}`. Each row carries `id`, `title`, `icon`,
 `cover`, `position`, `props` and `tags`, with rollups, formulas and
 backrelations already computed. `total` is the count **after** filtering, so
 paging is honest. Other people's private rows are excluded from both the rows
-and the total.
+and the total — unless you are an **admin of the workspace**, who sees them all,
+the same rule the rest of the product applies.
 
 Errors: `page "…" is not a database`.
 
@@ -624,11 +747,19 @@ Up to **200** rows in one call, each `{title, icon?, properties?}`. For 40 rows
 this is one call rather than forty, each of which could fail and leave half a
 state behind.
 
+`page_id` is checked for existing, **not for being a database**. Point it at an
+ordinary document and the call reports rows created — they are created, as
+ordinary sub-pages of that document, and they appear in no view because there is
+no schema and no view to put them in. The error text says `database "…" not
+found`, which only ever means the id is wrong or out of reach. Confirm the
+target with `get_collection` first if the id came from somewhere other than a
+listing.
+
 Returns `{"created":n,"ids":[…]}`. Errors: `rows must be a list of {title,
 icon?, properties?}`; `rows is empty`; `at most 200 rows per call (got N) —
 split into batches`; `every row needs a title (row N is empty) — nothing was
-created`. If a row fails partway through, the error says how many were created
-before it — those stay.
+created`; `database "…" not found`. If a row fails partway through, the error
+says how many were created before it — those stay.
 
 ### set_properties
 
@@ -688,15 +819,27 @@ Without `view_id` it creates and `type` is required. With one it **merges** —
 what you do not pass stays as it is. A view's **type cannot be changed**: delete
 it and create the new one.
 
-A board needs `group_by` (a select or a relation property). A calendar and a
-timeline need `date_prop`. Both are checked up front, because a board without a
-grouping renders empty and sends you hunting for the mistake in the data rather
-than in the call.
+A board needs `group_by`, a calendar and a timeline need `date_prop`, and both
+are checked up front: a board without a grouping renders empty and sends you
+hunting for the mistake in the data rather than in the call.
 
-Clearing works through empty values: `""` for `group_by` and `sort`, `[]` for
-`filters` and `hidden`. Filters take the same operators `query_rows` does. A
-board people actually work in usually needs one — without a "status is not done"
-filter the finished column grows forever and pushes the work aside.
+What is checked is that the property **exists in the schema**, not what type it
+is. A board grouped by a date or a checkbox is created without complaint — and
+then shows "This board needs a Select property to group by. Open ⚙ Properties to
+add one." instead of columns. The types that produce columns are select,
+multi-select and relation; those are also the only ones the interface's own
+group-by picker offers.
+
+Clearing works through empty values: `""` for `sort`, `[]` for `filters` and
+`hidden`. **`group_by` and `date_prop` cannot be cleared on the view types that
+need them** — passing `""` removes the setting and the view is then refused for
+being incomplete, so a board with `group_by: ""` comes back as `a board needs
+group_by`, and a calendar or timeline with `date_prop: ""` likewise. To be rid
+of the grouping you delete the view.
+
+Filters take the same operators `query_rows` does. A board people actually work
+in usually needs one — without a "status is not done" filter the finished column
+grows forever and pushes the work aside.
 
 An unnamed view is named after its type, capitalised.
 
@@ -737,9 +880,17 @@ A page's history. See [History and audit](history-and-audit.md).
 | `limit` | integer | **list** only |
 
 `list` returns `{page_id, revisions:[{id, created_at, author, title,
-content_bytes, by}]}`, newest first. **`by` is the interesting column**: `human`,
-`agent`, or `unknown` for a revision from before the audit trail existed. Limit
-defaults to 20; anything above 100 or below 1 falls back to 20.
+content_bytes, by}]}`, newest first. Limit defaults to 20; anything above 100 or
+below 1 falls back to 20. The newest 50 revisions of a page are kept; older ones
+are dropped.
+
+**`by` is the interesting column**, and the one most easily misread. It is
+`human`, `agent`, or `unknown`. `unknown` does not mean old: it means the
+revision could not be matched to an entry in the audit trail. That covers
+revisions written before the trail existed, and it also covers **every revision
+an `append` leaves behind**, because that path records no author to match on. A
+history full of `unknown` on a page an agent has been appending to is the normal
+picture, not a sign of missing data.
 
 **get** returns one older state as `{page_id, revision_id, created_at, author,
 title, markdown}`.
@@ -767,6 +918,11 @@ Errors: `unknown action "x" — use list (the default), get or restore`;
 `list` returns the page's comments as JSON. `add` posts one; give `block_id` to
 attach it to a single block instead of the page. `resolve` ticks one off,
 `reopen` un-ticks it.
+
+There is also an undeclared `resolved` boolean, and where it appears it wins:
+`action: "resolve"` together with `resolved: false` reopens the comment. Two
+ways to say the same thing, and only one of them is in the schema — send the
+action alone unless you have a reason.
 
 Deleting is deliberately **not** an action here — see below.
 
@@ -810,8 +966,14 @@ what makes it worth reading later: you wrote it before you knew how it would
 end. Correct a wrong one by adding another that says so. A person can discard a
 page's whole trail deliberately, and that discarding is itself logged.
 
-Everyone who may read the page sees the trail. Writing one needs write
-permission. Text over 2000 characters is truncated without complaint.
+Everyone who may read the page sees the trail **in the browser**. No MCP tool
+hands it back: there is no kind of `list` for notes and nothing returns them, so
+an agent can write to the trail and cannot read what it or anyone else wrote
+there. Over HTTP it is `GET /api/pages/{id}/notes`, which needs read permission
+on the page — see [API](api.md).
+
+This tool needs **write** permission. Text over 2000 characters is truncated
+without complaint.
 
 Returns `Noted, N on that page now. Nobody can edit or remove a single one,
 including you — correct a wrong note by adding another.` Errors:
@@ -833,16 +995,23 @@ behind.
 
 `public: true` mints a link anyone can open **without signing in**. Only do it
 when the user asked. Returns `{page_id, url, expires, note}`, the url being
-`https://salt.example.com/public/<token>` on your own domain.
+`https://salt.example.com/public/<token>` on your own domain. That address is
+for a human to open — it is not the form of link that turns into a page link
+when you write it into Markdown (see `create_page`).
 
 There is one live share per page: sharing again **replaces** the previous link,
 which is why a link somebody believes revoked cannot quietly keep working.
 `public: false` revokes it and answers `Revoked the public link for page <id>`,
 or `Page <id> was not shared publicly` if there was none.
 
+**A public form on the same page is left alone**, in both directions. Minting
+and revoking touch the reading share only, so revoking a page's public link does
+not close a form that is collecting submissions. Forms are closed where they are
+made — see [Forms](forms.md).
+
 Errors: `public is required (true to create a public link, false to revoke it)`.
 
-More on what a visitor sees, and on public forms, in [Sharing](sharing.md).
+More on what a visitor sees in [Sharing](sharing.md).
 
 ## Workspaces
 
@@ -870,9 +1039,15 @@ purpose: the workspace you point at is the blueprint, so it cannot drift out of
 step with how you actually work. Use `update_page` with `workspace_id` afterwards
 to move existing pages in.
 
-Returns `Created workspace "N" with id … — you are its admin.` or
-`Created workspace "N" with id … from the structure of …: N database(s) with
-their schemas and views, no rows.` or `Updated workspace <id>`.
+Creating from nothing returns `Created workspace "N" with id … — you are its
+admin.` followed by two more sentences: a reminder to move existing pages in,
+and a note that the workspace has no rules yet and that conventions can be
+drafted with the user and submitted via `propose_workspace_rules`. **The
+reminder still names a tool that no longer exists** (`move_page`, folded into
+`update_page`) — read it as `update_page` with `workspace_id`. Creating from a
+blueprint returns `Created workspace "N" with id … from the structure of …: N
+database(s) with their schemas and views, no rows.` Changing returns
+`Updated workspace <id>`.
 
 Errors: `name is required`; `name is too long`; `creating workspaces is disabled
 on this instance`; `this connection is limited to particular workspaces, so it
@@ -956,10 +1131,20 @@ colourless columns.
 `limit` imports only the first N records — a trial run before the real thing.
 
 Two things happen **before** the job starts, so a mistake fails immediately
-rather than halfway: the source is fetched and mapped, and write permission on
-the target is checked. Only public hosts can be fetched: loopback, private
-ranges and link-local addresses — where cloud metadata services live — are
-refused. A self-hosted source needs the operator to start the server with
+rather than halfway — and they happen **in this order**:
+
+1. The target is resolved and write permission on it is checked, along with
+   every property name you mapped.
+2. Only then is the source fetched and the mapping applied.
+
+The order shows in what you get back. A wrong target fails with a permission or
+property error and the source is never fetched at all, so the answer says
+nothing about whether the URL was reachable. Fix the target first, then the
+mapping.
+
+Only public hosts can be fetched: loopback, private ranges and link-local
+addresses — where cloud metadata services live — are refused. A self-hosted
+source needs the operator to start the server with
 `SALT_IMPORT_ALLOW_PRIVATE=1`; an agent cannot open that door.
 
 Returns immediately with `{job_id, status, total, target, note, next}`. Ceilings:
@@ -1018,11 +1203,11 @@ somebody actually has; "working" does not.
 
 **Nothing expires on you.** An agent has no clock and cannot wake itself to say
 "still here", so a ten-minute lease would erase a three-hour job halfway
-through. The entry stays until you check out, the interface fades it using two
-timestamps ("here for 2h 14m, last seen 47 min ago"), and a session silent for
-12 hours is swept as crashed. Every other call you make naming that page counts
-as a sign of life, including one that is refused — an agent whose write bounced
-is still alive.
+through. The entry stays until you check out, the interface fades it after ten
+minutes of silence using two timestamps ("here for 2h 14m, last seen 47 min
+ago"), and a session silent for 12 hours is swept as crashed. Every other call
+you make naming that page counts as a sign of life, including one that is
+refused — an agent whose write bounced is still alive.
 
 Checking in again keeps the original start time, so "still on it, now with a
 different note" does not reset the clock.
@@ -1036,17 +1221,21 @@ true) — nothing expires on you mid-task.` or `Checked out of page <id>. Your
 last note stays on the page as a trail entry.` or `Nothing to check out of — you
 were not marked as working on that page.`
 
-Errors: `page_id is required`; `page "…" not found`. Reading permission is
-enough to check in; leaving a `note` needs write permission.
+Errors: `page_id is required`; `page "…" not found`.
+
+**Reading permission is enough for the whole tool**, including the trail entry
+the check-out leaves behind. That is the one place where a note reaches a page
+you cannot write to. The separate `note` tool is the one that requires write
+permission.
 
 ## Where things are written down
 
 Every write through MCP lands in the audit log as an **agent** action, with the
-account, the tool name, the page and the result. Two tools are excluded on
-purpose: `working_on`, which writes its own entry with the note as the detail,
-and `note`, whose trail entry already is the record — copying it into the audit
-log would spread it to a second place read by a different set of people and buy
-nothing.
+account, the tool name, the page and the result. `working_on` writes its own
+entries instead — one on check-in, one on check-out, with the note as the
+detail. `note` writes none: its trail entry already is the record, and copying
+it into the audit log would spread it to a second place read by a different set
+of people and buy nothing.
 
 ## Related pages
 

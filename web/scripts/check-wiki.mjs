@@ -264,7 +264,17 @@ if (manifest) {
       } catch {
         continue; // the stamped commit is not in this clone — nothing to compare against
       }
+      // The working tree counts too. Only comparing commits means a shot goes
+      // stale the moment you edit the component and the check stays quiet until
+      // after you have committed — one round too late to be "in the same step",
+      // which is the whole point of tying pictures to source files.
+      let dirty = '';
+      try {
+        dirty = execFileSync('git', ['diff', '--name-only', 'HEAD', '--', ...s.shows],
+          { cwd: repo, stdio: 'pipe' }).toString().trim();
+      } catch { /* nothing to compare */ }
       if (changed) stale.push(`${s.id} (${changed.split('\n').length} commit(s) since)`);
+      else if (dirty) stale.push(`${s.id} (uncommitted change to ${dirty.split('\n')[0]})`);
     }
     if (stale.length) {
       errors.push(

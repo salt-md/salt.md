@@ -22,19 +22,27 @@ workspace and it fires for pages in every workspace on the instance.
 4. Under **When should we call?**, tick at least one of the three events. Each
    line shows the plain wording and the event name that will appear in the
    message.
-5. Press **Add**.
+5. Press **Add**. The button reads *Saving…* while the request is in flight.
 
 ![Outbound webhooks. The signing secret is shown once, when the webhook is created.](img/admin-webhooks.png)
 
 The button stays disabled until there is an address and at least one event
 ticked. If the address is rejected, the reason appears above the button —
 *that does not look like a URL*, *a webhook URL has to start with https:// or
-http://*, *the URL has no host*, or *that URL is too long*. If no event is
-ticked the server answers *Pick at least one event: page.created, page.updated
-or page.trashed.*
+http://*, *the URL has no host*, or *that URL is too long*.
+
+Under **Configured**, a fresh instance shows *Nothing yet — nobody is being
+called.* until the first hook exists.
 
 Adding and removing a webhook is written to the [audit log](history-and-audit.md)
 with the address as the detail.
+
+If you are creating hooks over the API rather than in the dialog, one thing is
+worth knowing: an event name the server does not recognise is dropped without a
+word. Sending `["page.created", "page.deleted"]` succeeds and leaves a hook
+subscribed to `page.created` alone. Only when nothing survives that filter does
+the server answer *Pick at least one event: page.created, page.updated or
+page.trashed.* Compare the `events` field of the answer against what you sent.
 
 ## The secret, shown once
 
@@ -48,10 +56,18 @@ As soon as the hook is created, a box appears:
 Below it sits the secret — 64 hexadecimal characters — and a button labelled
 **I have it**, which dismisses the box.
 
-Copy it before you dismiss it. The secret is stored the way an API token is:
-write-only after creation. Nothing in the interface, in `/api/webhooks`, or in a
-backup export shows it again. If you lose it, remove the hook and add it again;
+Copy it before you dismiss it. The secret is write-only through the interface
+and through the API: nothing in the dialog and nothing in `/api/webhooks` shows
+it again, for any hook, ever. If you lose it, remove the hook and add it again;
 the new one gets a new secret, and your receiver has to be updated.
+
+It is **not** hashed the way an [API token](api.md) is. A token is stored as a
+hash and cannot be recovered by anybody, but a webhook secret has to stay usable
+— the server computes the signature with it on every delivery — so it sits in
+the database as it is. An instance backup (the owner's **Download backup
+(.tar.gz)** in Instance settings → Maintenance, or `./salt backup` from cron)
+therefore contains every webhook secret on the instance. Keep the archive as
+carefully as you would keep the secret.
 
 ## The three events
 
@@ -70,21 +86,35 @@ the coverage is not complete. This is what fires today:
 
 | Action | Message |
 | --- | --- |
-| New page from the sidebar, or a new row in a collection | `page.created` |
+| New page, new collection, or a new row in a collection, from the browser | `page.created` |
 | A page created by an agent with `create_page` | `page.created` |
 | Editing a page's text in the editor | `page.updated` |
-| Renaming, changing icon, cover, description, tags, visibility, properties, or moving a page | `page.updated` |
+| Renaming, changing icon, cover, description, tags, visibility or properties | `page.updated` |
+| Moving a page under a different parent | `page.updated` |
+| Dragging a page up or down in the sidebar — a position is a detail like any other | `page.updated` |
+| Marking a page as a template, or removing that flag | `page.updated` |
 | An agent replacing a body with `write_content` in mode `replace` | `page.updated` |
 | Moving a page to the trash | `page.trashed`, one per page in the subtree |
-| Deleting a page for good from the trash | `page.trashed` |
+| Deleting a page for good from the trash | `page.trashed`, one per page in the subtree |
 
 And this is what produces **no** message at all, which is the part worth knowing
 before you build on it:
 
-- Rows added with `create_rows`, and pages made with `duplicate_page`.
+- **Any duplicate.** The ⋯ menu's **Duplicate**, **Save as template**, starting
+  a page from an entry under **Templates**, and an agent's `duplicate_page` all
+  take the same route through the server, and that route is silent. Duplicating
+  is not noisier for agents than for people; it is silent for both.
+- A collection created by an agent with `create_database`. The same collection
+  created in the browser does fire `page.created` — the two paths differ.
+- A database placed into a document with `embed_database`. That changes the
+  document's body, and no `page.updated` follows it.
+- Rows added with `create_rows`.
 - Pages created by a [form](forms.md) submission from outside.
 - Anything created by an [import](import-export.md) — Markdown, a ZIP archive,
-  a CSV, or `import_url`.
+  a CSV, or `import_url`. A new workspace made from the
+  [blueprint library](library.md) is silent for the same reason: both write many
+  pages at once, and a two-thousand-page import would otherwise become two
+  thousand outbound calls.
 - An agent appending or prepending text: `write_content` in its default mode
   (`append`) and in mode `prepend` are silent. Only `replace` reports.
 - An agent changing details with `update_page`, `set_properties`,
@@ -92,6 +122,14 @@ before you build on it:
 - An agent trashing or restoring a page with `set_trashed`.
 - Restoring a page from the [trash](trash-and-recovery.md), and restoring an
   older version with `revisions`.
+- Turning a page's public share link on or off. A `visibility` change fires
+  `page.updated`, but a [share link](sharing.md) is a separate thing and its
+  creation and removal are quiet. A receiver watching for "this page became
+  reachable from outside" will never hear it.
+- **Deleting a whole workspace, or deleting an account together with its
+  personal pages.** Every page inside goes, and not one `page.trashed` is sent.
+  This is the sharpest gap on the list: an integration keeping a mirror will go
+  on holding pages that no longer exist here, with nothing to tell it otherwise.
 - Comments and notes — see [Comments and notes](comments-and-notes.md).
 
 If your integration has to see every change without exception, a webhook is not
@@ -99,11 +137,17 @@ the whole answer. Read the page list or the search index on a schedule as well.
 
 ### How often `page.updated` arrives while somebody types
 
-The editor writes a saved copy about 1.5 seconds after the last keystroke, and
-again when you leave the page. Each of those writes is one `page.updated`. A
-ten-minute editing session therefore produces many messages, not one. Treat the
-event as "this page changed, look at it again", not as a change list, and make
-your receiver safe to run twice on the same page.
+Two separate timers run in the editor, and each one produces its own message.
+
+The body is written about **1.5 seconds** after the last keystroke, and again
+when you leave the page. The title, icon, cover, tags and description are
+written on a timer of their own, about **half a second** after the last change
+to them. Typing a title therefore produces a `page.updated` shortly after you
+stop, and typing in the body produces another a second later.
+
+A ten-minute editing session produces many messages, not one. Treat the event as
+"this page changed, look at it again", not as a change list, and make your
+receiver safe to run twice on the same page.
 
 ## What arrives
 
@@ -128,7 +172,8 @@ A `POST` with a JSON body. The body names the page and does not carry it:
 - The headers are `Content-Type: application/json`, a `User-Agent` of
   `Salt.md/` plus the running version, and `X-Salt-Signature`.
 
-Two things about the body are deliberate and will not change without warning.
+Two things about the body are deliberate, and worth knowing before you build on
+it.
 
 **It never carries the page content.** Id, title, workspace and path — never the
 blocks. A webhook address is typed once by an admin and then sends forever to a
@@ -192,9 +237,9 @@ your automation cannot tell the difference.
 
 ## Which addresses a webhook may reach
 
-Only publicly routable ones. Before each delivery the host name is resolved and
-**every** address it resolves to is checked; if any of them is not public, the
-call does not happen. Refused:
+Before each delivery the host name is resolved and **every** address it resolves
+to is checked against a fixed list. If any of them is on the list, the call does
+not happen:
 
 | Refused | Examples |
 | --- | --- |
@@ -203,13 +248,19 @@ call does not happen. Refused:
 | Link-local | including `169.254.169.254`, the cloud metadata service |
 | Multicast and the unspecified address | any multicast range, `0.0.0.0` |
 
-The reason is not caution for its own sake. Salt sits inside a network and can
-reach neighbours that the internet cannot: routers, hypervisors, the metadata
-service that hands out cloud credentials. A field that makes the server call any
-address an admin can type is the classic way a harmless feature becomes a way in
-from outside. The check happens at delivery time and against the resolved
-address, not against the text of the URL, so a host name that quietly starts
-pointing inward is caught too.
+That list is the whole of the check. Anything not on it is dialled, including
+address ranges that are not reachable from the public internet — the shared
+range some providers put between a customer network and the internet (100.64.x)
+is the common example. So the rule is "these are refused", not "only the public
+internet is allowed".
+
+The reason for it is not caution for its own sake. Salt sits inside a network
+and can reach neighbours that the internet cannot: routers, hypervisors, the
+metadata service that hands out cloud credentials. A field that makes the server
+call any address an admin can type is the classic way a harmless feature becomes
+a way in from outside. The check happens at delivery time and against the
+resolved address, not against the text of the URL, so a host name that quietly
+starts pointing inward is caught too.
 
 **Redirects are refused.** A webhook endpoint has no reason to move, and
 following a redirect is how a checked address turns into an unchecked one. A
@@ -247,6 +298,13 @@ What the status line can say:
 - `bad request: …` — the stored address could not be turned into a request at
   all.
 
+**What your receiver should answer: anything.** There is no contract to meet.
+The status code is written to the status line and otherwise ignored, and the
+body is never read, so `204 No Content` with an empty body is a perfectly good
+reply. Nothing depends on answering quickly either, beyond the 10-second timeout
+— and since there is no retry, a slow or failing answer costs you the message
+rather than earning you a second one.
+
 A webhook never affects the person who triggered it. Deliveries run in the
 background, after the save has already succeeded; a receiver that is down, slow
 or gone does not slow anybody's typing and never turns a successful save into an
@@ -254,6 +312,16 @@ error message. The price of that is the missing retry: if your endpoint is
 unreachable for five minutes, the events from those five minutes are gone. Build
 receivers that can catch up by reading the current state, not ones that
 reconstruct history from the messages.
+
+## More than one hook, and the same address twice
+
+Nothing stops you adding several hooks, and nothing stops two of them pointing
+at the same address. There is no uniqueness check and no limit on how many a
+server holds. Each hook is its own thing: its own secret, its own event
+selection, its own status line — and its own delivery. Two hooks on one URL mean
+every matching event arrives there twice, signed with two different secrets.
+
+If a receiver is seeing doubles, that is the first place to look.
 
 ## Changing or removing a hook
 
@@ -272,10 +340,18 @@ hook, ever. `POST /api/webhooks` creates one and its answer is the only place
 the secret appears. `DELETE /api/webhooks/{id}` removes one. All three need an
 admin's browser session.
 
+One field needs a warning: `active` is always `true`. It is set when the hook is
+created and nothing in the product ever changes it — there is no enable/disable
+switch in the dialog and no route that flips it. Read it as a field the server
+consults before delivering, not as a setting you can use.
+
 ## When a webhook is the wrong tool
 
-- **Something inside Salt should react to a change** — that is not this. See
-  [Automation](automation.md).
+- **Something inside Salt should react to a change** — there is nothing for
+  that. Salt.md has no rule engine and no scheduler; nothing in it says "when
+  Status becomes Done, send an email". The logic lives at the other end of the
+  webhook. See [Automation](automation.md) for the whole map of what reaches in
+  and out.
 - **A program of your own wants to read and write pages** — call the API
   directly, or connect over MCP. See [API](api.md) and
   [Agents](agents.md).

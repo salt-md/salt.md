@@ -4,7 +4,7 @@ import Portal from './Portal';
 import { useBoardDrag } from '../boardDrag';
 import { tagColorClass } from '../tags';
 import { compare, firstWeekday, formatMonth, toDayString, weekdayNames } from '../format';
-import { t } from '../i18n';
+import { plural, t } from '../i18n';
 import { confirm, promptText } from '../dialog';
 import type {
   CollectionConfig,
@@ -1799,7 +1799,14 @@ function TableView({
         {rows.length > 0 && (
           <tfoot>
             <tr className="db-calc-row">
-              <td className="db-title-col db-calc-cell">{rows.length} Zeilen</td>
+              {/* German, hard-coded, in an English-first product — and every
+                  check read clean. The JSX rule structurally cannot see a
+                  string with an expression inside it, and one word without an
+                  umlaut is below the line rule's threshold. It was found by
+                  reading the code for the wiki. */}
+              <td className="db-title-col db-calc-cell">
+                {plural(rows.length, '{n} row', '{n} rows')}
+              </td>
               {schema.map((p) => (
                 <td key={p.id} className="db-calc-cell">
                   {footer(p)}

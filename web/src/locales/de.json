@@ -940,6 +940,10 @@
     "one": "{n} erledigter Kommentar",
     "other": "{n} erledigte Kommentare"
   },
+  "{n} rows": {
+    "one": "{n} Zeile",
+    "other": "{n} Zeilen"
+  },
   "{n} skipped": "{n} übersprungen",
   "{n} templates": {
     "one": "{n} Vorlage",

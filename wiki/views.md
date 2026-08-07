@@ -58,9 +58,8 @@ agent is working on right now.
 When the table has rows, its foot is a calculation row. Under each column it
 shows either a sum (`Σ`, for number, rollup and formula columns) or how many
 cells are filled. It is not configurable — there is one aggregate per column and
-it follows the type. The left-hand cell counts the rows, and it is the one place
-in the product that has not been translated: it reads **42 Zeilen** whatever
-language you are in. On a table with no rows there is no foot at all, only the
+it follows the type. The left-hand cell counts the rows: **42 rows**, in your
+own language. On a table with no rows there is no foot at all, only the
 empty-state line.
 
 **Sub-items.** When the collection has a relation property pointing back at

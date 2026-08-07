@@ -1,11 +1,12 @@
 # Import and export
 
 Getting content into Salt.md and back out again. There are five ways in — a
-single Markdown file, a folder or archive of them, a Notion export, a JSON
-source an agent points Salt.md at, and a native workspace archive — and four
-ways out: Markdown, a self-contained HTML page, a whole workspace as a ZIP, and
-an iCalendar feed your calendar app subscribes to. This page covers each one:
-what it accepts, what it produces, and what does not survive the trip.
+single Markdown file, a ZIP archive of them, a Notion export, a JSON source an
+agent points Salt.md at, and a native workspace archive — and six ways out: a
+page as Markdown, a page as a self-contained HTML file, a page as print or PDF,
+a workspace as a ZIP of Markdown files, a workspace as a native archive, and an
+iCalendar feed your calendar app subscribes to. This page covers each one: what
+it accepts, what it produces, and what does not survive the trip.
 
 Everything here works on the content you can already read. An import writes
 where you have write access; an export contains what you would see in the app
@@ -27,6 +28,18 @@ and nothing more.
 | One workspace | out | `.salt.zip` | workspace settings → **Export workspace** |
 | Every date property | out | iCalendar feed | user menu → **Subscribe to calendar** |
 
+**There is no folder import.** The file picker takes one file — `.md`,
+`.markdown` or `.zip`. A directory of Markdown has to be zipped first.
+
+Two things about where the import lives:
+
+- **The ⋯ menu shows Import (.md / .zip) only when you may edit that page.** On
+  a page you can read but not write, the menu has the three export items and no
+  import item. See [Permissions](permissions.md).
+- **A brand-new account does not need a page first.** With nothing in the
+  sidebar the screen says *No pages yet* and offers **Import (.md / .zip)**
+  beside **New page**.
+
 ## Importing Markdown
 
 ### A single file
@@ -39,9 +52,10 @@ Two things about this are worth knowing before you use it on twenty files:
 
 - **The new page lands at the top level**, not under the page whose menu you
   used. The menu is where the item lives; it is not the destination.
-- **The workspace is your default one** — the first workspace you are a member
-  of, which is not necessarily the one currently open in the sidebar. Move the
-  page afterwards if it landed in the wrong place.
+- **The workspace is your default one**, which the server picks out of your
+  memberships without asking. It is not necessarily the one currently open in
+  the sidebar, and it is not the one you joined first — move the page afterwards
+  if it landed in the wrong place.
 
 The title comes from the first Markdown heading in the file. A file with no
 heading at all produces a page called **Imported**.
@@ -58,8 +72,12 @@ the menu item to turn a file into a page.
 
 The same menu item accepts a `.zip`. The archive is unpacked into a page tree:
 
-- Every folder becomes a page.
-- Every `.md` file becomes a page under the folder it sat in.
+- **Every `.md` file becomes a page** under the folder it sat in. Its title
+  comes from the file name without the extension — not from the heading inside
+  it, which is what a single-file import uses.
+- **A folder becomes a page when there is a `.md` or a `.csv` somewhere under
+  it.** Folders are not imported for their own sake: a folder holding nothing
+  but images produces no page at all, and its images count as skipped.
 - A file that pairs with a same-named folder — `Handbook.md` next to
   `Handbook/` — fills that folder's page instead of creating a second page
   beside it.
@@ -69,6 +87,12 @@ The same menu item accepts a `.zip`. The archive is unpacked into a page tree:
 Everything again lands at the top level of your default workspace, and when it
 is done a message says how many pages were created and how many entries were
 skipped: *"Imported 42 pages, 7 skipped"*.
+
+**A script can choose the destination.** `POST /api/import-zip` takes the file
+plus an optional `parentId` form field, and then the whole archive is unpacked
+under that page, in that page's workspace rather than your default one. You need
+write access to it. The browser never sends the field, which is why the menu
+route always lands at the top level.
 
 **Skipped means not imported.** Anything that is not a `.md` or a `.csv` file is
 counted as skipped and left behind — images, PDFs and every other attachment in
@@ -113,6 +137,10 @@ paragraph rather than being dropped.
 
 `__bold__` and `_italic_` only take effect when the underscores are flanked by
 non-word characters, so `my_var_name` stays literal.
+
+Only one style at a time is recognised. `***both***` is not read as bold and
+italic together, and markup inside a link's label — `[**Handbook**](…)` — is not
+read at all; in both cases the asterisks arrive as ordinary characters.
 
 There is no divider on import: a line of `---` arrives as a paragraph
 containing three hyphens, even though the export writes a divider that way.
@@ -166,6 +194,11 @@ What it does:
   row's properties and are shown by the property panel; repeating them as body
   text is duplication. Whatever real content follows is kept.
 
+**Nothing about this is Notion-specific.** Any `.csv` in the archive becomes a
+collection — no id in the name, no paired folder and no `_all` twin needed. That
+is the short route from a spreadsheet to a database: put the file in a ZIP and
+import it.
+
 ### How a column's type is guessed
 
 | The column's non-empty values | Type |
@@ -183,18 +216,26 @@ Dates are recognised in these forms, and always stored as a plain calendar day.
 `Start → End` keeps the start.
 
 `2026-07-18` · `2026-07-18T14:30:00` · `2026-07-18 14:30` · RFC 3339 ·
-`July 18, 2026` · `Jul 18, 2026` · `18.07.2026` · `7/18/2026` · `18.7.2026`
+`July 18, 2026` · `Jul 18, 2026` · `18.07.2026` · `07/18/2026` · `18.7.2026`
 
-Note that the slash form is read as **month/day**, the way Notion writes it.
+The slash form is read as **month/day**, the way Notion writes it, and **both
+parts have to carry their leading zero**: `07/18/2026` is a date, `7/18/2026` is
+text. The dotted form is relaxed about it — `18.7.2026` and `18.07.2026` both
+work. A column with one unpadded value in it therefore comes out as text rather
+than as a date, and the whole column with it.
 
 Every value of a `select` column becomes an option, in the order the values
 first appear, with colours taken in turn from a fixed palette.
 
 ### The views you get
 
-The imported collection comes with a **Table** view. If any column was inferred
-as a select, it also comes with a **Board** grouped by it — a column literally
-named `Status` if there is one, otherwise the first select column found.
+The imported collection always gets a **Table** view. If any column was inferred
+as a select, it also gets a **Board** grouped by it — a column literally named
+`Status` if there is one, otherwise the first select column found.
+
+**The Board is the view that opens**, because it comes first in the list. A
+Notion database with any select column at all therefore arrives as a board; the
+table is one click away in the view bar. See [Views](views.md).
 
 ### Cleaning up an older import
 
@@ -224,7 +265,7 @@ the content passes through the agent.
 | `title` | the field each record's title comes from. Required. |
 | `items` | path to the array of records, e.g. `cards` or `data.results`. Omit when the response *is* the array. |
 | `markdown` | a field to use as the page body |
-| `properties` | database property name → source path, e.g. `{"Due": "due"}` |
+| `properties` | database property name → source path, e.g. `{"Due": "due"}`. Only has an effect with `database_id` — see below. |
 | `resolve` | turn a foreign id into readable text using another array in the same response |
 | `headers` | request headers for this one fetch, e.g. an authorization header. Never stored. |
 | `database_id` | import as rows of this database |
@@ -233,7 +274,9 @@ the content passes through the agent.
 | `limit` | import only the first N records — a trial run before the real thing |
 
 A path may reach into a list: `labels[].name` picks that field out of every
-element and joins the results.
+element. In a `properties` mapping the result stays a list, which is what a
+multiselect column wants. Used as the `title` or the `markdown` field, where the
+value has to be text, the elements are joined with commas.
 
 `resolve` handles the shape almost every REST answer has, where a record carries
 a foreign id and the readable name sits in a second list:
@@ -245,6 +288,12 @@ a foreign id and the readable name sits in a second list:
   "properties": { "Status": "idList", "Labels": "labels[].name" },
   "resolve": { "idList": { "from": "lists", "match": "id", "to": "name" } } }
 ```
+
+**`properties` needs a `database_id`.** Rows are the only target that has a
+schema to map names onto. With `parent_id` or `workspace_id` the records still
+arrive — as pages, with their title and their body — but the mapped values are
+worked out and then dropped, without a message. Create the database first if the
+columns matter.
 
 Four behaviours to rely on:
 
@@ -265,12 +314,18 @@ Four behaviours to rely on:
 
 The call returns a `job_id` at once. Poll `get_import_status` with it every few
 seconds until the status reads `done`; the answer carries how many records were
-written, how many failed, and up to ten error messages. Job status lives in
-memory, the last 20 jobs are kept, and only the account that started a job can
-read it. A restart loses the status — never the pages already created.
+written, how many could not be created at all, and up to ten error messages. Job
+status lives in memory, the last 20 jobs are kept, and only the account that
+started a job can read it. A restart loses the status — never the pages already
+created.
+
+**Read the messages even when the failure count is zero.** The count only covers
+records whose page could not be created. A record whose page was written but
+whose properties failed counts as created and appears in the messages only — so
+a run can report nothing failed and still leave rows with empty columns.
 
 Limits: 64 MB for the fetched source, 20000 records, three minutes for the
-fetch, at most five redirects.
+fetch, and at most four redirects followed.
 
 An import of this kind writes directly and fires no [webhooks](webhooks.md) —
 two thousand records would otherwise be two thousand outbound calls.
@@ -285,6 +340,11 @@ back. For that there is a native archive.
 `<name>.salt.zip`. **Import workspace…** in the same dialog takes one and
 creates a new workspace from it — you become its administrator, and the sidebar
 switches to it when it is done.
+
+**Who may download one:** a member of that workspace, or somebody holding a
+live emergency access grant to it. An instance administrator who is not a member
+gets *workspace not found*, the same answer as for a workspace that does not
+exist. See [Permissions](permissions.md).
 
 | In the archive | Not in the archive |
 | --- | --- |
@@ -302,18 +362,26 @@ the counts), `pages.json`, `tags.json`, and a `files/` folder.
 On import every page and every file is given a new id, and references inside the
 content are rewritten to match — page links, mentions and relations keep
 pointing at the right thing. If the name is already taken on this instance, the
-new workspace gets **(Import)** appended.
+new workspace gets **(Import)** appended. The upload is capped at 100 MB, the
+same ceiling as the Markdown archive import.
 
 | What can go wrong | The message |
 | --- | --- |
 | the file is not a ZIP | *not a valid zip archive* |
 | it is a ZIP but not ours | *not a Salt.md workspace archive (salt-workspace.json missing)* |
+| it has a manifest but no readable page list | *pages.json missing or invalid* |
 | written by a newer Salt.md | *archive format 2 is newer than this instance supports (1) — update Salt.md* |
 | the instance does not let you create workspaces | *creating workspaces is disabled on this instance — ask an admin* |
 
-The same reader is used for the ready-made workspaces on the shelf in
-[the library](library.md) — those are the same format, shipped inside the
-binary, with rows and documents left out.
+### The shelf is an import too
+
+**New workspace** in the sidebar opens *Start with a ready-made workspace*: a
+shelf of blueprints that ship inside the binary and are read by exactly the same
+reader as an uploaded archive, with rows and documents left out. What arrives is
+the databases with their columns, options and views, plus the workspace's house
+rules, and no data. The same screen can copy a workspace you already have, under
+*Or like one you already have*, on the same terms — or start from **Empty
+workspace**. See [Workspaces](workspaces.md).
 
 ## Exporting
 
@@ -327,14 +395,22 @@ Over MCP the same thing is `get_page`; with `include_children` it returns the
 whole sub-tree in one answer, each page separated by a rule and pushed one
 heading level deeper.
 
-In the [library](library.md) each row has a small **md** button that copies the
-export URL to the clipboard rather than downloading — useful for feeding a page
-to something else.
+In the [library](library.md)'s **Tree · agent view** tab each page has a small
+**md** button that copies the export URL to the clipboard rather than
+downloading — useful for feeding a page to something else. The other library
+tabs do not have it.
 
 ### A database as Markdown
 
-Exporting a collection page produces a Markdown table: one column per property,
-one row per row, in view order. Three limits follow from it being a plain table:
+Exporting a collection page produces a Markdown table: a `Title` column first,
+then one column per property in the order the schema holds them, one line per
+row.
+
+**No view is involved.** The rows come out in the collection's own stored order,
+and a view's sort, filter and hidden columns are not applied — you get the same
+file whichever view you happened to be looking at.
+
+Three more limits follow from it being a plain table:
 
 - **Computed columns are empty.** Rollups, formulas and backrelations are worked
   out when a view is read, and the export writes what is stored. The column
@@ -345,18 +421,28 @@ one row per row, in view order. Three limits follow from it being a plain table:
 A checkbox writes `✓` when ticked and nothing when not. A select writes the
 option's name. A number keeps four decimal places unless it is a whole number.
 
+Over MCP, `get_page` on a database returns this same table, so an agent reads a
+whole database in one call. With `include_children` it does something else
+entirely: it walks the rows as pages — each row's title as a heading, its body
+under it, and each row's sub-pages too — and writes no table, so no property
+values appear. Use `query_rows` when the values are the point.
+
 ### One page as a web page
 
 **⋯ → Web page (.html)** downloads a complete, self-contained HTML document —
 no stylesheet to fetch, no script, real headings, lists and tables. It is the
 format to hand to something that cannot read Markdown.
 
-Links in it are cleaned first: anything that is not `http`, `https` or `mailto`
-becomes `#`, so a planted URL in a block cannot run a script in whatever opens
-the file.
+Block-level addresses are cleaned on the way out: the URL of an image, of a
+file, video or audio block, and of a bookmark becomes `#` unless it is `http`,
+`https` or `mailto`. A link written inside a paragraph is carried over as it
+stands. An exported page is therefore exactly as trustworthy as the page it came
+from — if the content arrived from somewhere you do not control, treat the file
+the same way you would treat the page.
 
-Databases are not offered as HTML. A table is the faithful shape of their rows,
-and that is what Markdown gives.
+The menu item is offered on a database as well, and there it answers with the
+Markdown table instead: the download is a `.md` file. A table is the faithful
+shape of a database's rows, and that is what Markdown gives.
 
 ### Print, or a PDF
 
@@ -375,12 +461,18 @@ Workspace settings → **Export as Markdown** downloads `salt-export.zip`: one
 `.md` file per page, in folders that mirror the page tree. Two pages with the
 same name in the same folder get a `(2)` suffix.
 
-Databases come out as a folder of rows in this export, one `.md` per row,
-containing the row's title and body. **Row properties are not in it** — that is
-what the dialog means by "Readable anywhere, without the databases". Use the
-native archive when the properties matter.
+**A database comes out twice over**: a `.md` file for the database page itself,
+which holds its title and nothing else, and a folder of the same name beside it
+with one `.md` per row, containing the row's title and body. **Row properties are
+not in it** — that is what the dialog means by "Readable anywhere, without the
+databases". Use the native archive when the properties matter.
 
 The archive holds only pages you can read, and nothing from the trash.
+
+**Without a workspace it takes everything.** The button always names one. The
+endpoint behind it, `/api/export`, exports every workspace you can read into the
+same `salt-export.zip` when no workspace is given — worth knowing if you script
+a backup-shaped export. See [the API](api.md).
 
 ### What each block becomes
 
@@ -416,9 +508,14 @@ Export to Markdown and import the result, and these change:
 - Columns are flattened into one column of blocks.
 - Underlined text arrives as literal `<u>` tags.
 - Database rows arrive as pages, with their properties gone.
+- **Two styles on the same words** come apart. Bold and italic together are
+  written `***text***` and read back as an asterisk, bold *text*, an asterisk —
+  the italic is gone and two asterisks are now body text.
+- **Styling inside a link's label** does the same: `[**Handbook**](…)` returns
+  with the asterisks as part of the label.
 
-Page links, headings, lists, checklists, quotes, code, images, tables and every
-inline style come back unchanged.
+Page links, headings, lists, checklists, quotes, code, images, tables and any
+single inline style come back unchanged.
 
 ## The calendar feed
 
@@ -431,7 +528,7 @@ scope under *What should the calendar contain?*:
 
 | Scope | The feed holds |
 | --- | --- |
-| **Everything I can see** | every date property in every workspace you are a member of |
+| **Everything I can see** | every date property in every workspace you are a member of, plus any you currently hold emergency access to |
 | a workspace | the same, limited to that workspace |
 | a collection | the dates of that collection's rows |
 
@@ -440,7 +537,11 @@ A collection is only offered once it has a date property — the dialog says
 can never contain anything is worse than no feed.
 
 **Open in calendar** hands the `webcal://` link to your calendar app; **Copy
-URL** copies the `https://` form for anything that wants to fetch it.
+URL** copies the `https://` form for anything that wants to fetch it. The shape
+is your instance's public address followed by `/ics/<token>.ics`; a scoped feed
+is the same URL with `?workspace=<id>` or `?collection=<id>` on the end. That is
+enough to recognise one in a calendar app's settings, or to narrow a link you
+already have by hand.
 
 What lands in the calendar:
 
