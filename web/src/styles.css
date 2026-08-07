@@ -1187,6 +1187,7 @@ button {
   box-sizing: border-box;
   background: var(--bg);
   border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   /* Above the sticky cover (6) and the sticky icon row (7). It used to be 5,
@@ -7166,13 +7167,18 @@ a,
    Panel and page are both white, so without the line there is nothing between
    them. But a cover already ends exactly at the panel's edge, in its own
    colour, and does that work better than a hairline can — putting a line there
-   too draws a frame around something that was flowing. So the line goes when
+   too draws a frame around something that was flowing. So both lines go when
    the page has a cover, asked of the DOM rather than threaded through as a
    prop — .has-cover is already on .page-body and is already the answer to
-   exactly this question, so there is no second flag that can drift. */
+   exactly this question, so there is no second flag that can drift.
+
+   The top line is what makes the left one work at all. Alone it started in
+   mid-air under the icon row; with a corner to begin at it reads as the edge
+   of a panel instead of a stray stroke. */
 .editor-page:has(.page-body.has-cover) .structure-panel,
 .editor-page:has(.page-body.has-cover) .comments-panel {
   border-left: 0;
+  border-top: 0;
 }
 
 /* ---- Comments as a panel (CommentsPanel) ----
@@ -7193,6 +7199,7 @@ a,
   flex-direction: column;
   background: var(--bg);
   border-left: 1px solid var(--border);
+  border-top: 1px solid var(--border);
   z-index: 5;
 }
 
