@@ -6944,11 +6944,6 @@ a,
   margin: 0 auto;
 }
 
-/* Inside the run of a heading the mark would otherwise sit on the baseline. */
-.inline-logo {
-  vertical-align: -0.15em;
-}
-
 /* ---- Theme choice: light / automatic / dark ------------------------------
    A segmented three-way choice rather than a toggle. The active state has to be
    recognisable without a label — hence not colour alone but a raised surface

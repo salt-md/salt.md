@@ -26,9 +26,18 @@ export default function Setup({ onSuccess }: { onSuccess: (user: User) => void }
 
   return (
     <div className="login-wrap">
-      <form className="login-card" onSubmit={submit}>
-        <div className="login-logo">🍃</div>
-        <h1><Logo size={30} className="inline-logo" /> {t('Welcome to Salt.md')}</h1>
+      <form className="login-card ring" onSubmit={submit}>
+        <div className="login-logo"><Logo size={56} /></div>
+        {/* The same card as signing in and as accepting an invitation: the ring,
+            the mark at 56, the wordmark. This screen had been left on the older
+            shape — a leaf emoji above the mark, and the product name spelled out
+            in the body typeface. It is the very first thing anybody sees of a
+            new instance, so it is the last place that should look like a
+            different program.
+
+            Always the wordmark here, never an instance name: this screen is what
+            CREATES the instance, so there is no name of anybody's to honour yet. */}
+        <h1 className="wordmark">salt.md</h1>
         <p>{t('Create the first (admin) account for this workspace.')}</p>
         <input
           autoFocus
