@@ -70,3 +70,35 @@ should be told to run a shell command to open an application.
 `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` are in the environment at
 build time; the entitlements and the hardened runtime are already configured.
 Windows and Linux builds stay unsigned for now.
+
+## Why Finder writes "salt.md.app"
+
+macOS hides the `.app` extension — except when hiding it would leave a name that
+ends in another *known* extension. `salt.md` looks like a Markdown file, so
+Finder shows the whole thing rather than risk an app that reads as a document.
+
+Measured rather than guessed, because the obvious explanation ("a dot in the
+name") is wrong:
+
+| bundle | Finder shows |
+| --- | --- |
+| `salt.app` | salt |
+| `saltmd.app` | saltmd |
+| `salt md.app` | salt md |
+| `salt.x.app` | salt.x — **a dot is fine** |
+| `salt.md.app` | salt.md.app |
+
+Nothing overrides it. `CFBundleDisplayName`, `LSHasLocalizedDisplayName` with a
+localised `InfoPlist.strings`, and the per-file "hide extension" flag were all
+tried and all ignored; the refusal is deliberate.
+
+Where the name actually appears:
+
+| surface | shows |
+| --- | --- |
+| menu bar, Dock, About | **salt.md** |
+| Finder, Spotlight | salt.md.app |
+
+The only way to change the last row is to name the bundle `salt.app`, and then
+those two surfaces say "salt" — which drops the half of the name that says what
+the product is. Left as it is on purpose.
