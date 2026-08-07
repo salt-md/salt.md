@@ -23,14 +23,13 @@ Everything is reached from the sidebar.
 | **Workspaces with nobody in charge** | the workspace name at the top → **With nobody in charge…** | the owner |
 | **Workspace members** (invitations) | the workspace name at the top → **Workspace settings** → **Members** | admins of that workspace |
 
-Administration needs a browser sign-in — not only changes. Creating or deleting
-an account, deactivating one, inviting somebody, editing the settings, but also
-*reading* the account list, the access overview, the clean-up view and the
-backup all turn an API token away with *"This action requires signing in
-through a browser — an API token is not enough."* That is deliberate: a token is
-a second key to content, not an administration pass. The one exception is that
-an admin's token can **read** the instance settings and the instance snapshot
-(`/api/settings`, `/api/admin/info`); changing them cannot be done with it. See
+Administration needs a browser sign-in, and not only for changes: *reading* the
+account list, the access overview, the clean-up view or the backup turns an API
+token away too, with *"This action requires signing in through a browser — an
+API token is not enough."* A token is a second key to content, not an
+administration pass. One exception: an admin's token may **read** the instance
+settings and the instance snapshot (`/api/settings`, `/api/admin/info`) — it
+just cannot change them. See
 [Permissions](permissions.md#sessions-and-api-tokens).
 
 ## Where the owner comes from
@@ -147,46 +146,41 @@ mistake that costs an afternoon, is in [Single sign-on](sso.md).
 
 ### Email
 
-Two ways, and the tab shows both at once.
+Two ways, both on the tab at once.
 
 **Sending through Google / Microsoft — no SMTP** is one click: **Connect with
-Google** or **Connect with Microsoft**. The buttons use the OAuth app you set up
-on the **Access** tab — without a stored client ID and secret they are greyed
-out and say *Set up Google OAuth on the Access tab first*. In the provider's
-sign-in window you may pick any mailbox at all, including a dedicated sending
-address; it does not have to be the account you sign in with. Once connected the
-row reads **Connected: sends as** … and offers **Send test mail** and
-**Disconnect**, plus a field **Override the sender address (optional, alias)**
-for sending under an alias of that mailbox. One trap is called out in the
-dialog: a Google OAuth app left in "testing" makes the connection expire after
-7 days — move it to *In production* and enable the Gmail API.
+Google** or **Connect with Microsoft**. Those buttons reuse the OAuth app from
+the **Access** tab, so without a stored client ID and secret they are greyed out
+(*Set up Google OAuth on the Access tab first*). In the provider's window you
+may pick any mailbox, not necessarily the one you sign in with. Once connected
+the row offers **Send test mail** and **Disconnect**, with a field **Override
+the sender address (optional, alias)** underneath for sending as an alias of
+that mailbox. One trap the dialog names: a Google OAuth app left in "testing"
+expires the connection after 7 days — move it to production and enable the Gmail
+API.
 
-**Or the classic way: SMTP** — host, port, user, password and **Sender (From)**.
-A stored password shows as *•••••• (unchanged)*; leaving the field empty keeps it.
+**Or the classic way: SMTP** — host, port, user, password, **Sender (From)**. A
+stored password shows as *•••••• (unchanged)* and an empty field keeps it.
 
-**Send test mail** sends to *your own* address and reports the result in a toast
-(*Test mail sent to … ✓*). Details, including why mail is a convenience and
-never a dependency, are in [Sending email](mail.md).
+**Send test mail** goes to *your own* address and reports the result. Details,
+including why mail is a convenience and never a dependency, are in
+[Sending email](mail.md).
 
 ### Domain & proxy
 
 Four routes to a public address, in the order the tab lists them:
 
-1. **Start quick tunnel** — one click, no account, a temporary
-   `trycloudflare.com` address that changes on every start. cloudflared is
-   downloaded automatically the first time.
-2. A permanent **Cloudflare Tunnel**: paste the token from the Cloudflare
-   dashboard and press **Connect**. Salt.md keeps it running across restarts.
-3. Built-in HTTPS: a domain field plus an **Active** switch. Salt.md fetches its
-   own Let's Encrypt certificate and listens on 80 and 443, so no proxy is
-   needed. Restart after saving.
+1. **Start quick tunnel** — a temporary `trycloudflare.com` address that changes
+   on every start. cloudflared is downloaded the first time.
+2. A permanent Cloudflare tunnel: paste the token from the dashboard, press
+   **Connect**. Salt.md keeps it running across restarts.
+3. Built-in HTTPS: a domain field plus an **Active** switch — Salt.md fetches
+   its own Let's Encrypt certificate and listens on 80 and 443.
 4. Your own reverse proxy: set **Internal address of the instance (upstream)**
-   and copy one of the three generated blocks — **Caddy (automatic HTTPS)**,
-   **Cloudflare Tunnel (no open port needed)** or **nginx**. The domain in them
-   comes from the public base URL on the General tab.
+   and copy one of the three generated blocks (Caddy, Cloudflare Tunnel, nginx).
 
 While a tunnel runs, its status line carries the address and a **Stop** button;
-after a failure the line shows the error and a **Reset**.
+after a failure it shows the error and a **Reset**.
 
 Above the generated blocks sits **Run behind a reverse proxy (trust
 `X-Forwarded-For`)**, which decides whether the instance believes proxy headers
@@ -297,7 +291,8 @@ Inviting is the bottom half of it. The list above does three more things:
 - **Change a role.** Beside every other member sits a dropdown — **Admin**,
   **Member**, **Viewer** — and picking one applies at once. The last admin
   cannot be demoted (*"cannot demote the last admin"*).
-- **Remove somebody**, with the ✕ button, after a *Remove <name>?* confirmation.
+- **Remove somebody**, with the ✕ button, after a *Remove Ada Lovelace?*
+  confirmation naming them.
 - **Leave the workspace yourself** — the same ✕ on your own row, labelled
   **Leave**. Non-admins can do this and nothing else here.
 
@@ -467,7 +462,8 @@ Account administration is not silent. Every one of these writes a line into the
 | *deleted the account:* | an account is deleted |
 | *handed the instance to:* | the owner role is passed on |
 | *took emergency access:* / *ended the emergency access:* | a grant starts or is ended early |
-| *adopted the ownerless workspace:* / *deleted the workspace:* | the clean-up view below |
+| *adopted the ownerless workspace:* | the clean-up view below |
+| *deleted the workspace:* | any workspace is deleted, there or elsewhere |
 
 Open it from your name at the bottom of the sidebar → **Activity log**. It shows
 the most recent changes and marks whether a human or an agent made each one.

@@ -34,9 +34,9 @@
 // leaked.
 
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '../..');
@@ -69,9 +69,27 @@ if (!wanted.length) {
 
 mkdirSync(imgDir, { recursive: true });
 
-/** The commit every shot is stamped with. A shot is stale when a file it shows
- *  has changed since — see check-wiki.mjs. */
-const head = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo }).toString().trim();
+/**
+ * What a shot is stamped with: the CONTENT of every file it shows, not the
+ * commit it was taken at.
+ *
+ * The commit was the obvious choice and it is wrong in the ordinary case. You
+ * change a component, retake the picture, then commit — and now the commit that
+ * changed the component is newer than the stamp, so the freshly taken picture
+ * reports itself stale. Content cannot lie about that, needs no history, and
+ * works in the Docker image where there is no .git at all.
+ */
+export function fingerprint(shows) {
+  const out = {};
+  for (const f of shows ?? []) {
+    try {
+      out[f] = createHash('sha256').update(readFileSync(join(repo, f))).digest('hex').slice(0, 12);
+    } catch {
+      out[f] = 'missing';
+    }
+  }
+  return out;
+}
 
 const browser = await chromium.launch();
 
@@ -152,7 +170,7 @@ for (const shot of wanted) {
     await run(page, { hide: '.toaster, .toast' });
     const target = shot.element ? page.locator(shot.element).first() : page;
     await target.screenshot({ path: join(imgDir, `${shot.id}${suffix}.png`), animations: 'disabled' });
-    shot.takenAt = head;
+    shot.takenAt = fingerprint(shot.shows);
     taken++;
     console.log(`  ok    ${shot.id}${suffix}`);
   } catch (err) {
@@ -167,7 +185,7 @@ for (const shot of wanted) {
 
 await browser.close();
 writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-console.log(`\n  ${taken} of ${wanted.length * 2} taken, stamped ${head.slice(0, 8)}`);
+console.log(`\n  ${taken} of ${wanted.length * 2} taken`);
 if (failed.length) {
   console.log(`  ${failed.length} failed:\n${failed.map((f) => '    ' + f).join('\n')}\n`);
   process.exit(1);

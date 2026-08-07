@@ -240,8 +240,9 @@ provider button works for that person immediately. The initial password stays
 usable as well, which makes it the fallback for a day the provider is
 unreachable.
 
-**An invitation.** Workspace menu → **Members** → the field *Invite by email
-(blank = link only)* → **Invite**. It produces a link valid for **14 days**,
+**An invitation.** Workspace switcher → **Workspace settings** → **Members** →
+the field *Invite by email (blank = link only)* → **Invite**. Workspace admins
+only. It produces a link valid for **14 days**,
 built on the instance's public address, and mails it if you filled the address
 in and sending is configured ([Sending email](mail.md)).
 
@@ -255,8 +256,8 @@ who you are.
 That holds for an invitation created **without** an address (*blank = link
 only*), or one created for the same address the signed-in account carries. An
 invitation bound to a different address refuses: *this invite is for a different
-account — sign out to accept it*. Since the Members dialog offers the address
-field first, that is the case you will meet — so for people who will arrive
+account — sign out to accept it*. Since the invitation field asks for an address
+first, that is the case you will meet — so for people who will arrive
 through a provider button, either leave the address blank or type exactly the
 address the provider returns.
 

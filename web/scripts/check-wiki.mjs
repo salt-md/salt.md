@@ -21,7 +21,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '../..');
@@ -236,54 +236,45 @@ if (manifest) {
     for (const f of s.shows ?? []) {
       if (!existsSync(join(repo, f))) errors.push(`screenshots.json: ${s.id} says it shows ${f}, which does not exist`);
     }
-    if (!s.takenAt) errors.push(`screenshots.json: ${s.id} was never taken — run scripts/shoot-wiki.mjs ${s.id}`);
+    if (!s.takenAt || typeof s.takenAt !== 'object')
+      errors.push(`screenshots.json: ${s.id} was never taken — run scripts/shoot-wiki.mjs ${s.id}`);
   }
 
   const unused = manifest.shots.filter((s) => !referenced.has(s.id)).map((s) => s.id);
   if (unused.length) notes.push(`${unused.length} screenshot(s) taken but never shown: ${unused.join(', ')}`);
 
-  // The staleness question. It needs git history, which the Docker image does
-  // not have — the build there copies source, not a repository. A check that
-  // cannot run must say so and step aside, never fail: breaking the image over
-  // a missing .git is exactly the shape of bug that took a release once.
-  let git = true;
-  try {
-    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: repo, stdio: 'pipe' });
-  } catch {
-    git = false;
-    notes.push('no git history here — screenshot staleness not checked');
-  }
-  if (git) {
-    const stale = [];
-    for (const s of manifest.shots) {
-      if (!s.takenAt || !(s.shows ?? []).length) continue;
-      let changed = '';
+  // The staleness question, answered from CONTENT rather than from history.
+  //
+  // A commit stamp was the first design and it was wrong in the ordinary case:
+  // change a component, retake the picture, then commit — and the commit that
+  // changed the component is newer than the stamp, so a freshly taken picture
+  // reports itself stale. Hashing what the shot SHOWS cannot be wrong about
+  // that, fires the moment the file is edited rather than a commit later, and
+  // needs no git — which matters, because the Docker image builds from copied
+  // source with no repository in it.
+  const stale = [];
+  for (const s of manifest.shots) {
+    const stamped = s.takenAt;
+    if (!stamped || typeof stamped !== 'object') continue; // already reported above
+    for (const [file, was] of Object.entries(stamped)) {
+      let now = 'missing';
       try {
-        changed = execFileSync('git', ['log', '--oneline', `${s.takenAt}..HEAD`, '--', ...s.shows],
-          { cwd: repo, stdio: 'pipe' }).toString().trim();
-      } catch {
-        continue; // the stamped commit is not in this clone — nothing to compare against
+        now = createHash('sha256').update(readFileSync(join(repo, file))).digest('hex').slice(0, 12);
+      } catch { /* the file is gone; reported separately */ }
+      if (now !== was) {
+        stale.push({ id: s.id, file });
+        break;
       }
-      // The working tree counts too. Only comparing commits means a shot goes
-      // stale the moment you edit the component and the check stays quiet until
-      // after you have committed — one round too late to be "in the same step",
-      // which is the whole point of tying pictures to source files.
-      let dirty = '';
-      try {
-        dirty = execFileSync('git', ['diff', '--name-only', 'HEAD', '--', ...s.shows],
-          { cwd: repo, stdio: 'pipe' }).toString().trim();
-      } catch { /* nothing to compare */ }
-      if (changed) stale.push(`${s.id} (${changed.split('\n').length} commit(s) since)`);
-      else if (dirty) stale.push(`${s.id} (uncommitted change to ${dirty.split('\n')[0]})`);
     }
-    if (stale.length) {
-      errors.push(
-        `${stale.length} screenshot(s) show code that has changed since they were taken: ${stale.join(', ')}\n` +
-        `        retake them: node scripts/shoot-wiki.mjs ${stale.map((s) => s.split(' ')[0]).join(' ')}`,
-      );
-    } else if (manifest.shots.length) {
-      notes.push(`all ${manifest.shots.length} screenshots are current`);
-    }
+  }
+  if (stale.length) {
+    errors.push(
+      `${stale.length} screenshot(s) show code that has changed since they were taken:\n` +
+      stale.map((x) => `          ${x.id} — ${x.file}`).join('\n') +
+      `\n        retake them: node scripts/shoot-wiki.mjs ${stale.map((x) => x.id).join(' ')}`,
+    );
+  } else if (manifest.shots.length) {
+    notes.push(`all ${manifest.shots.length} screenshots are current`);
   }
 }
 
