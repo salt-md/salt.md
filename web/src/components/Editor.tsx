@@ -1208,7 +1208,7 @@ function PageHeader({
           Only for documents and rows: a database page carries its table down
           here, and anything below that is lost. */}
       {page.type !== 'collection' && (
-        <div className="comments-wrap">
+        <div className="trail-wrap">
           <NoteTrail pageId={pageId} canWrite={canEdit} />
         </div>
       )}

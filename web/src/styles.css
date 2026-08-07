@@ -799,7 +799,8 @@ button {
   /* Bottom padding is the click-to-write strip under the last block, not a
      spacer: it used to be 30vh, which pushed the comments a third of a screen
      away from the text. Short pages still get their big clickable area from
-     .editor-scroll's flex stretch. */
+     .editor-scroll's flex stretch; the scroll-past-end room lives in
+     .trail-wrap's bottom padding. */
   padding: 20px var(--doc-pad) 56px;
 }
 
@@ -3069,7 +3070,7 @@ button {
   .sidebar, .sidebar-backdrop, .topbar, .tab-bar, .backlinks, .toaster,
   .menu-btn, .upload-bar, .menu, .page-cover-actions, .cover-btn,
   .page-tag-input, .page-tag-x, .add-icon, .icon-picker, .collection-toolbar,
-  .head-controls, .db-add-row, .structure-panel, .comments-panel {
+  .head-controls, .db-add-row, .structure-panel, .comments-panel, .trail-wrap {
     display: none !important;
   }
 
@@ -8946,6 +8947,18 @@ body:has(.confirm-dialog) .dialog:not(.confirm-dialog) {
    answer; a trail entry asks for nothing, and is read only when somebody
    doubts the written-up version. Same slim collapsed row, one step further
    down in weight and colour. */
+/* The trail sits at the foot of the document and has to keep the document's
+   column: full width it runs flush against the window edge, and without the
+   bottom room the last note sits on the very bottom pixel. It used to be
+   called .comments-wrap, from when comments lived down here — the name
+   outlived the thing, which is how it came to be deleted as dead. */
+.trail-wrap {
+  max-width: var(--doc-width);
+  margin: 0 auto;
+  padding: 0 var(--doc-pad) 22vh;
+  width: 100%;
+}
+
 .trail {
   border-top: 1px solid var(--border);
   font-size: 13px;
