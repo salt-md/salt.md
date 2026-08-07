@@ -545,6 +545,47 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
+**Production runs `1.6.14`** (2026-08-07 05:57), on his word ("ja push auf
+prod"): documentation for people, a desktop app, and a sign-in that goes
+through the real browser.
+
+The **wiki** (`wiki/`, 21 pages, English) is the big one, and the rule it was
+written under matters more than the pages: derived from the code, never from
+memory and never from the Vorgänge — the workspace only knows what somebody has
+written down, the code knows everything. `check-wiki.mjs` holds the mechanical
+half in the gate. Asked whether it covered the whole system, a one-second
+measurement against the route table found thirteen unmentioned families, three
+of them genuinely missing (favourites, the audit log, `/api/health`).
+
+He caught what no check could: the first draft named three of his customers in a
+tree diagram, written while looking at his live instance and headed for a public
+website. The check now refuses real IPs, hostnames and mail domains; the company
+name half is a written rule. The same pass found "e.g. VIICO Notes" — his own
+company — shipping as the instance-name placeholder to everyone who installs.
+
+A **desktop app** (`desktop/`, Electron, a shell around a server) and with it
+`/desktop/login`: signing in through the REAL browser, PKCE, an approval page
+against login-CSRF. The app carries its own window CSS rather than expecting the
+server to have it — that lesson cost two rounds, and the same mistake then
+repeated itself when the sign-in ran against a route his instance did not have
+yet. It probes first now.
+
+Plus **right-click** everywhere the ⋯ menu exists.
+
+**The tag was moved once, deliberately.** Docker failed on the first v1.6.14:
+`npm run build` runs the whole gate, and check-wiki.mjs reads files outside
+`web/`, which the image did not copy. Rather than burn a version number on a
+one-line CI fix, the tag was deleted and re-cut on the fixed commit —
+`softprops/action-gh-release` overwrites assets, so a second run is safe. Ten
+minutes old, nobody had consumed it.
+
+Checksums on both sides: `7919f22a…` (published `v1.6.13`) before,
+`ff93f2e4…` (published `v1.6.14`) after. Verified by behaviour:
+`/desktop/login?challenge=probe` answers `400` where an unknown path falls
+through with `200`. Four startup lines, no index rebuild. Backup:
+`/root/salt-backups/salt-data-20260807-055723-vor-1.6.14.tar.gz` (402M, gzip
+verified); `/opt/salt/salt.bak-1.6.13` sits beside it. 22G free.
+
 **Production runs `1.6.13`** (2026-08-06 16:01), on his word ("ja bring es
 live"): a regression, a picture and two handles.
 
