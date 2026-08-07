@@ -545,6 +545,32 @@ schema was recognised). Backup:
 `/root/salt-backups/salt-data-20260731-173053-vor-1.6.2.tar.gz` (23M, gzip
 verified); images `1.6.1`, `1.6.0`, `1.5.3` are still on the box.
 
+**Production runs `1.6.16`** (2026-08-07 08:20), on his word ("ja bring es
+live"): one regression, shipped by me in 1.6.15 and reported within minutes.
+
+The presence dot in the topbar shared ONE rule with the avatar beside a
+comment — `.cp-avatar, .presence-dot { … }`. The comments rebuild renamed the
+comment half and dropped the other name from the selector, so the dot kept its
+size and its border and lost everything that made it a circle. It shipped as a
+square.
+
+Two things worth keeping. **It survived every check because the class still
+had rules** — the used-but-undefined scan finds a class with NO styling, and
+this one had some, just not the right ones. Nothing mechanical catches "kept
+its shape". And **the test box could not show it**: the dot only appears when
+somebody ELSE is on the page, and he was alone there. A feature that renders
+only in company cannot be smoke-tested alone — open a second session or accept
+that production is the first real look.
+
+Checksums on both sides: `0da9a08a…` (published `v1.6.15`) before,
+`f8c42bd7…` (published `v1.6.16`) after — and this time the check was aimed at
+the INSTALLED binary against a checksum read from GitHub locally, which is what
+caught the stale-download trap one release earlier. Verified by behaviour:
+`.cp-avatar,.presence-dot{…border-radius:50%…}` in the served CSS. Four startup
+lines, no index rebuild, 649 files, 480 MB. Backup:
+`/root/salt-backups/salt-data-20260807-082024-vor-1.6.16.tar.gz` (385M);
+`/opt/salt/salt.bak-1.6.15` sits beside it. 21G free.
+
 **Production runs `1.6.15`** (2026-08-07 08:12), on his word ("push live" /
 "und auf prod ausrollen"): comments as a side panel, the two right-hand panels
 made one thing, and a database no longer offers a comment button it cannot
