@@ -800,9 +800,8 @@ button {
   margin: 0 auto;
   /* Bottom padding is the click-to-write strip under the last block, not a
      spacer: it used to be 30vh, which pushed the comments a third of a screen
-     away from the text ("riesen Abstand"). Short pages still get their big
-     clickable area from .editor-scroll's flex stretch; the scroll-past-end
-     room lives in .comments-wrap's bottom padding. */
+     away from the text. Short pages still get their big clickable area from
+     .editor-scroll's flex stretch. */
   padding: 20px var(--doc-pad) 56px;
 }
 
@@ -1187,7 +1186,6 @@ button {
   bottom: 0;
   width: var(--panel-w);
   box-sizing: border-box;
-  border-left: 1px solid var(--border);
   background: var(--bg);
   display: flex;
   flex-direction: column;
@@ -3072,8 +3070,13 @@ button {
   .sidebar, .sidebar-backdrop, .topbar, .tab-bar, .backlinks, .toaster,
   .menu-btn, .upload-bar, .menu, .page-cover-actions, .cover-btn,
   .page-tag-input, .page-tag-x, .add-icon, .icon-picker, .collection-toolbar,
-  .head-controls, .db-add-row, .comments-wrap {
+  .head-controls, .db-add-row, .structure-panel, .comments-panel {
     display: none !important;
+  }
+
+  /* The panel is gone, so the space it was holding open goes with it. */
+  .editor-page.with-structure .page-body {
+    padding-right: 0 !important;
   }
 
   .app, .main, .editor-page {
@@ -7158,17 +7161,22 @@ a,
   margin-top: 6px;
 }
 
-/* ---------- Kommentare: Abschnitt am Dokumentende (W92) ---------- */
+/* The dividing line of both panels, and why it is not a border.
 
-/* No column any more. The comments sit at the bottom of the document, in the
-   same column as the text — the way Notion does it. A column beside it took
-   width away and, on a page with no comments, showed nothing but an empty
-   message. */
-.comments-wrap {
-  max-width: var(--doc-width);
-  margin: 0 auto;
-  padding: 0 var(--doc-pad) 22vh;
-  width: 100%;
+   A border begins where the box begins, and above these boxes there is only
+   the topbar, which carries no line of its own — so on a page WITHOUT a cover
+   the line just appeared in mid-air. On a page with one it never showed: the
+   cover's colour ends exactly there and does the same work, fluidly. So the
+   line fades in over the height of the head, and the corner it makes with the
+   head's own border is its first pixel at full strength. */
+.structure-panel::before,
+.comments-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 1px;
+  background: linear-gradient(to bottom, transparent, var(--border) 42px);
+  pointer-events: none;
 }
 
 /* ---- Comments as a panel (CommentsPanel) ----
@@ -7187,7 +7195,6 @@ a,
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
   background: var(--bg);
   z-index: 5;
 }
