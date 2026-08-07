@@ -434,6 +434,7 @@
   "Notes cannot be edited or removed one by one — that is what makes them worth reading later.": "Einzelne Schnipsel lassen sich nicht ändern und nicht löschen — genau das macht sie später lesenswert.",
   "Notes mode": "Notizen-Modus",
   "Nothing has happened yet.": "Noch nichts passiert.",
+  "Nothing here yet. Write the first one.": "Noch nichts da. Schreib den ersten.",
   "Nothing hidden": "Nichts ausgeblendet",
   "Nothing links here": "Nichts verlinkt hierher",
   "Nothing secret in the address. Expires and can be ended.": "Nichts Geheimes in der Adresse. Läuft ab und lässt sich beenden.",
@@ -936,6 +937,10 @@
     "one": "{n} private Seite",
     "other": "{n} private Seiten"
   },
+  "{n} resolved comments": {
+    "one": "{n} erledigter Kommentar",
+    "other": "{n} erledigte Kommentare"
+  },
   "{n} skipped": "{n} übersprungen",
   "{n} templates": {
     "one": "{n} Vorlage",
@@ -961,6 +966,7 @@
   "→ Certificates & secrets → client secret.": "→ Zertifikate & Geheimnisse → Client-Secret.",
   "→ Links": "→ Links",
   "→ copy the token and paste it here. You set the hostname (e.g.": "→ Token kopieren und hier einfügen. Den Hostname (z. B.",
+  "⌘↵ to send": "⌘↵ zum Senden",
   "⚠ Cloud agents (claude.ai, say) cannot reach": "⚠ Cloud-Agents (z. B. claude.ai) erreichen nicht",
   "⚠ Google and Microsoft accept HTTPS redirect URIs only (localhost aside). Start a tunnel (the “Domain & proxy” tab) or enter a public HTTPS base URL under “General” — it then appears here on its own.": "⚠ Google & Microsoft akzeptieren nur HTTPS-Redirect-URIs (außer localhost). Starte einen Tunnel (Tab „Domain & Proxy“) oder trage unter „Allgemein“ eine öffentliche HTTPS-Basis-URL ein — dann erscheint sie hier automatisch.",
   "⚠ This is the URL of the running quick tunnel — it changes on every start. For OAuth that lasts, use a named tunnel or your own domain and enter it as the base URL.": "⚠ Das ist die URL des laufenden Quick-Tunnels — sie wechselt bei jedem Start. Für dauerhaftes OAuth einen benannten Tunnel oder eine eigene Domain nutzen und als Basis-URL eintragen.",

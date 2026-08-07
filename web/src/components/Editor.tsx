@@ -24,7 +24,12 @@ import { PageIcon } from '../pageIcon';
 import { BlockContext } from '../blockContext';
 import CollectionView from './CollectionView';
 import { HistoryModal } from './PageHistory';
-import CommentsSection, { initials, OPEN_COMMENTS_EVENT } from './CommentsSection';
+import CommentsPanel, {
+  COMMENTS_CHANGED,
+  commentsPanelOpen,
+  initials,
+  setCommentsPanelOpen,
+} from './CommentsPanel';
 import NoteTrail from './NoteTrail';
 import { FilePreview, isPreviewable } from './FilePreview';
 import StructurePanel, { structurePanelOpen, setStructurePanelOpen } from './StructurePanel';
@@ -67,12 +72,30 @@ export default function Editor(props: EditorProps) {
   // The panel is a reading preference, not a property of the page: it stays
   // put while you move through the workspace, like the comment column's.
   const [structureOpen, setStructureOpen] = useState(structurePanelOpen);
-  const toggleStructure = () => {
-    setStructureOpen((open) => {
-      setStructurePanelOpen(!open);
-      return !open;
-    });
+  // Comments now live in a panel beside the document rather than at its foot —
+  // his colleagues work in them all day and reported the old shape as awkward:
+  // at the very bottom, and two lines to write in.
+  const [commentsOpen, setCommentsOpen] = useState(commentsPanelOpen);
+
+  // Both panels occupy the same strip on the right, so opening one closes the
+  // other. Sharing the width would leave two columns too narrow to be either.
+  const showStructure = (on: boolean) => {
+    setStructureOpen(on);
+    setStructurePanelOpen(on);
+    if (on) {
+      setCommentsOpen(false);
+      setCommentsPanelOpen(false);
+    }
   };
+  const showComments = (on: boolean) => {
+    setCommentsOpen(on);
+    setCommentsPanelOpen(on);
+    if (on) {
+      setStructureOpen(false);
+      setStructurePanelOpen(false);
+    }
+  };
+  const toggleStructure = () => showStructure(!structureOpen);
 
   useEffect(() => {
     let alive = true;
@@ -106,12 +129,14 @@ export default function Editor(props: EditorProps) {
   // The content renders INSIDE PageHeader's .page-body scroller so cover,
   // title and content scroll away together (only the topbar stays fixed).
   return (
-    <div className={'editor-page' + (structureOpen ? ' with-structure' : '')}>
+    <div className={'editor-page' + (structureOpen || commentsOpen ? ' with-structure' : '')}>
       <PageHeader
         page={page}
         {...props}
         structureOpen={structureOpen}
         onToggleStructure={toggleStructure}
+        commentsOpen={commentsOpen}
+        onToggleComments={showComments}
         onLocalMeta={(patch) => setPage((p) => (p ? { ...p, ...patch } : p))}
       >
         {page.type === 'collection' ? (
@@ -140,6 +165,14 @@ export default function Editor(props: EditorProps) {
           />
         )}
       </PageHeader>
+      {commentsOpen && page.type !== 'collection' && (
+        <CommentsPanel
+          pageId={page.id}
+          myUserId={props.user.id}
+          open
+          onClose={() => showComments(false)}
+        />
+      )}
       {structureOpen && (
         <StructurePanel
           pageId={page.id}
@@ -370,12 +403,16 @@ function PageHeader({
   pagesById,
   structureOpen,
   onToggleStructure,
+  commentsOpen,
+  onToggleComments,
   children,
 }: EditorProps & {
   page: Page;
   onLocalMeta: (patch: Partial<PageMeta>) => void;
   structureOpen: boolean;
   onToggleStructure: () => void;
+  commentsOpen: boolean;
+  onToggleComments: (open: boolean) => void;
   children?: React.ReactNode;
 }) {
   const [title, setTitle] = useState(page.title);
@@ -401,31 +438,24 @@ function PageHeader({
   useMenuDismiss(overflowOpen, overflowWrapRef, () => setOverflowOpen(false));
   const [historyOpen, setHistoryOpen] = useState(false);
   const [openComments, setOpenComments] = useState(0);
-  // The topbar button toggles the WHOLE comments row, not just its expansion —
-  // hidden means hidden, remembered across pages and reloads.
-  const [commentsHidden, setCommentsHidden] = useState(
-    () => localStorage.getItem('salt-comments-hidden') === '1',
-  );
-  const showComments = () => {
-    setCommentsHidden(false);
-    localStorage.removeItem('salt-comments-hidden');
-    window.dispatchEvent(new CustomEvent(OPEN_COMMENTS_EVENT));
-    // Render first, then scroll — the row does not exist while hidden.
-    requestAnimationFrame(() =>
-      document.getElementById('comments')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
-    );
-  };
   const peers = usePeers(pageId);
   // The counter in the header should be right before anybody has scrolled
   // down — you should SEE that comments exist without going to look.
   useEffect(() => {
     let alive = true;
-    api
-      .listComments(pageId)
-      .then((l) => alive && setOpenComments(l.filter((c) => !c.resolvedAt).length))
-      .catch(() => {});
+    const count = () =>
+      api
+        .listComments(pageId)
+        .then((l) => alive && setOpenComments(l.filter((c) => !c.resolvedAt).length))
+        .catch(() => {});
+    void count();
+    // The panel says when it changed something. An event rather than a prop:
+    // the count has to be right whether the panel is open or not, so the header
+    // owns its own fetch and the panel only nudges it.
+    window.addEventListener(COMMENTS_CHANGED, count);
     return () => {
       alive = false;
+      window.removeEventListener(COMMENTS_CHANGED, count);
     };
   }, [pageId]);
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
@@ -685,18 +715,11 @@ function PageHeader({
             </div>
           )}
           <button
-            className={'icon-btn topbar-wide-only' + (commentsHidden ? ' comments-off' : '')}
-            title={commentsHidden ? t('Show comments') : t('Hide comments')}
-            onClick={() => {
-              if (commentsHidden) {
-                showComments();
-              } else {
-                setCommentsHidden(true);
-                localStorage.setItem('salt-comments-hidden', '1');
-              }
-            }}
+            className={'icon-btn topbar-wide-only' + (commentsOpen ? ' active' : '')}
+            title={commentsOpen ? t('Hide comments') : t('Show comments')}
+            onClick={() => onToggleComments(!commentsOpen)}
           >
-            {commentsHidden ? <MessageSquareOff size={17} /> : <MessageSquare size={17} />}
+            {commentsOpen ? <MessageSquare size={17} /> : <MessageSquareOff size={17} />}
             {openComments > 0 && <span className="badge-count">{openComments}</span>}
           </button>
           <button
@@ -807,9 +830,9 @@ function PageHeader({
                   className="menu-item"
                   onClick={() => {
                     setOverflowOpen(false);
-                    // Always SHOWS them — a jump target that stays hidden
-                    // would make this menu item a no-op.
-                    showComments();
+                    // Always OPENS them — an entry that toggles would be a
+                    // no-op half the time somebody reaches for it.
+                    onToggleComments(true);
                   }}
                 >
                   <MessageSquare size={15} /> {t('To the comments')}
@@ -832,16 +855,11 @@ function PageHeader({
                   className="menu-item narrow-only"
                   onClick={() => {
                     setOverflowOpen(false);
-                    if (commentsHidden) {
-                      showComments();
-                    } else {
-                      setCommentsHidden(true);
-                      localStorage.setItem('salt-comments-hidden', '1');
-                    }
+                    onToggleComments(!commentsOpen);
                   }}
                 >
-                  {commentsHidden ? <MessageSquareOff size={15} /> : <MessageSquare size={15} />}{' '}
-                  {commentsHidden ? t('Show comments') : t('Hide comments')}
+                  {commentsOpen ? <MessageSquare size={15} /> : <MessageSquareOff size={15} />}{' '}
+                  {commentsOpen ? t('Hide comments') : t('Show comments')}
                 </button>
                 <button
                   className="menu-item narrow-only"
@@ -1158,20 +1176,15 @@ function PageHeader({
         )}
       </div>
       {children}
-      {/* Comments belong at the end of the document, not in a column beside it
-          — see CommentsSection. Only for documents and rows: a database page
-          carries its table down there, and anything below that is lost.
-          The raw trail goes last of all. Comments are a conversation aimed at
-          people; the trail is evidence, and evidence belongs under the account
-          it supports. */}
+      {/* The raw trail stays at the foot of the document. Comments moved to a
+          panel beside it (CommentsPanel) because people WORK in them; the trail
+          is read, rarely, when somebody doubts the written-up version — and
+          under the account it supports is exactly where it belongs.
+
+          Only for documents and rows: a database page carries its table down
+          here, and anything below that is lost. */}
       {page.type !== 'collection' && (
         <div className="comments-wrap">
-          <CommentsSection
-            pageId={pageId}
-            myUserId={user.id}
-            onCountChange={setOpenComments}
-            hidden={commentsHidden}
-          />
           <NoteTrail pageId={pageId} canWrite={canEdit} />
         </div>
       )}

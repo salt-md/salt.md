@@ -4,7 +4,7 @@ import type { ChecklistItem, PropDef, PropOption } from '../types';
 import Portal from './Portal';
 import { OPTION_HEXES, optionPalette, optionSlug } from '../selectOptions';
 import { daysUntil, formatDay, formatNumber } from '../format';
-import { initials, nameColor } from './CommentsSection';
+import { initials, nameColor } from './CommentsPanel';
 import { Check, Link2 as LinkIcon, Plus, Trash2 } from 'lucide-react';
 import { PageIcon } from '../pageIcon';
 import { t } from '../i18n';
