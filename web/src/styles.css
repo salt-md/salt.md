@@ -1184,14 +1184,7 @@ button {
   bottom: 0;
   width: var(--panel-w);
   box-sizing: border-box;
-  /* The same surface as the sidebar on the other side, and for the same
-     reason: this is chrome, not document. It also settles the top edge, which
-     used to look unfinished on a page with no cover — a border begins where
-     its box begins, and above these panels there is only the topbar, which
-     carries no line of its own, so the line simply appeared in mid-air. A
-     surface has no such problem: where it starts IS the edge, and the border
-     now meets that corner instead of nothing. */
-  background: var(--sidebar-bg);
+  background: var(--bg);
   border-left: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -7167,6 +7160,20 @@ a,
   margin-top: 6px;
 }
 
+/* The dividing line, and the one case that does not want it.
+
+   Panel and page are both white, so without the line there is nothing between
+   them. But a cover already ends exactly at the panel's edge, in its own
+   colour, and does that work better than a hairline can — putting a line there
+   too draws a frame around something that was flowing. So the line goes when
+   the page has a cover, asked of the DOM rather than threaded through as a
+   prop — .has-cover is already on .page-body and is already the answer to
+   exactly this question, so there is no second flag that can drift. */
+.editor-page:has(.page-body.has-cover) .structure-panel,
+.editor-page:has(.page-body.has-cover) .comments-panel {
+  border-left: 0;
+}
+
 /* ---- Comments as a panel (CommentsPanel) ----
    Beside the document, not under it. The fourth shape and the first one that
    came from watching people use it: his colleagues live in comments and said
@@ -7183,14 +7190,7 @@ a,
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  /* The same surface as the sidebar on the other side, and for the same
-     reason: this is chrome, not document. It also settles the top edge, which
-     used to look unfinished on a page with no cover — a border begins where
-     its box begins, and above these panels there is only the topbar, which
-     carries no line of its own, so the line simply appeared in mid-air. A
-     surface has no such problem: where it starts IS the edge, and the border
-     now meets that corner instead of nothing. */
-  background: var(--sidebar-bg);
+  background: var(--bg);
   border-left: 1px solid var(--border);
   z-index: 5;
 }
