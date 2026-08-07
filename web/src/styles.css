@@ -7254,7 +7254,13 @@ a,
   gap: 7px;
   margin-bottom: 5px;
 }
-.cp-avatar {
+/* One small round avatar with initials, in two places: beside a comment and in
+   the presence row up in the topbar. They shared this rule before the comments
+   became a panel; the rebuild renamed the comment half and dropped the other
+   from the selector, which left the presence dot with its size and its border
+   and nothing that made it a circle. It went out as a square. */
+.cp-avatar,
+.presence-dot {
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -7367,6 +7373,9 @@ a,
 .presence .presence-dot {
   width: 22px;
   height: 22px;
+  /* A hair smaller than in a comment: up here the dots overlap each other, so
+     the initials have less clear room. */
+  font-size: 9.5px;
   border: 2px solid var(--bg);
   margin-left: -7px;
 }
